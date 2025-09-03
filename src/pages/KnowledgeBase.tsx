@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,6 +8,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { getCurrentPath } from "@/utils/router";
 import { Search, BookOpen, Users, Wrench, CreditCard, Settings, Star, Shield, UserCheck, Building, FileText, HelpCircle } from "lucide-react";
 
 interface KnowledgeBaseArticle {
@@ -109,7 +109,7 @@ export default function KnowledgeBase() {
   ).slice(0, 4);
 
   // Check if we're in tenant context
-  const isTenantRoute = window.location.pathname.startsWith('/tenant');
+  const isTenantRoute = getCurrentPath().startsWith('/tenant');
   
   const content = (
     <div className="container mx-auto p-6 space-y-8">

@@ -19,6 +19,7 @@ import {
   Ticket
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { getCurrentPath } from "@/utils/router";
 
 const supportCategories = [
   {
@@ -53,7 +54,7 @@ export default function Support() {
   const { user } = useAuth();
   
   // Check if we're in tenant context
-  const isTenantRoute = window.location.pathname.startsWith('/tenant');
+  const isTenantRoute = getCurrentPath().startsWith('/tenant');
   
   const content = (
     <div className="container mx-auto p-6 space-y-6">

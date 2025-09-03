@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { navigateTo } from "@/utils/router";
 
 export interface Notification {
   id: string;
@@ -163,7 +164,7 @@ export function useNotifications() {
               action: {
                 label: "View",
                 onClick: () => {
-                  window.location.href = getNotificationTargetUrl(newNotification);
+                  navigateTo(getNotificationTargetUrl(newNotification));
                 }
               }
             });
