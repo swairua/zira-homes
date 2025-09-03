@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { User, Session } from "@supabase/supabase-js";
+import { navigateTo } from "@/utils/router";
 import { supabase } from "@/integrations/supabase/client";
 
 interface AuthContextType {
@@ -69,7 +70,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } finally {
       // Always navigate to auth page regardless of server response
       console.log("🔄 Redirecting to /auth");
-      window.location.href = "/auth";
+      navigateTo("/auth", true);
     }
   };
 

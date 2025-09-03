@@ -6,6 +6,7 @@ import { Check, Star, Crown, Zap } from "lucide-react";
 import { useTrialManagement } from "@/hooks/useTrialManagement";
 import { usePlatformAnalytics } from "@/hooks/usePlatformAnalytics";
 import { toast } from "sonner";
+import { navigateTo } from "@/utils/router";
 
 interface BillingPlan {
   id: string;
@@ -110,7 +111,7 @@ export function Upgrade() {
       
       toast.success("Upgrade successful! Welcome to your new plan.");
       // Redirect to dashboard
-      window.location.href = '/';
+      navigateTo('/');
     } catch (error) {
       toast.error("Upgrade failed. Please try again.");
     } finally {
