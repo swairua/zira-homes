@@ -88,20 +88,42 @@ function createSafeStubClient() {
         return { error: null };
       }
     },
-    from: (_table: string) => ({
-      select: async () => ({ data: null, error: null }),
-      insert: async () => ({ data: null, error: null }),
-      update: async () => ({ data: null, error: null }),
-      delete: async () => ({ data: null, error: null }),
-      upsert: async () => ({ data: null, error: null }),
-      eq: () => ({ select: async () => ({ data: null, error: null }) })
-    }),
+    from: (_table: string) => {
+      // chainable query builder stub
+      const builder: any = {
+        _table: _table,
+        select(cols?: string) { this._select = cols; return this; },
+        eq(field?: string, value?: any) { this._eq = { field, value }; return this; },
+        order: function() { return this; },
+        limit: function() { return this; },
+        insert: async function(_data: any) { return { data: null, error: null }; },
+        update: async function(_data: any) { return { data: null, error: null }; },
+        delete: async function() { return { data: null, error: null }; },
+        upsert: async function(_data: any) { return { data: null, error: null }; },
+      };
+      // make builder awaitable: await builder.select(...).eq(...)
+      builder.then = function(resolve: any) { return resolve({ data: null, error: null }); };
+      return builder;
+    },
     rpc: async () => ({ data: null, error: null }),
-    channel: (_name: string) => ({
-      on: () => ({ subscribe: async () => ({}) }),
-      subscribe: async () => ({}),
-      unsubscribe: async () => ({})
-    })
+    channel: (_name: string) => {
+      const ch: any = {
+        _name: _name,
+        on(event?: any, opts?: any, callback?: any) {
+          // allow both (event, opts, cb) and (event, cb)
+          if (typeof opts === 'function') { callback = opts; opts = undefined; }
+          // store handlers if needed
+          (ch._handlers = ch._handlers || []).push({ event, opts, callback });
+          return ch;
+        },
+        subscribe: async function() {
+          // return object resembling real client
+          return { data: { subscription: { unsubscribe: () => {} } } };
+        },
+        unsubscribe: async function() { return {}; }
+      };
+      return ch;
+    }
   } as any;
 }
 
