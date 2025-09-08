@@ -23,6 +23,7 @@ const Auth = () => {
   const [isPasswordReset, setIsPasswordReset] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   // Persist last signup email to enable resending confirmation even after clearing the form
   const [lastSignupEmail, setLastSignupEmail] = useState<string>("");
