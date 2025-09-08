@@ -108,7 +108,15 @@ function createSafeStubClient() {
       builder.then = function(resolve: any) { return resolve({ data: null, error: null }); };
       return builder;
     },
-    rpc: async () => ({ data: null, error: null }),
+    rpc: (_fnName: string, _args?: any) => {
+      const call = {
+        then(resolve: any) { return resolve({ data: null, error: null }); },
+        async maybeSingle() { return { data: null, error: null }; },
+        async single() { return { data: null, error: null }; },
+        async select() { return { data: null, error: null }; }
+      };
+      return call;
+    },
     channel: (_name: string) => {
       const ch: any = {
         _name: _name,
