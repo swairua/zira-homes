@@ -152,6 +152,7 @@ function createSafeStubClient() {
       return {};
     }
   } as any;
+  return stub;
 }
 
 export const supabase = (typeof window !== 'undefined' && SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY)
