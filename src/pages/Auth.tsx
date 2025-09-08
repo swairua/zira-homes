@@ -591,8 +591,43 @@ const Auth = () => {
 
           <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
             <CardHeader className="space-y-2 pb-6 text-center">
-              <CardTitle className="text-2xl text-gray-800">Welcome Back</CardTitle>
-              <p className="text-gray-600">Choose your preferred sign-in method</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-2xl text-gray-800">Welcome Back</CardTitle>
+                  <p className="text-gray-600">Choose your preferred sign-in method</p>
+                </div>
+                <div className="text-right">
+                  <button
+                    type="button"
+                    className="text-xs text-primary underline"
+                    onClick={async () => {
+                      try {
+                        console.log('VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL);
+                        const anon = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON;
+                        console.log('VITE_SUPABASE_ANON_KEY length:', anon ? anon.length : 'not set');
+                        // detect stub
+                        if ((supabase as any).__isStubClient) {
+                          alert('Supabase client is using local stub. Real connection unavailable in this environment.');
+                          return;
+                        }
+                        // try a real request
+                        if (supabase && supabase.auth && typeof supabase.auth.getSession === 'function') {
+                          const res = await supabase.auth.getSession();
+                          console.log('supabase.auth.getSession()', res);
+                          alert('Supabase reachable. Check console for details.');
+                        } else {
+                          alert('Supabase client appears incomplete. Check environment variables.');
+                        }
+                      } catch (err) {
+                        console.error('Connection check error:', err);
+                        alert('Connection check failed. See console for details.');
+                      }
+                    }}
+                  >
+                    Check Supabase
+                  </button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'login' | 'signup')} className="space-y-6">
