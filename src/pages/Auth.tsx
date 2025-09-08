@@ -627,8 +627,9 @@ const Auth = () => {
                     </div>
                   </div>
 
-                  <Button 
-                    type="submit" 
+                  <Button
+                    type="submit"
+                    onClick={(e) => handleLogin(e as any)}
                     className="w-full h-12 bg-gradient-to-r from-accent to-accent/80 hover:from-accent/90 hover:to-accent text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200"
                     disabled={isLoading}
                   >
