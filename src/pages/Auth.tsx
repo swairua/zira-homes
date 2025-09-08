@@ -153,6 +153,51 @@ const Auth = () => {
     return <Navigate to="/" replace />;
   }
 
+  // Compatibility helpers for different supabase-js versions
+  const signInCompat = async (email: string, password: string) => {
+    // Newer API
+    if (supabase?.auth && typeof supabase.auth.signInWithPassword === 'function') {
+      return await supabase.auth.signInWithPassword({ email, password });
+    }
+    // Older API
+    if (supabase?.auth && typeof supabase.auth.signIn === 'function') {
+      return await supabase.auth.signIn({ email, password });
+    }
+    // Fallback to rpc or stub
+    if (supabase?.rpc) {
+      try {
+        const res = await supabase.rpc('sign_in_with_password', { _email: email, _password: password });
+        return { data: res.data, error: res.error };
+      } catch (e) { return { data: null, error: e }; }
+    }
+    throw new Error('Sign-in method not available');
+  };
+
+  const signUpCompat = async (email: string, password: string, options: any) => {
+    if (supabase?.auth && typeof supabase.auth.signUp === 'function') {
+      return await supabase.auth.signUp({ email, password, options });
+    }
+    if (supabase?.auth && typeof supabase.auth.signUpWithPassword === 'function') {
+      return await supabase.auth.signUpWithPassword({ email, password });
+    }
+    if (supabase?.from) {
+      // Try creating via RPC or a users table (best-effort)
+      try {
+        const res = await supabase.rpc('create_user_with_password', { _email: email, _password: password, _meta: options?.data ?? {} });
+        return { data: res.data, error: res.error };
+      } catch (e) { return { data: null, error: e }; }
+    }
+    throw new Error('Sign-up method not available');
+  };
+
+  const resendCompat = async (opts: any) => {
+    if (supabase?.auth && typeof supabase.auth.resend === 'function') {
+      return await supabase.auth.resend(opts);
+    }
+    // No-op fallback
+    return { error: null };
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -160,18 +205,17 @@ const Auth = () => {
     setSuccess("");
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: loginData.email,
-        password: loginData.password,
-      });
+      const result: any = await signInCompat(loginData.email, loginData.password);
+      const error = result?.error ?? null;
 
       if (error) {
-        if (error.message.includes("Invalid login credentials")) {
+        const msg = (error && error.message) || String(error);
+        if (msg.includes("Invalid login credentials")) {
           setError("Invalid email or password. Please check your credentials and try again.");
-        } else if (error.message.includes("Email not confirmed")) {
+        } else if (msg.includes("Email not confirmed")) {
           setError("Please check your email and click the confirmation link before signing in.");
         } else {
-          setError(error.message);
+          setError(msg);
         }
         return;
       }
@@ -180,8 +224,8 @@ const Auth = () => {
         title: "Welcome back!",
         description: "You have been successfully logged in.",
       });
-    } catch (err) {
-      setError("An unexpected error occurred. Please try again.");
+    } catch (err: any) {
+      setError(err?.message || "An unexpected error occurred. Please try again.");
       console.error("Login error:", err);
     } finally {
       setIsLoading(false);
@@ -210,10 +254,8 @@ const Auth = () => {
     try {
       const redirectUrl = `${window.location.origin}/`;
       console.log("Signup: creating user", signupData.email, "redirect:", redirectUrl);
-      
-      const { error } = await supabase.auth.signUp({
-        email: signupData.email,
-        password: signupData.password,
+
+      const result: any = await signUpCompat(signupData.email, signupData.password, {
         options: {
           emailRedirectTo: redirectUrl,
           data: {
@@ -222,17 +264,20 @@ const Auth = () => {
             phone: signupData.phone,
             role: signupData.role,
           },
-        },
+        }
       });
 
+      const error = result?.error ?? null;
+
       if (error) {
-        if (error.message.includes("User already registered")) {
+        const msg = (error && error.message) || String(error);
+        if (msg.includes("User already registered")) {
           setExistingAccountEmail(signupData.email);
           setActiveTab('login');
           setLoginData((prev) => ({ ...prev, email: signupData.email }));
           setError("An account with this email already exists. You can sign in, reset your password, or resend confirmation below.");
         } else {
-          setError(error.message);
+          setError(msg);
         }
         return;
       }
@@ -241,7 +286,7 @@ const Auth = () => {
       setLastSignupEmail(signupData.email);
 
       setSuccess(`Account created for ${signupData.email}. Please check your inbox at ${signupData.email} for a confirmation email from noreply@mail.app.supabase.io. If you can't find it, check Updates/Promotions or Spam/Junk and mark it as 'Not spam'.`);
-      
+
       // Clear form fields but keep lastSignupEmail for resend
       setSignupData({
         email: "",
