@@ -208,6 +208,7 @@ const Auth = () => {
 
     try {
       const result: any = await signInCompat(loginData.email, loginData.password);
+      console.log('signInCompat result:', result);
       const error = result?.error ?? null;
 
       if (error) {
@@ -222,10 +223,20 @@ const Auth = () => {
         return;
       }
 
+      // If backend returned a session or user, consider login successful
+      const sessionFromResult = result?.data?.session ?? result?.data?.session ?? null;
+      const userFromResult = result?.data?.user ?? result?.user ?? null;
+
       toast({
         title: "Welcome back!",
         description: "You have been successfully logged in.",
       });
+
+      if (sessionFromResult || userFromResult) {
+        console.log('session/user returned directly, navigating to /');
+        // prefer navigate
+        try { navigate('/'); return; } catch (e) { window.location.href = '/'; return; }
+      }
       // Wait for session to be available before navigating
       try {
         const waitForSession = async (timeout = 3000) => {
