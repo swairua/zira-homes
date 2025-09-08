@@ -226,8 +226,38 @@ const Auth = () => {
         title: "Welcome back!",
         description: "You have been successfully logged in.",
       });
-      // Navigate to home after successful login
-      try { navigate('/'); } catch (e) { window.location.href = '/'; }
+      // Wait for session to be available before navigating
+      try {
+        const waitForSession = async (timeout = 3000) => {
+          const start = Date.now();
+          while (Date.now() - start < timeout) {
+            try {
+              if (supabase?.auth && typeof supabase.auth.getSession === 'function') {
+                const res = await supabase.auth.getSession();
+                const sessionNow = res?.data?.session ?? null;
+                console.log('post-login session check:', sessionNow);
+                if (sessionNow) return sessionNow;
+              }
+            } catch (e) {
+              console.warn('Error checking session after login:', e);
+            }
+            await new Promise(r => setTimeout(r, 300));
+          }
+          return null;
+        };
+
+        const session = await waitForSession(5000);
+        if (session) {
+          navigate('/');
+        } else {
+          // As a fallback, reload to let auth state propagate
+          console.warn('No session after login; reloading to sync auth state');
+          window.location.reload();
+        }
+      } catch (e) {
+        console.error('Error during post-login navigation:', e);
+        try { navigate('/'); } catch (err) { window.location.href = '/'; }
+      }
     } catch (err: any) {
       setError(err?.message || "An unexpected error occurred. Please try again.");
       console.error("Login error:", err);
