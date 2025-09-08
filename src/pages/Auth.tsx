@@ -336,7 +336,19 @@ const Auth = () => {
         title: "Account created!",
         description: `Confirmation sent to ${signupData.email}. From noreply@mail.app.supabase.io. Check Inbox, Updates/Promotions, or Spam/Junk.`,
       });
-      try { navigate('/'); } catch (e) { window.location.href = '/'; }
+      try {
+        // Wait a moment to allow auth session to initialize when using redirect flows
+        const res = (supabase?.auth && typeof supabase.auth.getSession === 'function') ? await supabase.auth.getSession() : null;
+        const sessionNow = res?.data?.session ?? null;
+        if (sessionNow) {
+          navigate('/');
+        } else {
+          // small delay then redirect
+          setTimeout(() => { try { navigate('/'); } catch (e) { window.location.href = '/'; } }, 500);
+        }
+      } catch (e) {
+        try { navigate('/'); } catch (err) { window.location.href = '/'; }
+      }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
       console.error("Signup error:", err);
