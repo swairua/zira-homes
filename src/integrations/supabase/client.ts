@@ -21,7 +21,8 @@ function createSafeStubClient() {
 
   const asyncNoOp = async () => ({ data: null, error: null });
 
-  return {
+  const stub: any = {
+    __isStubClient: true,
     auth: {
       onAuthStateChange: (cb: any) => {
         warn();
