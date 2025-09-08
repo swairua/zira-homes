@@ -16,4 +16,17 @@ const supabaseOptions = typeof window !== 'undefined' ? {
   }
 } : undefined;
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, supabaseOptions);
+function createMissingClientProxy() {
+  const handler: ProxyHandler<any> = {
+    get(_target, prop) {
+      return (..._args: any[]) => {
+        throw new Error(`Supabase client not initialized. Ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set.`);
+      };
+    }
+  };
+  return new Proxy({}, handler) as any;
+}
+
+export const supabase = (typeof window !== 'undefined' && SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY)
+  ? createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, supabaseOptions)
+  : createMissingClientProxy();
