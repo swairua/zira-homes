@@ -90,14 +90,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.log("🗑️ Clearing browser storage");
       localStorage.removeItem('sb-kdpqimetajnhcqseajok-auth-token');
       sessionStorage.removeItem('sb-kdpqimetajnhcqseajok-auth-token');
-      
+      // Clear dev session if present
+      try { localStorage.removeItem('dev_supabase_session'); } catch(e) {}
+
       // Attempt to sign out from Supabase with global scope
       console.log("☁️ Calling Supabase signOut with global scope");
-      const { error } = await supabase.auth.signOut({ scope: 'global' });
-      if (error) {
-        console.warn("Supabase signOut error (continuing with local logout):", error);
-      } else {
-        console.log("✅ Supabase signOut successful");
+      try {
+        const { error } = await supabase.auth.signOut({ scope: 'global' });
+        if (error) {
+          console.warn("Supabase signOut error (continuing with local logout):", error);
+        } else {
+          console.log("✅ Supabase signOut successful");
+        }
+      } catch (e) {
+        console.warn('Error calling supabase.auth.signOut:', e);
       }
       
       // Small delay to ensure auth state processes
