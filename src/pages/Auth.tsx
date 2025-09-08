@@ -226,6 +226,8 @@ const Auth = () => {
         title: "Welcome back!",
         description: "You have been successfully logged in.",
       });
+      // Navigate to home after successful login
+      try { navigate('/'); } catch (e) { window.location.href = '/'; }
     } catch (err: any) {
       setError(err?.message || "An unexpected error occurred. Please try again.");
       console.error("Login error:", err);
