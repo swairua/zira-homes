@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { TablePaginator } from "@/components/ui/table-paginator";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { Mail, Search, Filter, Calendar, User, Check, X, Clock, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 
@@ -22,7 +24,9 @@ interface EmailLog {
 
 const EmailLogsViewer = () => {
   const { toast } = useToast();
+  const { page, pageSize, setPage, setPageSize } = useUrlPageParam({ pageSize: 25, defaultPage: 1 });
   const [logs, setLogs] = useState<EmailLog[]>([]);
+  const [totalLogs, setTotalLogs] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -31,18 +35,19 @@ const EmailLogsViewer = () => {
 
   useEffect(() => {
     fetchEmailLogs();
-  }, []);
+  }, [page, pageSize]);
 
   const fetchEmailLogs = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error, count } = await supabase
         .from('email_logs')
-        .select('*')
+        .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
-        .limit(100);
+        .range((page - 1) * pageSize, page * pageSize - 1);
 
       if (error) throw error;
       setLogs(data || []);
+      setTotalLogs(count || 0);
     } catch (error) {
       console.error('Error fetching email logs:', error);
       // Generate dummy data for demonstration
@@ -300,6 +305,21 @@ const EmailLogsViewer = () => {
               </div>
             )}
           </div>
+          
+          {Math.ceil(totalLogs / pageSize) > 1 && (
+            <div className="mt-6">
+              <TablePaginator
+                currentPage={page}
+                totalPages={Math.ceil(totalLogs / pageSize)}
+                pageSize={pageSize}
+                totalItems={totalLogs}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                showPageSizeSelector={true}
+                pageSizeOptions={[10, 25, 50, 100]}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

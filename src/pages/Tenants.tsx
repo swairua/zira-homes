@@ -15,6 +15,8 @@ import { BulkUploadDropdown } from "@/components/bulk-upload/BulkUploadDropdown"
 import { Users, Phone, Mail, Search, Filter, Edit, Eye, Briefcase, LayoutGrid, List, Building2, MapPin } from "lucide-react";
 import { KpiGrid } from "@/components/kpi/KpiGrid";
 import { KpiStatCard } from "@/components/kpi/KpiStatCard";
+import { TablePaginator } from "@/components/ui/table-paginator";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 
 interface Tenant {
   id: string;
@@ -40,16 +42,10 @@ interface Property {
   property_type: string;
 }
 
-// RPC result interfaces
-interface LandlordTenantsRpcResult {
-  tenants: Tenant[];
-  total_count: number;
-  error?: string;
-}
-
 const Tenants = () => {
   const { toast } = useToast();
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -58,47 +54,72 @@ const Tenants = () => {
   const [filterBedrooms, setFilterBedrooms] = useState("all");
   const [filterRentRange, setFilterRentRange] = useState("all");
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ pageSize: 10 });
 
   useEffect(() => {
     fetchTenants();
     fetchProperties();
-  }, []);
+  }, [page, pageSize, searchTerm, filterEmployment, filterProperty]);
 
   const fetchTenants = async () => {
     try {
-      console.log("🔍 Fetching tenants using optimized RPC");
+      console.log("🔍 Fetching tenants with server-side pagination", { page, pageSize, offset });
       
-      // Use optimized RPC function for better performance
-      const { data: rpcResult, error: rpcError } = await supabase
-        .rpc('get_landlord_tenants_summary', {
-          p_search: searchTerm,
-          p_employment_filter: filterEmployment,
-          p_property_filter: filterProperty,
-          p_limit: 200,
-          p_offset: 0
-        });
+      // Build the base query for tenants with joined data
+      let query = supabase
+        .from('tenants')
+        .select(`
+          *,
+          leases!tenant_id (
+            monthly_rent,
+            unit:units!unit_id (
+              unit_number,
+              property:properties!property_id (
+                name
+              )
+            )
+          )
+        `, { count: 'exact' });
 
-      if (rpcError) {
-        console.error('Error calling tenants RPC:', rpcError);
-        throw rpcError;
+      // Apply search filter
+      if (searchTerm) {
+        query = query.or(`first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
       }
 
-      const typedResult = rpcResult as unknown as LandlordTenantsRpcResult | null;
-
-      if (!typedResult || typedResult.error) {
-        console.log("❌ RPC error:", typedResult?.error);
-        setTenants([]);
-        return;
+      // Apply employment filter
+      if (filterEmployment !== "all") {
+        query = query.eq('employment_status', filterEmployment);
       }
 
-      console.log("✅ RPC result received:", {
-        tenantsCount: typedResult.tenants?.length || 0,
-        totalCount: typedResult.total_count
-      });
+      // Add pagination and ordering
+      const { data: tenantsData, error: tenantsError, count } = await query
+        .range(offset, offset + pageSize - 1)
+        .order('created_at', { ascending: false });
 
-      setTenants(typedResult.tenants || []);
+      if (tenantsError) {
+        console.error('Error calling tenants query:', tenantsError);
+        throw tenantsError;
+      }
+
+      // Transform the data to match the expected interface
+      const transformedTenants = (tenantsData || []).map((tenant: any) => ({
+        ...tenant,
+        property_name: tenant.leases?.[0]?.unit?.property?.name,
+        unit_number: tenant.leases?.[0]?.unit?.unit_number,
+        rent_amount: tenant.leases?.[0]?.monthly_rent
+      }));
+
+      console.log("✅ Tenants loaded:", transformedTenants.length, "of", count);
+
+      setTenants(transformedTenants as Tenant[]);
+      setTotalCount(count || 0);
     } catch (error) {
       console.error('Error fetching tenants:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load tenants",
+        variant: "destructive",
+      });
       setTenants([]);
     } finally {
       setLoading(false);
@@ -120,13 +141,8 @@ const Tenants = () => {
     }
   };
 
+  // Apply client-side filters for complex filters (property, bedrooms, rent range)
   const filteredTenants = tenants.filter((tenant) => {
-    const matchesSearch = 
-      tenant.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tenant.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tenant.email.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesEmployment = filterEmployment === "all" || tenant.employment_status === filterEmployment;
     const matchesProperty = filterProperty === "all" || tenant.property_name === filterProperty;
     
     const matchesBedrooms = filterBedrooms === "all" || 
@@ -152,7 +168,7 @@ const Tenants = () => {
       }
     }
     
-    return matchesSearch && matchesEmployment && matchesProperty && matchesBedrooms && matchesRent;
+    return matchesProperty && matchesBedrooms && matchesRent;
   });
 
   const getEmploymentStatusColor = (status: string | null) => {
@@ -169,6 +185,8 @@ const Tenants = () => {
         return "bg-secondary text-secondary-foreground";
     }
   };
+
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   if (loading) {
     return (
@@ -290,8 +308,8 @@ const Tenants = () => {
             <KpiGrid>
               <KpiStatCard
                 title="Total Tenants"
-                value={tenants.length}
-                subtitle="Active tenants"
+                value={totalCount}
+                subtitle="Total in system"
                 icon={Users}
                 gradient="card-gradient-blue"
               />
@@ -392,6 +410,18 @@ const Tenants = () => {
                 </Card>
               ))}
             </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <TablePaginator
+                currentPage={page}
+                totalPages={totalPages}
+                pageSize={pageSize}
+                totalItems={totalCount}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+              />
+            )}
 
             {filteredTenants.length === 0 && (
               <Card className="bg-card">

@@ -1,4 +1,4 @@
-// Fixed BulkMessaging component - removed useInhouseSMS references
+// Remove mock data and connect to real SMS usage data
 import React, { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +16,8 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { TablePaginator } from "@/components/ui/table-paginator";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 
 import {
   MessageSquare,
@@ -104,9 +106,17 @@ const BulkMessaging = () => {
   // Report viewing
   const [viewingCampaign, setViewingCampaign] = useState<MessageCampaign | null>(null);
 
-  // SMS Provider configuration (load from localStorage)
+  // SMS Provider configuration (load from Supabase)
   const [smsProviders, setSmsProviders] = useState([]);
+  const [smsTemplates, setSmsTemplates] = useState<MessageTemplate[]>([]);
   const [defaultSmsProvider, setDefaultSmsProvider] = useState(null);
+  const [smsUsageData, setSmsUsageData] = useState([]);
+  const [smsUsageTotalCount, setSmsUsageTotalCount] = useState(0);
+  const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ pageSize: 10 });
+  
+  // Separate pagination for recipients (client-side)
+  const [recipientsPage, setRecipientsPage] = useState(1);
+  const recipientsPerPage = 10;
   
   // Message customization and preview
   const [maxSMSCount, setMaxSMSCount] = useState(1);
@@ -122,7 +132,8 @@ const BulkMessaging = () => {
     fetchProperties();
     loadProviderSettings();
     loadMessageTemplates();
-  }, [recipientType, selectedProperty, user]);
+    fetchSmsUsage();
+  }, [recipientType, selectedProperty, user, page, pageSize]);
 
   // Refresh provider settings when component becomes visible
   useEffect(() => {
@@ -290,76 +301,82 @@ const BulkMessaging = () => {
     setCampaigns(mockCampaigns);
   };
 
-  const loadProviderSettings = () => {
-    console.log('🔍 Loading SMS provider settings...');
-    
-    // Load SMS providers from localStorage
-    const savedProviders = localStorage.getItem('sms_providers');
-    
-    if (savedProviders) {
-      try {
-        const providers = JSON.parse(savedProviders);
-        console.log('📋 Loaded providers from localStorage:', providers);
-        setSmsProviders(providers);
-        
-        // Find the default provider (prioritize is_default first, then fallback to any active provider)
-        let defaultProvider = providers.find(p => p.is_default && p.is_active);
-        
-        if (!defaultProvider) {
-          // Fallback: look for default provider even if not explicitly active
-          defaultProvider = providers.find(p => p.is_default);
-          console.log('⚠️ No active default provider found, using default provider:', defaultProvider);
-        }
-        
-        if (!defaultProvider) {
-          // Final fallback: use any active provider
-          defaultProvider = providers.find(p => p.is_active);
-          console.log('⚠️ No default provider found, using any active provider:', defaultProvider);
-        }
-        
-        console.log('✅ Selected SMS provider:', defaultProvider);
-        setDefaultSmsProvider(defaultProvider);
-        
-        if (!defaultProvider) {
-          console.log('❌ No usable SMS provider found. Available providers:', 
-            providers.map(p => ({ name: p.provider_name, active: p.is_active, default: p.is_default }))
-          );
-        }
-      } catch (error) {
-        console.error('❌ Error parsing SMS providers from localStorage:', error);
-        setSmsProviders([]);
-        setDefaultSmsProvider(null);
+  const loadProviderSettings = async () => {
+    try {
+      console.log('🔍 Loading SMS provider settings from Supabase...');
+      
+      // Load SMS providers from Supabase
+      const { data: providers, error } = await supabase
+        .from('sms_providers')
+        .select('*')
+        .eq('is_active', true)
+        .order('provider_name');
+
+      if (error) throw error;
+      
+      console.log('📋 Loaded providers from Supabase:', providers);
+      setSmsProviders(providers || []);
+      
+      // Find the default provider
+      const defaultProvider = providers?.find(p => p.is_default) || providers?.[0];
+      console.log('✅ Selected SMS provider:', defaultProvider);
+      setDefaultSmsProvider(defaultProvider);
+      
+      if (!defaultProvider) {
+        console.log('❌ No usable SMS provider found');
       }
-    } else {
-      console.log('ℹ️ No SMS providers found in localStorage');
+    } catch (error) {
+      console.error('❌ Error loading SMS providers from Supabase:', error);
       setSmsProviders([]);
       setDefaultSmsProvider(null);
     }
   };
 
-  const loadMessageTemplates = () => {
-    // Mock templates - in real app, this would fetch from a templates table
-    const templates: MessageTemplate[] = [
-      {
-        id: '1',
-        name: 'Rent Reminder',
+  const loadMessageTemplates = async () => {
+    try {
+      const { data: templates, error } = await supabase
+        .from('sms_templates')
+        .select('*')
+        .eq('enabled', true)
+        .order('name');
+
+      if (error) throw error;
+      
+      const formattedTemplates: MessageTemplate[] = (templates || []).map(template => ({
+        id: template.id,
+        name: template.name,
         type: 'sms',
-        content: 'Hi {{first_name}}, your rent for unit {{unit_number}} is due by {{due_date}}. Please make payment to avoid late fees.'
-      },
-      {
-        id: '2',
-        name: 'Maintenance Notice',
-        type: 'whatsapp',
-        content: 'Hello {{first_name}}, scheduled maintenance is planned for {{date}} at {{property_name}}. Please ensure access to your unit {{unit_number}}.'
-      },
-      {
-        id: '3',
-        name: 'Payment Received',
-        type: 'sms',
-        content: 'Hi {{first_name}}, we have received your payment of {{amount}} for unit {{unit_number}}. Thank you!'
-      }
-    ];
-    setMessageTemplates(templates);
+        content: template.content
+      }));
+      
+      setMessageTemplates(formattedTemplates);
+    } catch (error) {
+      console.error('Error loading SMS templates:', error);
+      setMessageTemplates([]);
+    }
+  };
+
+  const fetchSmsUsage = async () => {
+    try {
+      // Use secure function to get masked SMS data for admins
+      const { data: usage, error } = await supabase
+        .rpc('get_sms_usage_for_admin');
+
+      if (error) throw error;
+      
+      // Sort and paginate the results locally since the RPC doesn't support ordering/pagination
+      const sortedUsage = (usage || []).sort((a, b) => 
+        new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime()
+      );
+      
+      const paginatedUsage = sortedUsage.slice(offset, offset + pageSize);
+      setSmsUsageData(paginatedUsage);
+      setSmsUsageTotalCount(sortedUsage.length);
+    } catch (error) {
+      console.error('Error fetching SMS usage:', error);
+      setSmsUsageData([]);
+      setSmsUsageTotalCount(0);
+    }
   };
 
   // Remove the old saveProviderSettings function as it's no longer needed
@@ -951,7 +968,7 @@ const BulkMessaging = () => {
               <Label htmlFor="select-all">Select All ({recipients.length})</Label>
             </div>
             
-            <div className="border rounded-lg max-h-96 overflow-y-auto overflow-x-auto">
+            <div className="border rounded-lg">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -964,7 +981,9 @@ const BulkMessaging = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {recipients.map((recipient) => (
+                  {recipients
+                    .slice((recipientsPage - 1) * recipientsPerPage, recipientsPage * recipientsPerPage)
+                    .map((recipient) => (
                     <TableRow key={recipient.id}>
                       <TableCell>
                         <Checkbox
@@ -992,7 +1011,73 @@ const BulkMessaging = () => {
                   ))}
                 </TableBody>
               </Table>
+              <TablePaginator
+                currentPage={recipientsPage}
+                totalPages={Math.ceil(recipients.length / recipientsPerPage)}
+                pageSize={recipientsPerPage}
+                totalItems={recipients.length}
+                onPageChange={setRecipientsPage}
+                showPageSizeSelector={false}
+              />
             </div>
+          </CardContent>
+        </Card>
+
+        {/* SMS Usage History */}
+        <Card className="bg-card">
+          <CardHeader>
+            <CardTitle className="text-primary">SMS Usage History</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {smsUsageData.length > 0 ? (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Recipient</TableHead>
+                      <TableHead>Message</TableHead>
+                      <TableHead>Cost</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {smsUsageData.map((usage: any) => (
+                      <TableRow key={usage.id}>
+                        <TableCell>
+                          {format(new Date(usage.sent_at), 'MMM dd, yyyy HH:mm')}
+                        </TableCell>
+                        <TableCell>{usage.recipient_phone}</TableCell>
+                        <TableCell>
+                          <div className="max-w-xs truncate">
+                            {usage.message_content}
+                          </div>
+                        </TableCell>
+                        <TableCell>{usage.cost}</TableCell>
+                        <TableCell>
+                          <Badge variant={usage.status === 'delivered' ? 'default' : 'destructive'}>
+                            {usage.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <TablePaginator
+                  currentPage={page}
+                  totalPages={Math.ceil(smsUsageTotalCount / pageSize)}
+                  pageSize={pageSize}
+                  totalItems={smsUsageTotalCount}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                />
+              </>
+            ) : (
+              <div className="text-center py-8">
+                <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">No SMS usage data available</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 

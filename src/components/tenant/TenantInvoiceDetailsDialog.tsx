@@ -103,7 +103,7 @@ export function TenantInvoiceDetailsDialog({ invoice, trigger, onPayNow }: Tenan
       };
 
       console.log('Generating PDF document using Admin template...');
-      await renderer.generateDocument(documentData, brandingData, template);
+      await renderer.generateDocument(documentData, brandingData, null, null, template);
       console.log('PDF generated successfully with Admin template and branding');
       toast.success(`Invoice ${formatInvoiceNumber(invoice.invoice_number)} downloaded successfully`);
     } catch (error) {

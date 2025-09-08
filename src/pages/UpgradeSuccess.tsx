@@ -4,7 +4,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { CheckCircle, Loader2, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { navigateTo } from "@/utils/router";
 import { toast } from "sonner";
 
 export default function UpgradeSuccess() {
@@ -57,7 +56,7 @@ export default function UpgradeSuccess() {
 
   const handleContinue = () => {
     // Reload to refresh trial status across the app
-    navigateTo('/');
+    window.location.href = '/';
   };
 
   return (
@@ -95,7 +94,7 @@ export default function UpgradeSuccess() {
                 <li>• Access to unlimited properties and units</li>
                 <li>• Priority customer support</li>
                 <li>• Advanced reporting features</li>
-                <li>• Commission-based billing (3% on rent collected)</li>
+                <li>• Enhanced tenant management tools</li>
               </ul>
             </div>
           )}

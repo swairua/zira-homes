@@ -5,14 +5,24 @@ import { RecentPayments } from "@/components/dashboard/RecentPayments";
 import { RecentActivityAlerts } from "@/components/dashboard/RecentActivityAlerts";
 import { OptimizedStatsCards } from "@/components/optimized/OptimizedStatsCards";
 import { OptimizedChartsSection } from "@/components/optimized/OptimizedChartsSection";
+import { GatedOptimizedStatsCards } from "@/components/optimized/GatedOptimizedStatsCards";
+import { GatedOptimizedChartsSection } from "@/components/optimized/GatedOptimizedChartsSection";
+import { GatedFloatingActionMenu } from "@/components/dashboard/GatedFloatingActionMenu";
 import { useLandlordDashboard } from "@/hooks/useLandlordDashboard";
 import { LoadingSkeleton } from "@/components/ui/loading-skeleton";
 import { useRouteTitle } from "@/hooks/useRouteTitle";
 import { HealthCheckBanner } from "@/components/HealthCheckBanner";
+import { useLeaseExpiryCount } from "@/hooks/useLeaseExpiryCount";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Calendar, AlertTriangle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export default function Index() {
   useRouteTitle();
+  const navigate = useNavigate();
   const { data, loading, error } = useLandlordDashboard();
+  const { expiringCount } = useLeaseExpiryCount();
 
   // Extract dashboard stats safely
   const stats = data?.property_stats ? {
@@ -81,14 +91,35 @@ export default function Index() {
           </p>
         </div>
         
+        {/* Lease Expiry Alert */}
+        {expiringCount > 0 && (
+          <Alert className="border-warning/20 bg-warning/5">
+            <AlertTriangle className="h-4 w-4 text-warning" />
+            <AlertDescription className="flex items-center justify-between">
+              <span>
+                <strong>{expiringCount}</strong> lease{expiringCount > 1 ? 's' : ''} expiring in the next 90 days
+              </span>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => navigate('/leases')}
+                className="ml-4"
+              >
+                <Calendar className="h-3 w-3 mr-1" />
+                View Details
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* KPI Summary Cards - Using optimized version with actual data */}
         <Suspense fallback={<LoadingSkeleton type="card" count={4} />}>
-          <OptimizedStatsCards stats={stats} isLoading={loading} />
+          <GatedOptimizedStatsCards stats={stats} isLoading={loading} />
         </Suspense>
         
         {/* Charts Section */}
         <Suspense fallback={<LoadingSkeleton type="chart" />}>
-          <OptimizedChartsSection chartData={chartData} isLoading={loading} />
+          <GatedOptimizedChartsSection chartData={chartData} isLoading={loading} />
         </Suspense>
         
         {/* Recent Activity Section */}
@@ -101,6 +132,9 @@ export default function Index() {
           <RecentPayments />
         </Suspense>
       </div>
+
+      {/* Floating Action Menu */}
+      <GatedFloatingActionMenu />
     </DashboardLayout>
   );
 }

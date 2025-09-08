@@ -9,8 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Plus, UserPlus, Settings, UserX, Shield, Users } from "lucide-react";
+import { TablePaginator } from "@/components/ui/table-paginator";
 import { useForm } from "react-hook-form";
 import { useSubUsers } from "@/hooks/useSubUsers";
+import { DisabledActionWrapper } from "@/components/feature-access/DisabledActionWrapper";
+import { FEATURES } from "@/hooks/usePlanFeatureAccess";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 
 interface CreateSubUserFormData {
   email: string;
@@ -32,6 +36,7 @@ const SubUserManagement = () => {
   const [permissionsDialogOpen, setPermissionsDialogOpen] = useState(false);
   const [selectedSubUser, setSelectedSubUser] = useState<any>(null);
   const { subUsers, loading, createSubUser, updateSubUserPermissions, deactivateSubUser } = useSubUsers();
+  const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ defaultPage: 1, pageSize: 10 });
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<CreateSubUserFormData>({
     defaultValues: {
       permissions: {
@@ -98,112 +103,121 @@ const SubUserManagement = () => {
             Delegate access to trusted partners, managers, and agents
           </p>
         </div>
-        <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-accent hover:bg-accent/90 w-full sm:w-auto">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Sub-User
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px] bg-tint-gray">
-            <DialogHeader>
-              <DialogTitle className="text-primary">Create New Sub-User</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit(onCreateSubUser)} className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="first_name" className="text-primary">First Name *</Label>
-                  <Input
-                    id="first_name"
-                    className="border-border bg-card"
-                    {...register("first_name", { required: "First name is required" })}
-                    placeholder="John"
-                  />
-                  {errors.first_name && <p className="text-xs text-destructive">{errors.first_name.message}</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="last_name" className="text-primary">Last Name *</Label>
-                  <Input
-                    id="last_name"
-                    className="border-border bg-card"
-                    {...register("last_name", { required: "Last name is required" })}
-                    placeholder="Doe"
-                  />
-                  {errors.last_name && <p className="text-xs text-destructive">{errors.last_name.message}</p>}
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-primary">Email *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  className="border-border bg-card"
-                  {...register("email", { required: "Email is required" })}
-                  placeholder="john.doe@example.com"
-                />
-                {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="phone" className="text-primary">Phone</Label>
-                  <Input
-                    id="phone"
-                    className="border-border bg-card"
-                    {...register("phone")}
-                    placeholder="+254 700 000 000"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="title" className="text-primary">Title</Label>
-                  <Input
-                    id="title"
-                    className="border-border bg-card"
-                    {...register("title")}
-                    placeholder="Manager, Agent, Partner"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <Label className="text-primary font-semibold">Permissions</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {Object.entries(permissions).map(([key, value]) => (
-                    <div key={key} className="flex items-center space-x-2">
-                      <Switch
-                        id={key}
-                        checked={value}
-                        onCheckedChange={(checked) => handlePermissionChange(key as keyof CreateSubUserFormData['permissions'], checked)}
-                      />
-                      <Label htmlFor={key} className="text-sm capitalize">
-                        {key.replace('_', ' ')}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => setCreateDialogOpen(false)}
-                  className="w-full sm:w-auto border-primary text-primary hover:bg-primary hover:text-primary-foreground"
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  type="submit" 
-                  className="w-full sm:w-auto bg-accent hover:bg-accent/90"
-                >
-                  Create Sub-User
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <DisabledActionWrapper 
+          feature={FEATURES.SUB_USERS}
+          fallbackTitle="Create Sub-Users"
+          fallbackDescription="Add team members with custom permissions and role-based access control."
+        >
+          <Button className="bg-accent hover:bg-accent/90 w-full sm:w-auto" onClick={() => setCreateDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Sub-User
+          </Button>
+        </DisabledActionWrapper>
       </div>
+
+      {/* Create Dialog */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent className="sm:max-w-[600px] bg-tint-gray">
+          <DialogHeader>
+            <DialogTitle className="text-primary">Create New Sub-User</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onCreateSubUser)} className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="first_name" className="text-primary">First Name *</Label>
+                <Input
+                  id="first_name"
+                  className="border-border bg-card"
+                  {...register("first_name", { required: "First name is required" })}
+                  placeholder="John"
+                />
+                {errors.first_name && <p className="text-xs text-destructive">{errors.first_name.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="last_name" className="text-primary">Last Name *</Label>
+                <Input
+                  id="last_name"
+                  className="border-border bg-card"
+                  {...register("last_name", { required: "Last name is required" })}
+                  placeholder="Doe"
+                />
+                {errors.last_name && <p className="text-xs text-destructive">{errors.last_name.message}</p>}
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-primary">Email *</Label>
+              <Input
+                id="email"
+                type="email"
+                className="border-border bg-card"
+                {...register("email", { required: "Email is required" })}
+                placeholder="john.doe@example.com"
+              />
+              {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+              <p className="text-xs text-muted-foreground">
+                If this email is already registered, we'll link them to your organization instead of creating a new account.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="phone" className="text-primary">Phone</Label>
+                <Input
+                  id="phone"
+                  className="border-border bg-card"
+                  {...register("phone")}
+                  placeholder="+254 700 000 000"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="title" className="text-primary">Title</Label>
+                <Input
+                  id="title"
+                  className="border-border bg-card"
+                  {...register("title")}
+                  placeholder="Manager, Agent, Partner"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <Label className="text-primary font-semibold">Permissions</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {Object.entries(permissions).map(([key, value]) => (
+                  <div key={key} className="flex items-center space-x-2">
+                    <Switch
+                      id={key}
+                      checked={value}
+                      onCheckedChange={(checked) => handlePermissionChange(key as keyof CreateSubUserFormData['permissions'], checked)}
+                    />
+                    <Label htmlFor={key} className="text-sm capitalize">
+                      {key.replace('_', ' ')}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setCreateDialogOpen(false)}
+                className="w-full sm:w-auto border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                className="w-full sm:w-auto bg-accent hover:bg-accent/90"
+              >
+                Create Sub-User
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 gap-6 md:grid-cols-3">
@@ -283,57 +297,53 @@ const SubUserManagement = () => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  subUsers.map((subUser) => (
+                  subUsers.slice(offset, offset + pageSize).map((subUser) => (
                     <TableRow key={subUser.id}>
-                    <TableCell>
-                        {subUser.profiles?.first_name && subUser.profiles?.last_name 
-                          ? `${subUser.profiles.first_name} ${subUser.profiles.last_name}`
-                          : "No name"
-                        }
-                      </TableCell>
-                      <TableCell>{subUser.profiles?.email || "No email"}</TableCell>
                       <TableCell>
-                        {subUser.title ? (
-                          <Badge variant="outline">{subUser.title}</Badge>
-                        ) : (
-                          <span className="text-muted-foreground">No title</span>
-                        )}
+                        <div>
+                          <p className="font-medium">
+                            {subUser.profiles?.first_name} {subUser.profiles?.last_name}
+                          </p>
+                        </div>
                       </TableCell>
+                      <TableCell>{subUser.profiles?.email}</TableCell>
+                      <TableCell>-</TableCell>
                       <TableCell>
-                        <Badge variant="secondary">
-                          {getPermissionCount(subUser.permissions)} permissions
-                        </Badge>
+                        <div className="flex gap-1 flex-wrap">
+                          <Badge variant="outline" className="text-xs">
+                            {getPermissionCount(subUser.permissions)} permissions
+                          </Badge>
+                        </div>
                       </TableCell>
-                      <TableCell>
-                        {new Date(subUser.created_at).toLocaleDateString()}
+                      <TableCell className="text-sm">
+                        {subUser.created_at ? new Date(subUser.created_at).toLocaleDateString() : '-'}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
+                        <div className="flex gap-2">
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => openPermissionsDialog(subUser)}
                           >
-                            <Settings className="h-4 w-4" />
+                            <Settings className="h-3 w-3" />
                           </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button variant="outline" size="sm">
-                                <UserX className="h-4 w-4" />
+                                <UserX className="h-3 w-3" />
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>Revoke Access</AlertDialogTitle>
+                                <AlertDialogTitle>Deactivate Sub-User</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Are you sure you want to revoke access for {subUser.profiles?.first_name} {subUser.profiles?.last_name}? 
-                                  They will no longer be able to access your properties.
+                                  Are you sure you want to deactivate this sub-user? They will lose access to your organization.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                                 <AlertDialogAction onClick={() => handleDeactivateSubUser(subUser.id)}>
-                                  Revoke Access
+                                  Deactivate
                                 </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
@@ -345,6 +355,16 @@ const SubUserManagement = () => {
                 )}
               </TableBody>
             </Table>
+            
+            <TablePaginator
+              currentPage={page}
+              totalPages={Math.ceil(subUsers.length / pageSize)}
+              pageSize={pageSize}
+              totalItems={subUsers.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              showPageSizeSelector={true}
+            />
           </div>
         </CardContent>
       </Card>

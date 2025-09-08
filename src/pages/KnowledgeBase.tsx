@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,8 +9,9 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { getCurrentPath } from "@/utils/router";
 import { Search, BookOpen, Users, Wrench, CreditCard, Settings, Star, Shield, UserCheck, Building, FileText, HelpCircle } from "lucide-react";
+import { TablePaginator } from "@/components/ui/table-paginator";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 
 interface KnowledgeBaseArticle {
   id: string;
@@ -39,6 +41,11 @@ export default function KnowledgeBase() {
   const [articles, setArticles] = useState<KnowledgeBaseArticle[]>([]);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string>("");
+  
+  const { page, pageSize, setPage, setPageSize } = useUrlPageParam({
+    pageSize: 12,
+    defaultPage: 1
+  });
 
   useEffect(() => {
     fetchUserRole();
@@ -96,6 +103,16 @@ export default function KnowledgeBase() {
     return matchesSearch && matchesCategory;
   });
 
+  // Pagination logic
+  const totalPages = Math.ceil(filteredArticles.length / pageSize);
+  const startIndex = (page - 1) * pageSize;
+  const paginatedArticles = filteredArticles.slice(startIndex, startIndex + pageSize);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, selectedCategory, setPage]);
+
   const popularArticles = articles.sort((a, b) => b.view_count - a.view_count).slice(0, 3);
   
   // Get role-specific articles
@@ -109,7 +126,7 @@ export default function KnowledgeBase() {
   ).slice(0, 4);
 
   // Check if we're in tenant context
-  const isTenantRoute = getCurrentPath().startsWith('/tenant');
+  const isTenantRoute = window.location.pathname.startsWith('/tenant');
   
   const content = (
     <div className="container mx-auto p-6 space-y-8">
@@ -264,31 +281,43 @@ export default function KnowledgeBase() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredArticles.map((article) => (
-                <Card key={article.id} className="hover:shadow-md transition-shadow cursor-pointer">
-                  <CardHeader>
-                    <CardTitle className="text-lg line-clamp-2">{article.title}</CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary">{article.category}</Badge>
-                      <span className="text-xs text-muted-foreground">{article.view_count} views</span>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground line-clamp-3">
-                      {article.content}
-                    </p>
-                    <div className="flex flex-wrap gap-1 mt-3">
-                      {article.tags?.map((tag) => (
-                        <Badge key={tag} variant="outline" className="text-xs">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {paginatedArticles.map((article) => (
+                  <Card key={article.id} className="hover:shadow-md transition-shadow cursor-pointer">
+                    <CardHeader>
+                      <CardTitle className="text-lg line-clamp-2">{article.title}</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">{article.category}</Badge>
+                        <span className="text-xs text-muted-foreground">{article.view_count} views</span>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground line-clamp-3">
+                        {article.content}
+                      </p>
+                      <div className="flex flex-wrap gap-1 mt-3">
+                        {article.tags?.map((tag) => (
+                          <Badge key={tag} variant="outline" className="text-xs">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              
+              <TablePaginator
+                currentPage={page}
+                totalPages={totalPages}
+                pageSize={pageSize}
+                totalItems={filteredArticles.length}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                showPageSizeSelector={true}
+              />
+            </>
           )}
         </div>
       )}

@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { TablePaginator } from "@/components/ui/table-paginator";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -44,36 +46,58 @@ interface ActivityLog {
 const AuditLogs = () => {
   const { toast } = useToast();
   const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [totalLogs, setTotalLogs] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
+  const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ defaultPage: 1, pageSize: 10 });
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, actionFilter, dateFilter, setPage]);
 
   useEffect(() => {
     fetchLogs();
-  }, []);
+  }, [page, pageSize, searchTerm, actionFilter, dateFilter]);
 
   const fetchLogs = async () => {
     try {
-      // Fetch logs AND email logs
+      // Get total count first
+      const [activityCountResult, emailCountResult] = await Promise.all([
+        supabase
+          .from("user_activity_logs")
+          .select('*', { count: 'exact', head: true }),
+        supabase
+          .from("email_logs")
+          .select('*', { count: 'exact', head: true })
+      ]);
+
+      const totalCount = (activityCountResult.count || 0) + (emailCountResult.count || 0);
+      setTotalLogs(totalCount);
+
+      // Fetch more data than needed for client-side pagination
+      const fetchLimit = Math.max(pageSize * 3, 200); // Fetch 3x pageSize or minimum 200
+      
       const [logsResult, emailLogsResult] = await Promise.all([
         supabase
           .from("user_activity_logs")
           .select("*")
           .order("performed_at", { ascending: false })
-          .limit(100),
+          .limit(fetchLimit),
         supabase
           .from("email_logs")
           .select("*")
           .order("created_at", { ascending: false })
-          .limit(50)
+          .limit(fetchLimit)
       ]);
 
       if (logsResult.error) throw logsResult.error;
       if (emailLogsResult.error) throw emailLogsResult.error;
 
-      const logsData = logsResult.data;
-      const emailLogs = emailLogsResult.data;
+      const logsData = logsResult.data || [];
+      const emailLogs = emailLogsResult.data || [];
 
       // Get unique user IDs from logs
       const userIds = [...new Set(logsData?.map(log => log.user_id).filter(Boolean))];
@@ -95,7 +119,7 @@ const AuditLogs = () => {
       });
 
       // Combine logs with profile data
-        const logsWithProfile: ActivityLog[] = logsData?.map(log => ({
+      const logsWithProfile: ActivityLog[] = logsData?.map(log => ({
         id: log.id,
         user_id: log.user_id,
         action: log.action,
@@ -107,8 +131,6 @@ const AuditLogs = () => {
         performed_at: log.performed_at,
         profile: profilesMap.get(log.user_id) || null
       })) || [];
-
-      console.log('Activity logs fetched:', logsWithProfile.length, 'logs');
 
       // Combine activity logs and email logs with proper typing
       const combinedLogs: ActivityLog[] = [
@@ -383,7 +405,7 @@ const AuditLogs = () => {
         {/* Activity Logs Table */}
         <Card className="bg-card">
           <CardHeader>
-            <CardTitle className="text-primary">Activity Logs ({filteredLogs.length})</CardTitle>
+            <CardTitle className="text-primary">Activity Logs ({totalLogs})</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
@@ -398,7 +420,7 @@ const AuditLogs = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredLogs.map((log) => (
+                {filteredLogs.slice(offset, offset + pageSize).map((log) => (
                   <TableRow key={log.id}>
                     <TableCell>
                       <div className="text-sm">
@@ -489,12 +511,24 @@ const AuditLogs = () => {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
+                  ))}
+                </TableBody>
+              </Table>
+              
+              <div className="mt-4">
+                <TablePaginator
+                  currentPage={page}
+                  totalPages={Math.ceil(Math.max(filteredLogs.length, 1) / pageSize)}
+                  pageSize={pageSize}
+                  totalItems={filteredLogs.length}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                  showPageSizeSelector={true}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
     </DashboardLayout>
   );
 };

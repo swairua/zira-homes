@@ -13,6 +13,60 @@ serve(async (req) => {
   }
 
   try {
+    // SECURITY FIX: Verify JWT token and authorization
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return new Response(
+        JSON.stringify({ error: 'Authorization required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    // Create admin client for authorization check
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+
+    // Verify the JWT token and get user
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid or expired token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check if the caller has Admin role using RPC function
+    const { data: hasAdminRole, error: roleCheckError } = await supabaseAdmin
+      .rpc('has_role', { _user_id: user.id, _role: 'Admin' });
+
+    if (roleCheckError || !hasAdminRole) {
+      // Log unauthorized access attempt
+      await supabaseAdmin.rpc('log_security_event', {
+        _event_type: 'unauthorized_access',
+        _severity: 'high',
+        _details: { 
+          action: 'create_user_attempt', 
+          user_id: user.id,
+          ip_address: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown'
+        },
+        _user_id: user.id,
+        _ip_address: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || null
+      });
+
+      return new Response(
+        JSON.stringify({ error: 'Insufficient permissions. Admin role required.' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const { email, first_name, last_name, phone, role } = await req.json();
 
     // Validate required fields
@@ -23,17 +77,28 @@ serve(async (req) => {
       );
     }
 
-    // Get the service role key from environment
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    // SECURITY FIX: Validate target role assignment permission
+    const { data: canAssign, error: roleValidationError } = await supabaseAdmin
+      .rpc('can_assign_role', { _assigner_id: user.id, _target_role: role });
 
-    // Create admin client
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    });
+    if (roleValidationError || !canAssign) {
+      await supabaseAdmin.rpc('log_security_event', {
+        _event_type: 'privilege_escalation_attempt',
+        _severity: 'critical',
+        _details: { 
+          action: 'unauthorized_role_assignment', 
+          target_role: role,
+          assigner_id: user.id
+        },
+        _user_id: user.id,
+        _ip_address: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || null
+      });
+
+      return new Response(
+        JSON.stringify({ error: `Cannot assign ${role} role. Insufficient permissions.` }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     console.log('Creating user with email:', email);
 
@@ -272,13 +337,25 @@ Please log in and change your password immediately.
       }
     }
 
+    // Log successful user creation (audit trail)
+    await supabaseAdmin.rpc('log_security_event', {
+      _event_type: 'user_created',
+      _severity: 'medium',
+      _details: { 
+        created_user_email: email,
+        assigned_role: role,
+        created_by: user.id
+      },
+      _user_id: user.id,
+      _ip_address: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || null
+    });
+
     return new Response(
       JSON.stringify({
         success: true,
         user_id: authData.user.id,
         email: authData.user.email,
-        temporary_password: tempPassword,
-        message: `${role} user created successfully. They can log in with email: ${email} and temporary password: ${tempPassword}`
+        message: `${role} user created successfully. Login credentials sent via email.`
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

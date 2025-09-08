@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Eye, Edit, Home, DollarSign, Info, Calendar } from "lucide-react";
 import { UnitEditForm } from "@/components/forms/UnitEditForm";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface Unit {
   id: string;
@@ -62,10 +64,49 @@ export function UnitDetailsDialog({ unit, mode, trigger }: UnitDetailsDialogProp
   };
 
   const handleSave = async (data: any) => {
-    // TODO: Implement actual save functionality with Supabase
-    console.log('Saving unit:', data);
-    setIsEditing(false);
-    setOpen(false);
+    try {
+      // Prepare update data, only include status if it's maintenance
+      const updateData: any = {
+        unit_number: data.unit_number,
+        unit_type: data.unit_type,
+        bedrooms: data.bedrooms,
+        bathrooms: data.bathrooms,
+        square_feet: data.square_feet,
+        rent_amount: data.rent_amount,
+        security_deposit: data.security_deposit,
+        description: data.description,
+        floor_area: data.floor_area,
+        office_spaces: data.office_spaces,
+        conference_rooms: data.conference_rooms,
+        parking_spaces: data.parking_spaces,
+        loading_docks: data.loading_docks
+      };
+
+      // Only update status if it's being set to maintenance
+      if (data.status === 'maintenance') {
+        updateData.status = 'maintenance';
+      }
+      // If status is not maintenance, don't include it (let database handle occupancy)
+
+      const { error } = await supabase
+        .from('units')
+        .update(updateData)
+        .eq('id', unit.id);
+
+      if (error) throw error;
+      
+      toast.success('Unit updated successfully');
+      setIsEditing(false);
+      setOpen(false);
+      
+      // Trigger a refresh by calling the parent's refresh function
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    } catch (error) {
+      console.error('Error updating unit:', error);
+      toast.error('Failed to update unit');
+    }
   };
 
   const handleCancel = () => {

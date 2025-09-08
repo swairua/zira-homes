@@ -1,0 +1,33 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/supabase/(.*)",
+      "destination": "https://kdpqimetajnhcqseajok.supabase.co/$1"
+    },
+    {
+      "source": "/((?!api|assets|static|lovable-uploads|.*\\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|txt|pdf|zip|mp4|webm|ogg)).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-Content-Type-Options", 
+          "value": "nosniff"
+        }
+      ]
+    }
+  ]
+}

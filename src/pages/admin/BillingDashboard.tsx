@@ -105,6 +105,8 @@ interface BillingPlan {
   sms_credits_included: number;
   features: string[];
   is_active: boolean;
+  is_custom: boolean;
+  contact_link?: string;
   currency: string;
 }
 
@@ -946,23 +948,23 @@ const BillingDashboard = () => {
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-2">
-                          {/* Display pricing based on billing model */}
-                          <div className="text-2xl font-bold">
-                            {plan.billing_model === 'percentage' && (
-                              <span>{plan.percentage_rate}% commission</span>
-                            )}
-                            {plan.billing_model === 'fixed_per_unit' && (
-                              <span>
-                                {formatCurrency(plan.fixed_amount_per_unit || 0, plan.currency)}
-                                <span className="text-sm font-normal text-muted-foreground">
-                                  /unit/{plan.billing_cycle}
-                                </span>
-                              </span>
-                            )}
-                            {plan.billing_model === 'tiered' && (
-                              <span className="text-lg">Tiered Pricing</span>
-                            )}
-                          </div>
+                           {/* Display pricing based on billing model */}
+                           <div className="text-2xl font-bold">
+                             {plan.is_custom ? (
+                               <span>Custom pricing</span>
+                             ) : plan.billing_model === 'percentage' ? (
+                               <span>{plan.percentage_rate}% commission</span>
+                             ) : plan.billing_model === 'fixed_per_unit' ? (
+                               <span>
+                                 {formatCurrency(plan.fixed_amount_per_unit || 0, plan.currency)}
+                                 <span className="text-sm font-normal text-muted-foreground">
+                                   /unit/{plan.billing_cycle}
+                                 </span>
+                               </span>
+                             ) : plan.billing_model === 'tiered' ? (
+                               <span className="text-lg">Tiered Pricing</span>
+                             ) : null}
+                           </div>
                           
                           {/* Show billing model badge */}
                           <div className="flex items-center gap-2">
@@ -1134,6 +1136,8 @@ const BillingDashboard = () => {
             sms_credits_included: newPlan.sms_credits_included || 0,
             features: newPlan.features || [],
             is_active: newPlan.is_active !== false,
+            is_custom: newPlan.is_custom || false,
+            contact_link: newPlan.contact_link,
             currency: newPlan.currency || 'KES'
           } : null}
           open={isAddingPlan}

@@ -443,15 +443,24 @@ const handler = async (req: Request): Promise<Response> => {
           console.log("Sending welcome email...");
           const loginUrl = `${req.headers.get("origin")}/auth`;
           
+          const emailBody = isNewUser ? {
+            tenantEmail: tenantData.email,
+            tenantName: `${tenantData.first_name} ${tenantData.last_name}`,
+            propertyName: propertyInfo?.name || "Your Property",
+            unitNumber: unitInfo?.unit_number || "N/A",
+            temporaryPassword,
+            loginUrl
+          } : {
+            tenantEmail: tenantData.email,
+            tenantName: `${tenantData.first_name} ${tenantData.last_name}`,
+            propertyName: propertyInfo?.name || "Your Property",
+            unitNumber: unitInfo?.unit_number || "N/A",
+            temporaryPassword: null, // Don't send temp password for existing users
+            loginUrl
+          };
+          
           const { data: emailData, error: emailError } = await supabaseAdmin.functions.invoke('send-welcome-email', {
-            body: {
-              tenantEmail: tenantData.email,
-              tenantName: `${tenantData.first_name} ${tenantData.last_name}`,
-              propertyName: propertyInfo?.name || "Your Property",
-              unitNumber: unitInfo?.unit_number || "N/A",
-              temporaryPassword,
-              loginUrl
-            }
+            body: emailBody
           });
 
           if (emailError) {
@@ -569,19 +578,25 @@ const handler = async (req: Request): Promise<Response> => {
         success: true,
         tenant,
         lease,
-        temporaryPassword, // Return for immediate display to admin
+        temporaryPassword: isNewUser ? temporaryPassword : null, // Only return for new users
+        isNewUser,
         communicationStatus: {
           emailSent,
           smsSent,
           errors: communicationErrors
         },
-        // Always include login details for admin fallback
+        // Include login details with appropriate messaging  
         loginDetails: {
           email: tenantData.email,
-          temporaryPassword: temporaryPassword,
-          loginUrl: `${req.headers.get("origin")}/auth`
+          temporaryPassword: isNewUser ? temporaryPassword : null,
+          loginUrl: `${req.headers.get("origin")}/auth`,
+          instructions: isNewUser 
+            ? "Share these credentials with the tenant and ask them to change their password on first login."
+            : "The tenant can use their existing credentials to log in."
         },
-        message: "Tenant account created successfully."
+        message: isNewUser 
+          ? "Tenant account created successfully with new login credentials."
+          : "Tenant account created successfully. User already had an account."
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

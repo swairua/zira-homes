@@ -18,6 +18,29 @@ interface TenantProfileData {
     national_id?: string;
     previous_address?: string;
   } | null;
+  leases: {
+    id: string;
+    lease_start_date: string;
+    lease_end_date: string;
+    monthly_rent: number;
+    security_deposit?: number;
+    status: string;
+    lease_terms?: string;
+    unit_number: string;
+    floor?: string;
+    unit_rent?: number;
+    property_name: string;
+    address: string;
+    city: string;
+    state: string;
+    amenities?: string[];
+    property_description?: string;
+    landlord_first_name?: string;
+    landlord_last_name?: string;
+    landlord_email?: string;
+    landlord_phone?: string;
+  }[];
+  // Backward compatibility - primary lease (most recent active)
   lease: {
     id: string;
     lease_start_date: string;
@@ -75,9 +98,13 @@ export function useTenantProfile() {
       }
 
       // Validate and normalize result data
+      const leases = (result as any)?.leases || [];
+      const primaryLease = leases.length > 0 ? leases[0] : null;
+      
       const validatedData: TenantProfileData = {
         tenant: (result as any)?.tenant && typeof (result as any).tenant === 'object' ? (result as any).tenant : null,
-        lease: (result as any)?.lease && typeof (result as any).lease === 'object' ? (result as any).lease : null,
+        leases: Array.isArray(leases) ? leases : [],
+        lease: primaryLease, // Backward compatibility
         landlord: (result as any)?.landlord && typeof (result as any).landlord === 'object' ? (result as any).landlord : null
       };
       

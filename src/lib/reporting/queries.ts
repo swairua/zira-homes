@@ -8,6 +8,90 @@ interface ReportResponse {
   table: any[];
 }
 
+// Helper functions for data normalization
+function normalizeChartData(chartData: any[], expectedKeys?: string[]): any[] {
+  if (!Array.isArray(chartData)) return [];
+  
+  return chartData.map(item => {
+    const normalized: any = {};
+    
+    // Ensure consistent name/value structure
+    if (item.name === undefined && (item.property_name || item.category || item.status)) {
+      normalized.name = item.property_name || item.category || item.status;
+    } else {
+      normalized.name = item.name;
+    }
+    
+    if (item.value === undefined && (item.amount !== undefined || item.count !== undefined || item.total !== undefined)) {
+      normalized.value = item.amount || item.count || item.total;
+    } else {
+      normalized.value = item.value;
+    }
+    
+    // Copy all other properties
+    Object.keys(item).forEach(key => {
+      if (key !== 'name' && key !== 'value') {
+        normalized[key] = item[key];
+      }
+    });
+    
+    return normalized;
+  });
+}
+
+function normalizeTableData(tableData: any[], fieldMappings?: Record<string, string>): any[] {
+  if (!Array.isArray(tableData)) return [];
+  
+  return tableData.map(row => {
+    if (!fieldMappings) return row;
+    
+    const normalized: any = { ...row };
+    Object.entries(fieldMappings).forEach(([oldKey, newKey]) => {
+      if (row[oldKey] !== undefined && row[newKey] === undefined) {
+        normalized[newKey] = row[oldKey];
+        delete normalized[oldKey];
+      }
+    });
+    
+    return normalized;
+  });
+}
+
+function computeMissingKpis(kpis: Record<string, number>, reportType: string): Record<string, number> {
+  const computed = { ...kpis };
+  
+  switch (reportType) {
+    case 'profit_loss':
+      if (computed.total_revenue !== undefined && computed.total_expenses !== undefined && computed.net_profit === undefined) {
+        computed.net_profit = computed.total_revenue - computed.total_expenses;
+      }
+      if (computed.total_income !== undefined && computed.total_expenses !== undefined && computed.profit === undefined) {
+        computed.profit = computed.total_income - computed.total_expenses;
+      }
+      break;
+      
+    case 'revenue_vs_expenses':
+      if (computed.revenue !== undefined && computed.expenses !== undefined && computed.net_income === undefined) {
+        computed.net_income = computed.revenue - computed.expenses;
+      }
+      if (computed.total_revenue !== undefined && computed.total_expenses !== undefined && computed.profit_margin === undefined) {
+        computed.profit_margin = computed.total_revenue > 0 ? ((computed.total_revenue - computed.total_expenses) / computed.total_revenue * 100) : 0;
+      }
+      break;
+      
+    case 'property_performance':
+      if (computed.total_revenue !== undefined && computed.total_expenses !== undefined && computed.net_income === undefined) {
+        computed.net_income = computed.total_revenue - computed.total_expenses;
+      }
+      if (computed.net_income !== undefined && computed.total_revenue !== undefined && computed.avg_yield === undefined) {
+        computed.avg_yield = computed.total_revenue > 0 ? (computed.net_income / computed.total_revenue * 100) : 0;
+      }
+      break;
+  }
+  
+  return computed;
+}
+
 const reportQueries = {
   rent_collection: async (filters: ReportFilters): Promise<ReportData> => {
     try {
@@ -105,7 +189,7 @@ const reportQueries = {
       
       console.log('Fetching maintenance report with dates:', { startDate, endDate });
       
-      const { data, error } = await supabase.rpc('get_maintenance_report', {
+      const { data, error } = await (supabase as any).rpc('get_maintenance_report', {
         p_start_date: startDate,
         p_end_date: endDate
       });
@@ -117,9 +201,15 @@ const reportQueries = {
 
       const reportResponse = data as unknown as ReportResponse;
       
+      // Normalize chart data for maintenance analytics
+      const normalizedCharts: Record<string, any[]> = {};
+      Object.entries(reportResponse?.charts || {}).forEach(([key, chartData]) => {
+        normalizedCharts[key] = normalizeChartData(chartData);
+      });
+      
       return {
         kpis: reportResponse?.kpis || {},
-        charts: reportResponse?.charts || {},
+        charts: normalizedCharts,
         table: reportResponse?.table || []
       };
     } catch (error) {
@@ -171,7 +261,7 @@ const reportQueries = {
       
       console.log('Fetching lease expiry report with dates:', { startDate, endDate });
       
-      const { data, error } = await supabase.rpc('get_lease_expiry_report', {
+      const { data, error } = await (supabase as any).rpc('get_lease_expiry_report', {
         p_start_date: startDate,
         p_end_date: endDate
       });
@@ -204,7 +294,7 @@ const reportQueries = {
       
       console.log('Fetching outstanding balances report with dates:', { startDate, endDate });
       
-      const { data, error } = await supabase.rpc('get_outstanding_balances_report', {
+      const { data, error } = await (supabase as any).rpc('get_outstanding_balances_report', {
         p_start_date: startDate,
         p_end_date: endDate
       });
@@ -216,9 +306,15 @@ const reportQueries = {
 
       const reportResponse = data as unknown as ReportResponse;
       
+      // Normalize chart data
+      const normalizedCharts: Record<string, any[]> = {};
+      Object.entries(reportResponse?.charts || {}).forEach(([key, chartData]) => {
+        normalizedCharts[key] = normalizeChartData(chartData);
+      });
+      
       return {
         kpis: reportResponse?.kpis || {},
-        charts: reportResponse?.charts || {},
+        charts: normalizedCharts,
         table: reportResponse?.table || []
       };
     } catch (error) {
@@ -249,10 +345,106 @@ const reportQueries = {
 
       const reportResponse = data as unknown as ReportResponse;
       
+      // Enhanced normalization for property performance
+      const normalizedCharts: Record<string, any[]> = {};
+      Object.entries(reportResponse?.charts || {}).forEach(([key, chartData]) => {
+        const normalized = normalizeChartData(chartData).map(item => {
+          // Ensure consistent property name mapping
+          const propertyName = item.property_name || item.property || item.name || 'Unknown Property';
+          
+          // Coerce numeric values and handle percentages
+          const revenue = typeof item.revenue === 'string' 
+            ? parseFloat(item.revenue.replace(/[,$%]/g, '')) || 0
+            : (typeof item.revenue === 'number' ? item.revenue : 0);
+            
+          const expenses = typeof item.expenses === 'string'
+            ? parseFloat(item.expenses.replace(/[,$%]/g, '')) || 0
+            : (typeof item.expenses === 'number' ? item.expenses : 0);
+            
+          let yield_value = typeof item.yield === 'string'
+            ? parseFloat(item.yield.replace(/[,%]/g, '')) || 0
+            : (typeof item.yield === 'number' ? item.yield : 0);
+          
+          // Convert yield to percentage if in 0-1 range
+          if (yield_value > 0 && yield_value < 1) {
+            yield_value = yield_value * 100;
+          }
+          
+          return {
+            ...item,
+            property_name: propertyName,
+            revenue,
+            expenses,
+            yield: yield_value,
+            net_income: revenue - expenses
+          };
+        });
+        
+        normalizedCharts[key] = normalized;
+      });
+      
+      // Compute missing KPIs for property performance
+      const computedKpis = computeMissingKpis(reportResponse?.kpis || {}, 'property_performance');
+      
+      // Normalize table data
+      const normalizedTable = (reportResponse?.table || []).map(row => {
+        const propertyName = row.property_name || row.property || row.name || 'Unknown Property';
+        const revenue = typeof row.revenue === 'number' ? row.revenue : 0;
+        const expenses = typeof row.expenses === 'number' ? row.expenses : 0;
+        
+        let yield_value = typeof row.yield === 'string'
+          ? parseFloat(row.yield.replace(/[,%]/g, '')) || 0
+          : (typeof row.yield === 'number' ? row.yield : 0);
+          
+        // Convert yield to percentage if in 0-1 range
+        if (yield_value > 0 && yield_value < 1) {
+          yield_value = yield_value * 100;
+        }
+        
+        // Compute net income if missing
+        const net_income = row.net_income || (revenue - expenses);
+        
+        // Compute yield if missing (with divide-by-zero guard)
+        if (!row.yield && revenue > 0) {
+          yield_value = (net_income / revenue) * 100;
+        }
+        
+        // Normalize date fields to prevent "Invalid time value" errors
+        let report_period = row.report_period || row.report_date || row.period;
+        if (report_period && typeof report_period === 'string') {
+          // Handle partial dates like "2024-01" by adding day
+          if (/^\d{4}-\d{2}$/.test(report_period)) {
+            report_period = `${report_period}-01`;
+          }
+        }
+        if (!report_period) {
+          report_period = new Date().toISOString().split('T')[0]; // Current date as fallback
+        }
+        
+        return {
+          ...row,
+          property_name: propertyName,
+          net_income,
+          yield: yield_value,
+          report_period,
+          report_date: report_period // Ensure both fields are normalized
+        };
+      });
+      
+      // Debug logging for property performance
+      console.log('Property Performance - Sample chart data:', 
+        Object.keys(normalizedCharts).map(key => ({
+          chart: key,
+          sample: normalizedCharts[key].slice(0, 2)
+        }))
+      );
+      console.log('Property Performance - Sample table data:', normalizedTable.slice(0, 2));
+      console.log('Property Performance - Computed KPIs:', computedKpis);
+      
       return {
-        kpis: reportResponse?.kpis || {},
-        charts: reportResponse?.charts || {},
-        table: reportResponse?.table || []
+        kpis: computedKpis,
+        charts: normalizedCharts,
+        table: normalizedTable
       };
     } catch (error) {
       console.error('Failed to fetch property performance report:', error);
@@ -282,9 +474,17 @@ const reportQueries = {
 
       const reportResponse = data as unknown as ReportResponse;
       
+      // Normalize chart data and compute missing KPIs
+      const normalizedCharts: Record<string, any[]> = {};
+      Object.entries(reportResponse?.charts || {}).forEach(([key, chartData]) => {
+        normalizedCharts[key] = normalizeChartData(chartData);
+      });
+      
+      const computedKpis = computeMissingKpis(reportResponse?.kpis || {}, 'profit_loss');
+      
       return {
-        kpis: reportResponse?.kpis || {},
-        charts: reportResponse?.charts || {},
+        kpis: computedKpis,
+        charts: normalizedCharts,
         table: reportResponse?.table || []
       };
     } catch (error) {
@@ -348,9 +548,17 @@ const reportQueries = {
 
       const reportResponse = data as unknown as ReportResponse;
       
+      // Normalize chart data and compute missing KPIs
+      const normalizedCharts: Record<string, any[]> = {};
+      Object.entries(reportResponse?.charts || {}).forEach(([key, chartData]) => {
+        normalizedCharts[key] = normalizeChartData(chartData);
+      });
+      
+      const computedKpis = computeMissingKpis(reportResponse?.kpis || {}, 'revenue_vs_expenses');
+      
       return {
-        kpis: reportResponse?.kpis || {},
-        charts: reportResponse?.charts || {},
+        kpis: computedKpis,
+        charts: normalizedCharts,
         table: reportResponse?.table || []
       };
     } catch (error) {
@@ -363,19 +571,114 @@ const reportQueries = {
     }
   },
 
+  executive_summary: async (filters: ReportFilters): Promise<ReportData> => {
+    try {
+      const { startDate, endDate } = calculateDateRange(
+        filters.periodPreset || 'current_month',
+        filters.startDate,
+        filters.endDate
+      );
+
+      console.log('Fetching executive summary report with dates:', { startDate, endDate });
+      
+      const { data, error } = await supabase.rpc('get_executive_summary_report', {
+        p_start_date: startDate,
+        p_end_date: endDate,
+        p_include_tenant_scope: true
+      });
+
+      if (error) {
+        console.error('Executive summary RPC error:', error);
+        throw error;
+      }
+
+      console.log('Executive summary raw response:', data);
+      
+      // Debug meta data for verification
+      const reportData = data as any;
+      if (reportData?.meta) {
+        console.log('📊 Executive Summary Meta:', {
+          properties_count: reportData.meta.properties_count || 0,
+          payments_count: reportData.meta.payments_count || 0,
+          expenses_count: reportData.meta.expenses_count || 0,
+          invoices_count: reportData.meta.invoices_count || 0,
+          date_range: `${startDate} to ${endDate}`,
+          scope: 'tenant_included'
+        });
+      }
+
+      if (!data) {
+        return {
+          kpis: {},
+          charts: {},
+          table: []
+        };
+      }
+
+      // Normalize the table data to match expected structure for detailed breakdown
+      const normalizedTable = (reportData?.table || []).map((item: any) => ({
+        report_date: item.report_date,
+        property_name: item.property_name,
+        units: item.units,
+        revenue: item.revenue,
+        occupancy: `${item.occupancy}%`
+      }));
+
+      return {
+        kpis: reportData?.kpis || {},
+        charts: reportData?.charts || {},
+        table: normalizedTable
+      };
+    } catch (error) {
+      console.error('Error in executive_summary query:', error);
+      throw error;
+    }
+  },
+
   market_rent: async (filters: ReportFilters): Promise<ReportData> => {
-    // Market rent analysis requires external data sources or manual input
-    // Return empty structure for now
-    return { 
-      kpis: { 
-        market_rent: 0, 
-        current_rent: 0, 
-        rent_variance: 0, 
-        optimization_potential: 0 
-      }, 
-      charts: {}, 
-      table: [] 
-    };
+    try {
+      // Check if this is a market comparison request
+      const isMarketComparison = filters.comparisonMode === 'market';
+      const functionName = isMarketComparison ? 'get_platform_market_rent' : 'get_market_rent_report';
+
+      const dateRange = calculateDateRange(
+        filters.periodPreset || 'last_12_months',
+        filters.startDate,
+        filters.endDate
+      );
+
+      const { data, error } = await supabase.rpc(functionName, {
+        p_start_date: dateRange.startDate,
+        p_end_date: dateRange.endDate
+      });
+      
+      if (error) {
+        console.error('Error fetching market rent report:', error);
+        throw error;
+      }
+
+      const reportData = data as any;
+      return {
+        kpis: reportData?.kpis || {},
+        charts: reportData?.charts || {},
+        table: reportData?.table || [],
+        comparisonMode: isMarketComparison ? 'market' : 'portfolio'
+      };
+    } catch (error) {
+      console.error('Error in market_rent report:', error);
+      return {
+        kpis: {
+          avg_market_rent: 0,
+          avg_current_rent: 0,
+          rent_variance: 0,
+          optimization_potential: 0,
+          properties_analyzed: 0
+        },
+        charts: {},
+        table: [],
+        comparisonMode: 'portfolio'
+      };
+    }
   },
 
   tenant_turnover: async (filters: ReportFilters): Promise<ReportData> => {
@@ -384,7 +687,7 @@ const reportQueries = {
       
       console.log('Fetching tenant turnover report with dates:', { startDate, endDate });
       
-      const { data, error } = await supabase.rpc('get_tenant_turnover_report', {
+      const { data, error } = await (supabase as any).rpc('get_tenant_turnover_report', {
         p_start_date: startDate,
         p_end_date: endDate
       });
@@ -411,46 +714,14 @@ const reportQueries = {
     }
   },
 
-  executive_summary: async (filters: ReportFilters): Promise<ReportData> => {
-    try {
-      const { startDate, endDate } = calculateDateRange(filters.periodPreset, filters.startDate, filters.endDate);
-      
-      console.log('Fetching executive summary report with dates:', { startDate, endDate });
-      
-      const { data, error } = await supabase.rpc('get_executive_summary_report', {
-        p_start_date: startDate,
-        p_end_date: endDate
-      });
-
-      if (error) {
-        console.error('Error fetching executive summary report:', error);
-        throw error;
-      }
-
-      const reportResponse = data as unknown as ReportResponse;
-      
-      return {
-        kpis: reportResponse?.kpis || {},
-        charts: reportResponse?.charts || {},
-        table: reportResponse?.table || []
-      };
-    } catch (error) {
-      console.error('Failed to fetch executive summary report:', error);
-      return {
-        kpis: {},
-        charts: {},
-        table: []
-      };
-    }
-  },
-
   financial_summary: async (filters: ReportFilters): Promise<ReportData> => {
     try {
       const { startDate, endDate } = calculateDateRange(filters.periodPreset, filters.startDate, filters.endDate);
       
       console.log('Fetching financial summary report with dates:', { startDate, endDate });
+      console.log('Financial summary filters:', filters);
       
-      const { data, error } = await supabase.rpc('get_financial_summary_report', {
+      const { data, error } = await (supabase as any).rpc('get_financial_summary_report', {
         p_start_date: startDate,
         p_end_date: endDate
       });
@@ -462,10 +733,101 @@ const reportQueries = {
 
       const reportResponse = data as unknown as ReportResponse;
       
+      console.log('Raw financial summary data:', reportResponse);
+      console.log('Financial Summary KPIs breakdown:', {
+        total_income: reportResponse?.kpis?.total_income,
+        total_expenses: reportResponse?.kpis?.total_expenses,
+        net_income: reportResponse?.kpis?.net_income,
+        payment_count: reportResponse?.kpis?.payment_count,
+        expense_count: reportResponse?.kpis?.expense_count
+      });
+
+      // Check if we have any data at all
+      const hasKpiData = reportResponse?.kpis && Object.values(reportResponse.kpis).some(v => v && v > 0);
+      const hasTableData = reportResponse?.table && reportResponse.table.length > 0;
+      const hasChartData = reportResponse?.charts && Object.values(reportResponse.charts).some(arr => Array.isArray(arr) && arr.length > 0);
+      
+      if (!hasKpiData && !hasTableData && !hasChartData) {
+        console.warn('⚠️ Financial Summary returned no data for period:', { startDate, endDate, propertyId: filters.propertyId });
+        console.log('This could indicate:');
+        console.log('- No payments with status "completed", "paid", or "success"');
+        console.log('- No expenses in the date range');
+        console.log('- User lacks permission to view properties');
+        console.log('- Property ownership/management assignments are missing');
+      } else {
+        console.log('✅ Financial Summary loaded successfully:', {
+          hasKpiData,
+          hasTableData, 
+          hasChartData,
+          totalIncome: reportResponse?.kpis?.total_income || 0,
+          totalExpenses: reportResponse?.kpis?.total_expenses || 0
+        });
+      }
+      
+      // Normalize table data for Financial Summary - flatten revenue_sources and expense_categories
+      let normalizedTable: any[] = [];
+      
+      if (reportResponse?.table && typeof reportResponse.table === 'object' && !Array.isArray(reportResponse.table)) {
+        const tableObj = reportResponse.table as any;
+        const { revenue_sources = [], expense_categories = [] } = tableObj;
+        const totalIncome = reportResponse?.kpis?.total_income || 0;
+        const totalExpenses = reportResponse?.kpis?.total_expenses || 0;
+        
+        // Add revenue sources as Income rows
+        if (Array.isArray(revenue_sources)) {
+          revenue_sources.forEach((item: any) => {
+            normalizedTable.push({
+              category: item.property_name || item.category || 'Revenue',
+              type: 'Income',
+              amount: item.amount || 0,
+              percentage: totalIncome > 0 ? ((item.amount || 0) / totalIncome * 100) : 0
+            });
+          });
+        }
+        
+        // Add expense categories as Expense rows
+        if (Array.isArray(expense_categories)) {
+          expense_categories.forEach((item: any) => {
+            normalizedTable.push({
+              category: item.category || 'Expense',
+              type: 'Expense', 
+              amount: item.amount || 0,
+              percentage: totalExpenses > 0 ? ((item.amount || 0) / totalExpenses * 100) : 0
+            });
+          });
+        }
+      } else if (Array.isArray(reportResponse?.table)) {
+        normalizedTable = reportResponse.table;
+      }
+
+      // Add fallback rows if table is empty but we have KPI data
+      if (normalizedTable.length === 0 && hasKpiData) {
+        const totalIncome = reportResponse?.kpis?.total_income || 0;
+        const totalExpenses = reportResponse?.kpis?.total_expenses || 0;
+        
+        if (totalIncome > 0) {
+          normalizedTable.push({
+            category: 'Total Revenue',
+            type: 'Income',
+            amount: totalIncome,
+            percentage: 100
+          });
+        }
+        
+        if (totalExpenses > 0) {
+          normalizedTable.push({
+            category: 'Total Expenses',
+            type: 'Expense',
+            amount: totalExpenses,
+            percentage: 100
+          });
+        }
+      }
+
       return {
         kpis: reportResponse?.kpis || {},
         charts: reportResponse?.charts || {},
-        table: reportResponse?.table || []
+        table: normalizedTable
       };
     } catch (error) {
       console.error('Failed to fetch financial summary report:', error);

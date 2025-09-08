@@ -8,6 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { TablePaginator } from "@/components/ui/table-paginator";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -59,6 +61,7 @@ interface EditUserFormData {
 
 const UserManagement = () => {
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [totalUsers, setTotalUsers] = useState(0);
   const [loading, setLoading] = useState(true);
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
@@ -81,15 +84,24 @@ const UserManagement = () => {
   const { hasPermission } = usePermissions();
   const { logActivity } = useUserActivity();
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<AddUserFormData>();
+  const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ defaultPage: 1, pageSize: 10 });
 
   const roles = ["Admin", "Landlord", "Manager", "Agent", "Tenant"];
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [page, pageSize]);
 
   const fetchUsers = async () => {
     try {
+      // First get total count
+      const { count } = await supabase
+        .from("profiles")
+        .select('*', { count: 'exact', head: true });
+
+      setTotalUsers(count || 0);
+
+      // Then get paginated data
       const { data, error } = await supabase
         .from("profiles")
         .select(`
@@ -100,11 +112,12 @@ const UserManagement = () => {
           phone,
           created_at
         `)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .range(offset, offset + pageSize - 1);
 
       if (error) throw error;
       
-      // Fetch user roles and subscriptions separately
+      // Fetch user roles and subscriptions only for the current page
       const usersWithRolesAndSubscriptions = await Promise.all(
         (data || []).map(async (user) => {
           const { data: roles } = await supabase
@@ -1093,13 +1106,24 @@ const UserManagement = () => {
             primaryUser={selectedUser}
             duplicateUser={duplicateUser}
             onMergeComplete={() => {
-              fetchUsers();
               setMergeDialogOpen(false);
               setSelectedUser(null);
               setDuplicateUser(null);
+              fetchUsers();
             }}
           />
         )}
+        
+        {/* Pagination */}
+        <TablePaginator
+          currentPage={page}
+          totalPages={Math.ceil(totalUsers / pageSize)}
+          pageSize={pageSize}
+          totalItems={totalUsers}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          showPageSizeSelector={true}
+        />
       </div>
     </DashboardLayout>
   );

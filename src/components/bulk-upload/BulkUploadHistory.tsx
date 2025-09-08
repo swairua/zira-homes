@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TablePaginator } from "@/components/ui/table-paginator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FileText, Clock, CheckCircle, AlertCircle, Download } from "lucide-react";
 import { getBulkUploadHistory } from "@/utils/bulkUploadAudit";
@@ -11,12 +12,20 @@ import { useQuery } from "@tanstack/react-query";
 
 export function BulkUploadHistory() {
   const { user } = useAuth();
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
 
   const { data: uploadHistory = [], isLoading } = useQuery({
     queryKey: ['bulk-upload-history', user?.id],
     queryFn: () => getBulkUploadHistory(user?.id),
     enabled: !!user?.id
   });
+
+  // Client-side pagination
+  const totalItems = uploadHistory.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedHistory = uploadHistory.slice(startIndex, startIndex + pageSize);
 
   if (isLoading) {
     return (
@@ -97,7 +106,7 @@ export function BulkUploadHistory() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {uploadHistory.map((upload) => (
+              {paginatedHistory.map((upload) => (
                 <TableRow key={upload.id}>
                   <TableCell className="font-mono text-sm">
                     {new Date(upload.created_at).toLocaleDateString()} {new Date(upload.created_at).toLocaleTimeString()}
@@ -139,6 +148,19 @@ export function BulkUploadHistory() {
             </TableBody>
           </Table>
         </ScrollArea>
+        
+        {totalPages > 1 && (
+          <div className="mt-4">
+            <TablePaginator
+              currentPage={currentPage}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              totalItems={totalItems}
+              onPageChange={setCurrentPage}
+              showPageSizeSelector={false}
+            />
+          </div>
+        )}
       </CardContent>
     </Card>
   );

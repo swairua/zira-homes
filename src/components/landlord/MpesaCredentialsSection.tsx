@@ -60,31 +60,33 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       if (!user?.id) return;
 
       try {
+        // Use the new encrypted table - only check if config exists
         const { data, error } = await supabase
           .from('landlord_mpesa_configs')
-          .select('*')
+          .select('id, callback_url, environment, is_active')
           .eq('landlord_id', user.id)
-          .eq('is_active', true)
           .maybeSingle();
 
-        if (error && error.code !== 'PGRST116') {
+        if (error) {
           console.error('Error loading M-Pesa config:', error);
           return;
         }
 
         if (data) {
-          setConfig({
-            ...data,
+          setConfig(prev => ({
+            ...prev,
+            id: data.id,
+            callback_url: data.callback_url || '',
             environment: (data.environment === 'production' ? 'production' : 'sandbox') as 'sandbox' | 'production',
-            shortcode_type: (data as any).shortcode_type || 'paybill'
-          });
+            is_active: data.is_active,
+          }));
           setUsePlatformDefaults(false);
           setHasConfig(true);
-          setIsOpen(true); // Open when configured
+          setIsOpen(true);
           onConfigChange(true);
         } else {
           setHasConfig(false);
-          setIsOpen(true); // Open by default when not configured for easy setup
+          setIsOpen(true);
           onConfigChange(false);
         }
       } catch (error) {
@@ -96,6 +98,8 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
   }, [user?.id, onConfigChange]);
 
   const handleSave = async () => {
+    if (!user?.id) return;
+    
     if (usePlatformDefaults) {
       // Delete custom config if switching to platform defaults
       if (config.id) {
@@ -131,7 +135,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         } catch (error) {
           console.error('Error deleting config:', error);
           toast({
-            title: "Error",
+            title: "Error", 
             description: "Failed to switch to platform defaults.",
             variant: "destructive",
           });
@@ -154,29 +158,42 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
     setSaving(true);
     try {
-      const configData = {
-        landlord_id: user?.id,
-        ...config,
-      };
-
-      const { error } = await supabase
-        .from('landlord_mpesa_configs')
-        .upsert(configData, { onConflict: 'landlord_id' });
+      // Save encrypted credentials via edge function
+      const { data, error } = await supabase.functions.invoke('save-mpesa-credentials', {
+        body: {
+          consumer_key: config.consumer_key,
+          consumer_secret: config.consumer_secret,
+          shortcode: config.business_shortcode,
+          passkey: config.passkey,
+          callback_url: config.callback_url,
+          environment: config.environment,
+          is_active: config.is_active
+        }
+      });
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       setHasConfig(true);
       onConfigChange(true);
+      
+      // Clear sensitive data from local state for security
+      setConfig(prev => ({
+        ...prev,
+        consumer_key: '',
+        consumer_secret: '',
+        passkey: ''
+      }));
 
       toast({
         title: "Success",
-        description: "M-Pesa credentials saved successfully.",
+        description: "M-Pesa credentials saved securely.",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving M-Pesa config:', error);
       toast({
         title: "Error",
-        description: "Failed to save M-Pesa credentials.",
+        description: error.message || "Failed to save M-Pesa credentials.",
         variant: "destructive",
       });
     } finally {

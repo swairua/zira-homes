@@ -13,17 +13,28 @@ export const getCurrencySymbol = (code: string = 'KES'): string => {
     case 'TZS': return 'TSh';
     case 'UGX': return 'USh';
     case 'KES':
-    default: return 'KES';
+    default: return 'KSh';
   }
 };
 
 export const formatAmount = (amount: number = 0, currencyCode?: string): string => {
   const code = currencyCode || getGlobalCurrencySync();
-  // Use Intl for $, €, £; for codes like KES render code + amount
   const symbol = getCurrencySymbol(code);
+  
+  // Use Intl.NumberFormat for major currencies (USD, EUR, GBP)
   if (['$', '€', '£'].includes(symbol)) {
     return new Intl.NumberFormat(undefined, { style: 'currency', currency: code }).format(Number(amount || 0));
   }
+  
+  // For African currencies and others, use Intl.NumberFormat with currency display
+  if (['KES', 'NGN', 'TZS', 'UGX'].includes(code)) {
+    return new Intl.NumberFormat(undefined, { 
+      style: 'currency', 
+      currency: code, 
+      currencyDisplay: 'code' 
+    }).format(Number(amount || 0)).replace(code, symbol);
+  }
+  
   return `${symbol} ${Number(amount || 0).toLocaleString()}`;
 };
 
@@ -77,12 +88,13 @@ export const getGlobalCurrency = async (): Promise<SupportedCurrency> => {
   const local = getGlobalCurrencySync();
   if (local) return local;
 
-  // 2) Try to infer from active subscription/billing plan
+  // 2) Try to infer from active or trial subscription/billing plan
   try {
     const { data: subs } = await supabase
       .from('landlord_subscriptions')
       .select('status, landlord_id, billing_plan:billing_plans(currency)')
-      .eq('status', 'active')
+      .in('status', ['active', 'trial'])
+      .order('status', { ascending: false }) // Prefer active over trial
       .limit(1);
 
     const code = (subs?.[0] as any)?.billing_plan?.currency as SupportedCurrency | undefined;

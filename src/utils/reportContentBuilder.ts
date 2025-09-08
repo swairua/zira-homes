@@ -1,6 +1,7 @@
 import { getReportTransformer } from '@/utils/reportDataTransformers';
 import { ReportChartDataService } from '@/utils/reportChartDataService';
 import { formatKPIValue, getReportSummary as modalSummaryHelper } from '@/utils/reportModalHelpers';
+import { reportConfigs } from '@/lib/reporting/config';
 
 export interface UnifiedReportContent {
   period: string;
@@ -20,6 +21,9 @@ interface BuildParams {
 export function buildUnifiedReportContent({ reportType, period, sourceData, summaryOverride }: BuildParams): UnifiedReportContent {
   console.log('Building report content for:', reportType, 'with data:', sourceData);
   
+  // Find the report config for proper KPI formatting
+  const reportConfig = reportConfigs.find(config => config.id === reportType || config.queryId === reportType);
+  
   // Handle SQL function response structure (kpis, charts, table objects/arrays)
   const hasSQLStructure = sourceData?.kpis && typeof sourceData.kpis === 'object' && 
                           sourceData?.charts && typeof sourceData.charts === 'object';
@@ -29,8 +33,11 @@ export function buildUnifiedReportContent({ reportType, period, sourceData, summ
     const kpisObject = sourceData.kpis || {};
     const chartsObject = sourceData.charts || {};
     
-    // Convert KPIs object to array format expected by PDF
+    // Convert KPIs object to array format expected by PDF with proper formatting
     const kpis = Object.entries(kpisObject).map(([key, value]) => {
+      // Try to find KPI config first for accurate formatting
+      const kpiConfig = reportConfig?.kpis?.find(k => k.key === key);
+      
       // Map common KPI keys to user-friendly labels
       const labelMap: Record<string, string> = {
         total_due: 'Total Due',
@@ -38,11 +45,30 @@ export function buildUnifiedReportContent({ reportType, period, sourceData, summ
         outstanding: 'Outstanding Amount',
         collection_rate: 'Collection Rate',
         total_invoices: 'Total Invoices',
-        paid_invoices: 'Paid Invoices'
+        paid_invoices: 'Paid Invoices',
+        total_units: 'Total Units',
+        occupied_units: 'Occupied Units',
+        vacant_units: 'Vacant Units',
+        occupancy_rate: 'Occupancy Rate',
+        total_requests: 'Total Requests',
+        completed_requests: 'Completed',
+        pending_requests: 'Pending',
+        avg_resolution_days: 'Avg Resolution Time'
       };
       
-      const label = labelMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-      const format = key.includes('rate') || key.includes('percent') ? 'percent' : 'currency';
+      const label = kpiConfig?.label || labelMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      
+      // Determine format from config or smart detection
+      let format = 'currency'; // default
+      if (kpiConfig?.format) {
+        format = kpiConfig.format;
+      } else if (key.includes('rate') || key.includes('percent') || key.includes('margin')) {
+        format = 'percent';
+      } else if (key.includes('units') || key.includes('count') || key.includes('requests') || key.includes('invoices') || key.includes('days')) {
+        format = 'number';
+      } else if (key.includes('time') && !key.includes('amount')) {
+        format = 'duration';
+      }
       
       return {
         label,
@@ -105,7 +131,9 @@ export function buildUnifiedReportContent({ reportType, period, sourceData, summ
       };
     });
 
-    const tableData = sourceData.table || [];
+    // Enhanced table data processing - use existing data structure without injecting additional fields
+    let tableData = sourceData.table || [];
+    
     const summary = summaryOverride || generateSummaryFromKPIs(kpis, reportType);
 
     return {

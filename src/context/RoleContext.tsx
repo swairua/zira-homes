@@ -40,14 +40,33 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchUserRole = async () => {
-      if (!user) {
-        setUserRole(null);
-        setLoading(false);
-        return;
-      }
+  // Optimistic role hydration from localStorage and metadata
+  const hydrateFromCache = (user: any) => {
+    if (!user) return;
+    
+    // SECURITY FIX: Don't trust localStorage until server verification
+    // Remove optimistic role setting to prevent privilege confusion
+    const metadataRole = user.user_metadata?.role?.toLowerCase();
+    
+    if (metadataRole) {
+      setSelectedRole(metadataRole);
+      setUserRole(metadataRole);
+    }
+  };
 
+  useEffect(() => {
+    if (!user) {
+      setUserRole(null);
+      setAssignedRoles([]);
+      setSelectedRole(null);
+      setLoading(false);
+      return;
+    }
+
+    // Immediate optimistic hydration
+    hydrateFromCache(user);
+
+    const fetchUserRole = async () => {
       try {
         const result = await measureApiCall("role-resolution", async () => {
           // Check metadata first (fastest)
@@ -75,7 +94,34 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
             const roles = userRolesResult.data.map(r => r.role.toLowerCase());
             setAssignedRoles(roles);
             
-            // Set primary role (highest priority first)
+            // SECURITY FIX: Only trust selectedRole if it exists in server-verified roles
+            const selectedRole = localStorage.getItem('selectedRole');
+            if (selectedRole && roles.includes(selectedRole.toLowerCase())) {
+              setSelectedRole(selectedRole.toLowerCase());
+            } else {
+              // Set primary role (highest priority first)
+              if (roles.includes("admin")) {
+                setSelectedRole("admin");
+                return "admin";
+              }
+              if (roles.includes("landlord")) {
+                setSelectedRole("landlord");
+                return "landlord";
+              }
+              if (roles.includes("manager")) {
+                setSelectedRole("manager");
+                return "manager";
+              }
+              if (roles.includes("agent")) {
+                setSelectedRole("agent");
+                return "agent";
+              }
+              if (selectedRole && !roles.includes(selectedRole.toLowerCase())) {
+                localStorage.removeItem('selectedRole'); // Clean up invalid/unauthorized selection
+              }
+            }
+            
+            // Return the primary role for userRole state
             if (roles.includes("admin")) return "admin";
             if (roles.includes("landlord")) return "landlord";
             if (roles.includes("manager")) return "manager";
@@ -97,12 +143,16 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
           return metadataRole?.toLowerCase() || "tenant";
         });
 
-        setUserRole(result);
+        // Only update if different from optimistic value
+        if (result !== userRole) {
+          setUserRole(result);
+        }
+        
         // Set selected role to stored preference or primary role
         const storedRole = localStorage.getItem('selectedRole');
         if (storedRole && assignedRoles.includes(storedRole)) {
           setSelectedRole(storedRole);
-        } else {
+        } else if (!selectedRole || selectedRole !== result) {
           setSelectedRole(result);
         }
       } catch (error) {
@@ -115,7 +165,8 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
       }
     };
 
-    fetchUserRole();
+    // Defer actual API call slightly to allow optimistic render
+    setTimeout(fetchUserRole, 0);
   }, [user]);
 
   // Calculate effective role (considering impersonation and role switching)

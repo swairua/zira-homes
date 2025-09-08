@@ -12,7 +12,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import apartmentBuilding from "@/assets/apartment-building.jpg";
 import { ResetPasswordForm } from "@/components/auth/ResetPasswordForm";
-import { navigateTo } from "@/utils/router";
 
 const Auth = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -138,12 +137,12 @@ const Auth = () => {
   // Show password reset form if in recovery mode
   if (isPasswordReset) {
     return (
-      <ResetPasswordForm
+      <ResetPasswordForm 
         onSuccess={() => {
-          navigateTo('/');
+          window.location.href = '/';
         }}
         onCancel={() => {
-          navigateTo('/auth');
+          window.location.href = '/auth';
         }}
       />
     );

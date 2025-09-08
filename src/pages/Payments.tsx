@@ -10,11 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { formatAmount, getGlobalCurrencySync } from "@/utils/currency";
-import { Plus, Search, Filter, DollarSign, Calendar } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { Search, Filter, DollarSign, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { KpiGrid } from "@/components/kpi/KpiGrid";
 import { KpiStatCard } from "@/components/kpi/KpiStatCard";
+import { RecordPaymentDialog } from "@/components/payments/RecordPaymentDialog";
+import { TablePaginator } from "@/components/ui/table-paginator";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 
 interface Payment {
   id: string;
@@ -40,41 +42,43 @@ interface Payment {
   };
 }
 
-interface PaymentFormData {
-  tenant_id: string;
-  lease_id: string;
-  amount: number;
-  payment_date: string;
-  payment_method: string;
-  payment_type: string;
-  payment_reference: string;
-  invoice_number?: string;
-  notes?: string;
-}
 
 const Payments = () => {
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [tenants, setTenants] = useState<any[]>([]);
   const [leases, setLeases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [periodFilter, setPeriodFilter] = useState("last_12_months");
-  const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
-  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<PaymentFormData>();
-
-  const selectedTenantId = watch("tenant_id");
+  const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ pageSize: 10 });
 
 
   const fetchPayments = async () => {
     try {
-      console.log("🔍 Starting payments fetch");
+      console.log("🔍 Starting payments fetch with pagination", { page, pageSize, offset });
       
-      // Get payments data
-      const { data: paymentsData, error: paymentsError } = await supabase
+      // Build query with filters
+      let query = supabase
         .from("payments")
-        .select("*")
+        .select("*", { count: 'exact' });
+
+      // Apply search filter (will be done after joining due to complexity)
+      // Apply status filter
+      if (statusFilter !== "all") {
+        query = query.eq('status', statusFilter);
+      }
+
+      // Apply period filter
+      const { start: periodStart, end: periodEnd } = getPeriodDates(periodFilter);
+      query = query.gte('payment_date', periodStart.toISOString().split('T')[0])
+               .lte('payment_date', periodEnd.toISOString().split('T')[0]);
+
+      // Add pagination and ordering
+      const { data: paymentsData, error: paymentsError, count } = await query
+        .range(offset, offset + pageSize - 1)
         .order("payment_date", { ascending: false });
 
       if (paymentsError) {
@@ -102,7 +106,7 @@ const Payments = () => {
       const propertyMap = new Map(propertiesResult.data?.map(p => [p.id, p]) || []);
 
       // Join data manually
-      const joinedPayments = paymentsData?.map(payment => {
+      let joinedPayments = paymentsData?.map(payment => {
         const tenant = tenantMap.get(payment.tenant_id);
         const lease = leaseMap.get(payment.lease_id);
         const unit = lease ? unitMap.get(lease.unit_id) : null;
@@ -122,8 +126,18 @@ const Payments = () => {
         };
       }) || [];
 
-      console.log("🔗 Joined payments:", joinedPayments.length);
+      // Apply search filter after joining
+      if (searchTerm) {
+        joinedPayments = joinedPayments.filter(payment =>
+          payment.tenants.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          payment.tenants.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          payment.leases.units.properties.name.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+      }
+
+      console.log("🔗 Joined payments:", joinedPayments.length, "of", count);
       setPayments(joinedPayments);
+      setTotalCount(count || 0);
     } catch (error) {
       console.error("💥 Error in fetchPayments:", error);
       toast({
@@ -182,37 +196,8 @@ const Payments = () => {
   useEffect(() => {
     fetchPayments();
     fetchTenantsAndLeases();
-  }, []);
+  }, [page, pageSize, searchTerm, statusFilter, periodFilter]);
 
-  const onSubmit = async (data: PaymentFormData) => {
-    try {
-      const { error } = await supabase
-        .from("payments")
-        .insert([{
-          ...data,
-          amount: Number(data.amount),
-          status: 'completed'
-        }]);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Payment recorded successfully",
-      });
-
-      reset();
-      setDialogOpen(false);
-      fetchPayments();
-    } catch (error) {
-      console.error("Error recording payment:", error);
-      toast({
-        title: "Error",
-        description: "Failed to record payment",
-        variant: "destructive",
-      });
-    }
-  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -257,18 +242,8 @@ const Payments = () => {
 
   const { start: periodStart, end: periodEnd } = getPeriodDates(periodFilter);
 
-  const filteredPayments = payments.filter(payment => {
-    const matchesSearch = 
-      payment.tenants.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      payment.tenants.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      payment.leases.units.properties.name.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === "all" || payment.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
-
-  const filteredLeases = leases.filter(lease => lease.tenant_id === selectedTenantId);
+  // Payments are already filtered on the server side
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   const getFilteredPaymentsByPeriod = (filterPeriod?: string) => {
     const period = filterPeriod || periodFilter;
@@ -300,147 +275,11 @@ const Payments = () => {
             </p>
           </div>
           
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-accent hover:bg-accent/90 text-accent-foreground">
-                <Plus className="h-4 w-4 mr-2" />
-                Record Payment
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>Record New Payment</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                <div>
-                  <Label htmlFor="tenant_id">Tenant</Label>
-                  <Select onValueChange={(value) => setValue("tenant_id", value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select tenant" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {tenants.map(tenant => (
-                        <SelectItem key={tenant.id} value={tenant.id}>
-                          {tenant.first_name} {tenant.last_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {errors.tenant_id && <p className="text-sm text-destructive">Tenant is required</p>}
-                </div>
-
-                <div>
-                  <Label htmlFor="lease_id">Lease</Label>
-                  <Select onValueChange={(value) => setValue("lease_id", value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select lease" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredLeases.map(lease => (
-                        <SelectItem key={lease.id} value={lease.id}>
-                          {lease.units.properties.name} - Unit {lease.units.unit_number} ({formatAmount(lease.monthly_rent)}/month)
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {errors.lease_id && <p className="text-sm text-destructive">Lease is required</p>}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="amount">Amount ({getGlobalCurrencySync()})</Label>
-                    <Input
-                      id="amount"
-                      type="number"
-                      {...register("amount", { required: "Amount is required" })}
-                      placeholder="25000"
-                    />
-                    {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
-                  </div>
-                  <div>
-                    <Label htmlFor="payment_date">Payment Date</Label>
-                    <Input
-                      id="payment_date"
-                      type="date"
-                      {...register("payment_date", { required: "Payment date is required" })}
-                    />
-                    {errors.payment_date && <p className="text-sm text-destructive">{errors.payment_date.message}</p>}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="payment_method">Payment Method</Label>
-                    <Select onValueChange={(value) => setValue("payment_method", value)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select method" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="M-Pesa">M-Pesa</SelectItem>
-                        <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
-                        <SelectItem value="Cash">Cash</SelectItem>
-                        <SelectItem value="Cheque">Cheque</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="payment_type">Payment Type</Label>
-                    <Select onValueChange={(value) => setValue("payment_type", value)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Rent">Rent</SelectItem>
-                        <SelectItem value="Security Deposit">Security Deposit</SelectItem>
-                        <SelectItem value="Utility">Utility</SelectItem>
-                        <SelectItem value="Other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="payment_reference">Payment Reference</Label>
-                    <Input
-                      id="payment_reference"
-                      {...register("payment_reference", { required: "Payment reference is required" })}
-                      placeholder="REF-2024-001"
-                    />
-                    {errors.payment_reference && (
-                      <p className="text-sm text-red-500">{errors.payment_reference.message}</p>
-                    )}
-                  </div>
-                  <div>
-                    <Label htmlFor="invoice_number">Invoice Number</Label>
-                    <Input
-                      id="invoice_number"
-                      {...register("invoice_number")}
-                      placeholder="INV-2024-001 (optional)"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="notes">Notes (Optional)</Label>
-                  <Input
-                    id="notes"
-                    {...register("notes")}
-                    placeholder="Payment notes..."
-                  />
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit">
-                    Record Payment
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <RecordPaymentDialog 
+            tenants={tenants} 
+            leases={leases} 
+            onPaymentRecorded={fetchPayments} 
+          />
         </div>
 
         {/* Period Filter & KPI Summary */}
@@ -529,13 +368,14 @@ const Payments = () => {
           <CardContent>
             {loading ? (
               <div className="text-center py-8">Loading...</div>
-            ) : filteredPayments.length === 0 ? (
+            ) : payments.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 No payments found
               </div>
             ) : (
-              <div className="space-y-4">
-                {filteredPayments.map((payment) => (
+              <>
+                <div className="space-y-4">
+                  {payments.map((payment) => (
                   <div key={payment.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center space-x-4">
                       <div>
@@ -559,9 +399,20 @@ const Payments = () => {
                       </div>
                       {getStatusBadge(payment.status)}
                     </div>
-                  </div>
-                ))}
-              </div>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Pagination */}
+                <TablePaginator
+                  currentPage={page}
+                  totalPages={totalPages}
+                  pageSize={pageSize}
+                  totalItems={totalCount}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                />
+              </>
             )}
           </CardContent>
         </Card>

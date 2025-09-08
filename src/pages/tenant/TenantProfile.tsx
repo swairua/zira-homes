@@ -2,20 +2,24 @@ import React, { Suspense } from "react";
 import { TenantLayout } from "@/components/TenantLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTenantProfile } from "@/hooks/useTenantProfile";
+import { useTenantLeases } from "@/hooks/useTenantLeases";
 import { useTenantContacts } from "@/hooks/useTenantContacts";
 import { EmergencyContactCard } from "@/components/tenant/EmergencyContactCard";
+import { LeaseSelector } from "@/components/tenant/LeaseSelector";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Edit, RefreshCw } from "lucide-react";
+import { Edit, RefreshCw, Building2, Users } from "lucide-react";
 import { useState } from "react";
 import { TenantEditForm } from "@/components/forms/TenantEditForm";
 import { LoadingSkeleton } from "@/components/ui/loading-skeleton";
 
 export default function TenantProfile() {
   const { data: profileData, loading: profileLoading, error, refetch } = useTenantProfile();
+  const { leases, hasMultipleLeases, hasMultipleProperties } = useTenantLeases();
   const { contacts, loading: contactsLoading } = useTenantContacts();
   const [isEditing, setIsEditing] = useState(false);
+  const [selectedLeaseId, setSelectedLeaseId] = useState<string | null>(null);
 
   if (profileLoading || contactsLoading) {
     return (
@@ -46,7 +50,11 @@ export default function TenantProfile() {
   }
 
   const tenant = profileData?.tenant;
-  const lease = profileData?.lease;
+  const allLeases = profileData?.leases || [];
+  const selectedLease = selectedLeaseId 
+    ? allLeases.find(l => l.id === selectedLeaseId) 
+    : allLeases[0];
+  const lease = selectedLease || profileData?.lease; // Fallback to old single lease format
   const landlord = profileData?.landlord;
 
   // Show friendly empty state if no tenant data found (not an error)
@@ -75,7 +83,20 @@ export default function TenantProfile() {
     <TenantLayout>
       <div className="container mx-auto p-6 max-w-4xl">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">My Profile</h1>
+          <div>
+            <h1 className="text-3xl font-bold">My Profile</h1>
+            {hasMultipleLeases() && (
+              <div className="flex items-center gap-2 mt-2 text-muted-foreground">
+                <Building2 className="h-4 w-4" />
+                <span className="text-sm">
+                  {hasMultipleProperties() ? 
+                    `${leases.length} units across multiple properties` : 
+                    `${leases.length} units in ${leases[0]?.property_name}`
+                  }
+                </span>
+              </div>
+            )}
+          </div>
           <Button
             onClick={() => setIsEditing(true)}
             variant="outline"
@@ -85,6 +106,26 @@ export default function TenantProfile() {
             Edit Profile
           </Button>
         </div>
+
+        {/* Lease Selector for Multi-unit Tenants */}
+        {hasMultipleLeases() && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Your Properties & Units
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <LeaseSelector 
+                leases={leases}
+                selectedLeaseId={selectedLeaseId || leases[0]?.id}
+                onLeaseSelect={setSelectedLeaseId}
+                showAsCards={false}
+              />
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid gap-6 md:grid-cols-2">
           {/* Personal Information */}

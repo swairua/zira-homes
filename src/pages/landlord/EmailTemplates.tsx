@@ -12,6 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Mail, Plus, Edit, Eye, Save, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { FeatureGate } from "@/components/ui/feature-gate";
+import { FEATURES } from "@/hooks/usePlanFeatureAccess";
 
 interface EmailTemplate {
   id: string;
@@ -172,6 +174,13 @@ const LandlordEmailTemplates = () => {
   return (
     <DashboardLayout>
       <div className="bg-tint-gray p-3 sm:p-4 lg:p-6 space-y-8">
+        <FeatureGate
+          feature={FEATURES.CUSTOM_EMAIL_TEMPLATES}
+          fallbackTitle="Custom Email Templates"
+          fallbackDescription="Create and manage custom email templates for your property communications. Personalize messages with variables and organize by category."
+          allowReadOnly={true}
+          readOnlyMessage="View-only mode - upgrade to Pro to create and edit custom templates"
+        >
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
@@ -348,6 +357,7 @@ const LandlordEmailTemplates = () => {
             </div>
           </TabsContent>
         </Tabs>
+        </FeatureGate>
       </div>
     </DashboardLayout>
   );

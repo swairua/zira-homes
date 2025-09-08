@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { TablePaginator } from "@/components/ui/table-paginator";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -37,6 +38,8 @@ const KnowledgeBaseManager = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingArticle, setEditingArticle] = useState<KnowledgeBaseArticle | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   
   const [newArticle, setNewArticle] = useState({
     title: '',
@@ -472,67 +475,92 @@ const KnowledgeBaseManager = () => {
             </CardContent>
           </Card>
         ) : (
-          articles.map((article) => (
-            <Card key={article.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-medium text-lg">{article.title}</h3>
-                      <Badge className={`${article.is_published ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                        {article.is_published ? 'published' : 'draft'}
-                      </Badge>
-                    </div>
-                    
-                    <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                      {article.content.substring(0, 150)}...
-                    </p>
-                    
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span className="font-medium">{article.view_count} views</span>
-                      <div className="flex flex-wrap gap-1">
-                        {article.target_user_types.map((role) => (
-                          <Badge key={role} variant="secondary" className="text-xs">
-                            {role}
-                          </Badge>
-                        ))}
-                      </div>
-                      <span>{article.category}</span>
-                    </div>
-                  </div>
+          <>
+            {/* Client-side pagination */}
+            {(() => {
+              const totalItems = articles.length;
+              const totalPages = Math.ceil(totalItems / pageSize);
+              const startIndex = (currentPage - 1) * pageSize;
+              const endIndex = startIndex + pageSize;
+              const paginatedArticles = articles.slice(startIndex, endIndex);
+              
+              return (
+                <>
+                  {paginatedArticles.map((article) => (
+                    <Card key={article.id} className="hover:shadow-md transition-shadow">
+                      <CardContent className="p-6">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h3 className="font-medium text-lg">{article.title}</h3>
+                              <Badge className={`${article.is_published ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                {article.is_published ? 'published' : 'draft'}
+                              </Badge>
+                            </div>
+                            
+                            <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+                              {article.content.substring(0, 150)}...
+                            </p>
+                            
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <span className="font-medium">{article.view_count} views</span>
+                              <div className="flex flex-wrap gap-1">
+                                {article.target_user_types.map((role) => (
+                                  <Badge key={role} variant="secondary" className="text-xs">
+                                    {role}
+                                  </Badge>
+                                ))}
+                              </div>
+                              <span>{article.category}</span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            {!article.is_published ? (
+                              <Button
+                                size="sm"
+                                onClick={() => publishArticle(article.id)}
+                                className="text-xs"
+                              >
+                                Publish
+                              </Button>
+                            ) : null}
+                            
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => editArticle(article)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => deleteArticle(article.id)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
                   
-                  <div className="flex items-center gap-2">
-                    {!article.is_published ? (
-                      <Button
-                        size="sm"
-                        onClick={() => publishArticle(article.id)}
-                        className="text-xs"
-                      >
-                        Publish
-                      </Button>
-                    ) : null}
-                    
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => editArticle(article)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => deleteArticle(article.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
+                  <TablePaginator
+                    currentPage={currentPage}
+                    totalPages={Math.ceil(Math.max(totalItems, 1) / pageSize)}
+                    pageSize={pageSize}
+                    totalItems={totalItems}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={setPageSize}
+                    showPageSizeSelector={true}
+                  />
+                </>
+              );
+            })()}
+          </>
         )}
       </div>
     </div>

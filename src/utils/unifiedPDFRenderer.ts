@@ -56,6 +56,11 @@ interface ReportContent {
   tableData?: Array<Record<string, any>>;
   charts?: Array<any>; // Chart configurations for enhanced report rendering
   includeCharts?: boolean; // Flag to enable/disable chart generation
+  layoutOptions?: {
+    tableOnly?: boolean;
+    includeKPIs?: boolean;
+    kpiFitOneRow?: boolean;
+  };
 }
 
 interface LetterContent {
@@ -78,6 +83,7 @@ export class UnifiedPDFRenderer {
   private pageWidth: number;
   private margins = { top: 10, bottom: 20, left: 12, right: 12 }; // Ultra-compact margins for maximum content space
   private layoutOptimizer: PDFLayoutOptimizer;
+  private progressCallback?: (progress: number, step: string) => void;
 
   constructor() {
     // Enable compression for smaller, faster PDF files
@@ -98,17 +104,99 @@ export class UnifiedPDFRenderer {
     });
   }
 
+  setProgressCallback(callback: (progress: number, step: string) => void) {
+    this.progressCallback = callback;
+  }
+
+  private updateProgress(progress: number, step: string) {
+    if (this.progressCallback) {
+      this.progressCallback(progress, step);
+    }
+  }
+
+  /**
+   * Get spacing values based on branding settings
+   */
+  private getSpacing(type: 'section' | 'chart' | 'kpi' | 'summary' | 'table', branding?: BrandingData): number {
+    const sectionSpacing = branding?.reportLayout?.sectionSpacing || 'normal';
+    const chartSpacing = branding?.reportLayout?.chartSpacing || 'normal';
+    
+    // Base spacing values - optimized for better layout
+    const baseSpacing = {
+      section: { tight: 4, normal: 8, spacious: 12 },
+      chart: { minimal: 6, normal: 10, generous: 16 },
+      kpi: { tight: 6, normal: 10, spacious: 15 },
+      summary: { tight: 6, normal: 10, spacious: 15 },
+      table: { tight: 4, normal: 6, spacious: 10 }
+    };
+
+    switch (type) {
+      case 'chart':
+        return baseSpacing.chart[chartSpacing as keyof typeof baseSpacing.chart] || baseSpacing.chart.normal;
+      case 'kpi':
+      case 'summary':
+      case 'table':
+        return baseSpacing[type][sectionSpacing as keyof typeof baseSpacing.section] || baseSpacing[type].normal;
+      case 'section':
+      default:
+        return baseSpacing.section[sectionSpacing as keyof typeof baseSpacing.section] || baseSpacing.section.normal;
+    }
+  }
+
   private formatTableHeader(header: string): string {
     return header.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()).trim();
   }
 
-  private formatTableValue(value: any, header: string): string {
+  private formatTableValue(value: any, header: string, format?: string, decimals?: number): string {
     if (value === null || value === undefined) return '-';
     const h = header.toLowerCase();
     
-    // Format currency-like values using global currency
-    const currencyKeywords = ['amount','rent','balance','revenue','expense','expenses','income','cost','fee','fees','payment','paid'];
-    if (currencyKeywords.some(k => h.includes(k))) {
+    // Use explicit format if provided
+    if (format) {
+      if (format === 'currency') {
+        const num = typeof value === 'number' ? value : parseFloat(String(value).replace(/[,$]/g, ''));
+        if (!isNaN(num)) return formatAmount(num);
+      } else if (format === 'percent') {
+        const num = typeof value === 'number' ? value : parseFloat(String(value));
+        if (!isNaN(num)) return `${num.toFixed(decimals || 1)}%`;
+      } else if (format === 'number') {
+        const num = typeof value === 'number' ? value : parseFloat(String(value));
+        if (!isNaN(num)) return num.toFixed(decimals || 0);
+      } else if (format === 'date') {
+        if (value instanceof Date) return value.toLocaleDateString();
+        const dateStr = String(value);
+        const isoMatch = dateStr.match(/\d{4}-\d{2}-\d{2}/);
+        if (isoMatch) {
+          const d = new Date(isoMatch[0]);
+          if (!isNaN(d.getTime())) return d.toLocaleDateString();
+        }
+        const d = new Date(value);
+        if (!isNaN(d.getTime())) return d.toLocaleDateString();
+      }
+    }
+    
+    // PRIORITY: Enhanced date formatting - check dates FIRST to avoid currency conflicts
+    const dateKeywords = ['date', 'created_at', 'updated_at', 'due_date', 'payment_date', 
+                         'lease_end_date', 'move_out_date', 'analysis_date', 'report_date', 
+                         'expense_date', 'period_end', 'transaction_date', 'last_updated'];
+    if (dateKeywords.some(k => h.includes(k))) {
+      if (value instanceof Date) return value.toLocaleDateString();
+      
+      // Handle ISO date strings and various date formats
+      const dateStr = String(value);
+      const isoMatch = dateStr.match(/\d{4}-\d{2}-\d{2}/);
+      if (isoMatch) {
+        const d = new Date(isoMatch[0]);
+        if (!isNaN(d.getTime())) return d.toLocaleDateString();
+      }
+      
+      const d = new Date(value);
+      if (!isNaN(d.getTime())) return d.toLocaleDateString();
+    }
+    
+    // Format currency-like values (after date check to avoid conflicts)
+    const currencyKeywords = ['amount','rent','balance','revenue','expenses','income','cost','fee','fees','payment','paid'];
+    if (currencyKeywords.some(k => h.includes(k)) && !dateKeywords.some(k => h.includes(k))) {
       const match = String(value).match(/-?[\d,]+\.?\d*/);
       if (match) {
         const num = parseFloat(match[0].replace(/,/g, ''));
@@ -117,15 +205,16 @@ export class UnifiedPDFRenderer {
       if (typeof value === 'number') return formatAmount(value);
     }
     
-    // Format dates (Date objects and parseable strings)
-    if (h.includes('date')) {
-      if (value instanceof Date) return value.toLocaleDateString();
-      const d = new Date(value);
-      if (!isNaN(d.getTime())) return d.toLocaleDateString();
+    // Truncate long strings and allow wrapping for description columns
+    const str = String(value);
+    const descriptionColumns = ['description', 'notes', 'reason', 'comments'];
+    const isDescription = descriptionColumns.some(k => h.includes(k));
+    
+    if (isDescription) {
+      // Allow longer text for descriptions - will be handled by table row height
+      return str.length > 50 ? str.substring(0, 47) + '...' : str;
     }
     
-    // Truncate long strings
-    const str = String(value);
     return str.length > 25 ? str.substring(0, 22) + '...' : str;
   }
 
@@ -136,6 +225,41 @@ export class UnifiedPDFRenderer {
       g: parseInt(result[2], 16),
       b: parseInt(result[3], 16)
     } : { r: 37, g: 99, b: 235 }; // Default blue
+  }
+
+  private fitCurrencyTextToCard(text: string, maxWidth: number, fontSize: number): { text: string; fontSize: number } {
+    // Extract currency symbol and numeric part for smarter formatting
+    const currencyMatch = text.match(/([^\d\s,.-]+)?\s*([\d,.-]+)\s*([^\d\s,.-]+)?/);
+    const prefix = currencyMatch?.[1] || '';
+    const number = currencyMatch?.[2] || text;
+    const suffix = currencyMatch?.[3] || '';
+    
+    this.pdf.setFontSize(fontSize);
+    const textWidth = this.pdf.getTextWidth(text);
+    
+    if (textWidth <= maxWidth) {
+      return { text, fontSize };
+    }
+    
+    // Try compact formatting first
+    const compactText = this.getCompactValue(text);
+    if (this.pdf.getTextWidth(compactText) <= maxWidth) {
+      return { text: compactText, fontSize };
+    }
+    
+    // Scale down font size
+    let scaledFontSize = fontSize;
+    while (scaledFontSize >= 8) {
+      scaledFontSize -= 0.5;
+      this.pdf.setFontSize(scaledFontSize);
+      
+      if (this.pdf.getTextWidth(compactText) <= maxWidth) {
+        return { text: compactText, fontSize: scaledFontSize };
+      }
+    }
+    
+    // Last resort: use original fitTextToWidth
+    return this.fitTextToWidth(text, maxWidth, fontSize);
   }
 
   private fitTextToWidth(text: string, maxWidth: number, fontSize: number): { text: string; fontSize: number } {
@@ -156,9 +280,30 @@ export class UnifiedPDFRenderer {
     }
     
     // Scale down font size if needed
+    const minFontSize = 6;
     const scaleFactor = maxWidth / textWidth;
-    const newFontSize = Math.max(8, fontSize * scaleFactor);
-    return { text, fontSize: newFontSize };
+    const newFontSize = Math.max(minFontSize, fontSize * scaleFactor);
+    
+    // Check if the scaled font size still fits
+    this.pdf.setFontSize(newFontSize);
+    const scaledWidth = this.pdf.getTextWidth(compactText || text);
+    if (scaledWidth <= maxWidth) {
+      return { text: compactText || text, fontSize: newFontSize };
+    }
+    
+    // Last resort: truncate with ellipsis
+    this.pdf.setFontSize(minFontSize);
+    let truncatedText = text;
+    while (truncatedText.length > 3) {
+      const testText = truncatedText.substring(0, truncatedText.length - 3) + '...';
+      const testWidth = this.pdf.getTextWidth(testText);
+      if (testWidth <= maxWidth) {
+        return { text: testText, fontSize: minFontSize };
+      }
+      truncatedText = truncatedText.substring(0, truncatedText.length - 1);
+    }
+    
+    return { text: '...', fontSize: minFontSize };
   }
 
   private getCompactValue(text: string): string {
@@ -210,8 +355,15 @@ export class UnifiedPDFRenderer {
           const maxHeight = headerStyle.logoMaxHeight || 18;
           const maxWidth = 30;
           
-          // Use fixed aspect ratio for cached logos to avoid additional requests
-          const aspectRatio = 2.0; // Default 2:1 aspect ratio for logos
+          // Get actual image dimensions to preserve aspect ratio
+          let aspectRatio = 2.0; // Default fallback
+          try {
+            const dimensions = await this.getImageDimensions(platformBranding.logoUrl);
+            aspectRatio = dimensions.width / dimensions.height;
+          } catch (error) {
+            console.warn('Could not get logo dimensions, using default aspect ratio:', error);
+          }
+          
           let logoHeight = maxHeight;
           let calculatedWidth = logoHeight * aspectRatio;
           
@@ -352,10 +504,15 @@ export class UnifiedPDFRenderer {
     this.pdf.setFont('helvetica', 'normal');
     this.pdf.text(landlordData.name || 'Property Manager', this.margins.left, this.currentY + 8);
     this.pdf.text(landlordData.email || 'manager@property.com', this.margins.left, this.currentY + 16);
-    this.currentY += 24; // Reduced spacing
+    this.currentY += this.getSpacing('section', platformBranding);
   }
 
-  private async addKPISection(kpis: any[], platformBranding: BrandingData, template?: any): Promise<void> {
+  private async addKPISection(
+    kpis: any[], 
+    platformBranding: BrandingData, 
+    template?: any,
+    options?: { fitOneRow?: boolean; compact?: boolean }
+  ): Promise<void> {
     if (kpis.length === 0) return;
     
     // Use template styling if available
@@ -363,7 +520,7 @@ export class UnifiedPDFRenderer {
     const cardStyle = kpiConfig.cardStyle || {};
     const typography = kpiConfig.typography || {};
     
-    const requiredHeight = this.calculateKPIHeight(kpis, platformBranding);
+    const requiredHeight = this.calculateKPIHeight(kpis, platformBranding, options?.fitOneRow);
     this.checkPageBreak(requiredHeight);
     
     // Professional KPI header with template styling
@@ -375,14 +532,18 @@ export class UnifiedPDFRenderer {
     this.pdf.setFontSize(11);
     this.pdf.setFont('helvetica', 'bold');
     this.pdf.text('KEY PERFORMANCE INDICATORS', this.margins.left + 6, this.currentY + 7);
-    this.currentY += 15;
+    this.currentY += 10; // Add header height first
+    this.currentY += this.getSpacing('section', platformBranding);
 
-    // Enhanced KPI card layout
+    // Enhanced KPI card layout with improved padding
     const availableWidth = this.pageWidth - (this.margins.left + this.margins.right);
-    const kpisPerRow = Math.min(kpiConfig.columns || 4, kpis.length);
-    const cardSpacing = cardStyle.spacing || 8;
+    
+    // Force one row if fitOneRow is true, otherwise respect template columns or default to 4
+    const kpisPerRow = options?.fitOneRow ? kpis.length : Math.min(kpiConfig.columns || 4, kpis.length);
+    const cardSpacing = options?.compact ? 2 : (cardStyle.spacing || 6); // Much tighter spacing for compact
     const cardWidth = (availableWidth - ((kpisPerRow - 1) * cardSpacing)) / kpisPerRow;
-    const cardHeight = cardStyle.height || 28;
+    const cardHeight = options?.compact ? 16 : (cardStyle.height || 30); // Even more compact for dashboard view
+    const cardPadding = Math.max(1.5, cardWidth * 0.02); // Minimal padding for compact layout
     
     kpis.forEach((kpi, index) => {
       const col = index % kpisPerRow;
@@ -407,28 +568,45 @@ export class UnifiedPDFRenderer {
       this.pdf.line(x + 1, y + cardHeight + 0.5, x + cardWidth + 0.5, y + cardHeight + 0.5);
       this.pdf.line(x + cardWidth + 0.5, y + 1, x + cardWidth + 0.5, y + cardHeight + 0.5);
       
-      // KPI Value with template typography and text fitting
+      // KPI Value with enhanced text fitting and center alignment
       const valueColor = this.hexToRgb(typography.valueColor || '#1B365D');
       this.pdf.setTextColor(valueColor.r, valueColor.g, valueColor.b);
-      this.pdf.setFontSize(typography.valueSize || 13);
       this.pdf.setFont('helvetica', 'bold');
-      const valueText = kpi.value || String(kpi.amount || kpi.count || '0');
-      const fittedValue = this.fitTextToWidth(valueText, cardWidth - (cardStyle.padding || 8) * 2, typography.valueSize || 13);
-      this.pdf.text(fittedValue.text, x + (cardStyle.padding || 8), y + 14);
       
-      // KPI Label with template typography  
+      const valueText = kpi.value || String(kpi.amount || kpi.count || '0');
+      const maxValueWidth = cardWidth - cardPadding * 2;
+      
+      // Enhanced currency-aware text fitting with compact sizing
+      const baseValueSize = options?.compact ? 8 : (typography.valueSize || 12); // Smaller text for compact
+      const fittedValue = this.fitCurrencyTextToCard(valueText, maxValueWidth, baseValueSize);
+      this.pdf.setFontSize(fittedValue.fontSize);
+      
+      // Center-align value text
+      const valueWidth = this.pdf.getTextWidth(fittedValue.text);
+      const valueCenterX = x + (cardWidth - valueWidth) / 2;
+      this.pdf.text(fittedValue.text, valueCenterX, y + cardHeight * 0.5); // Centered vertically
+      
+      // KPI Label with better positioning and fitting
       const labelColor = this.hexToRgb(typography.labelColor || '#64748B');
       this.pdf.setTextColor(labelColor.r, labelColor.g, labelColor.b);
-      this.pdf.setFontSize(typography.labelSize || 7);
       this.pdf.setFont('helvetica', 'normal');
+      
       const labelText = kpi.label || kpi.title || 'Metric';
-      this.pdf.text(labelText, x + (cardStyle.padding || 8), y + cardHeight - 6);
+      const maxLabelWidth = cardWidth - cardPadding * 2;
+      const baseLabelSize = options?.compact ? 6 : (typography.labelSize || 7); // Smaller label for compact
+      const fittedLabel = this.fitTextToWidth(labelText, maxLabelWidth, baseLabelSize);
+      this.pdf.setFontSize(fittedLabel.fontSize);
+      
+      // Center-align label text
+      const labelWidth = this.pdf.getTextWidth(fittedLabel.text);
+      const labelCenterX = x + (cardWidth - labelWidth) / 2;
+      this.pdf.text(fittedLabel.text, labelCenterX, y + cardHeight - 4); // Better bottom positioning for compact
     });
     
     // Calculate total height used
     const rows = Math.ceil(kpis.length / kpisPerRow);
     const totalHeight = rows * (cardHeight + cardSpacing) - cardSpacing;
-    this.currentY += totalHeight + 15; // Professional spacing
+    this.currentY += totalHeight + this.getSpacing('kpi', platformBranding);
   }
 
   private async addDynamicCharts(charts: any[], platformBranding: BrandingData): Promise<void> {
@@ -446,7 +624,8 @@ export class UnifiedPDFRenderer {
       this.pdf.setFontSize(12);
       this.pdf.setFont('helvetica', 'bold');
       this.pdf.text(chart.title || 'VISUAL ANALYSIS', this.margins.left + 6, this.currentY + 8);
-      this.currentY += 18;
+      this.currentY += 12; // Add header height first
+      this.currentY += this.getSpacing('section', platformBranding);
 
       if (chart.data && chart.type) {
         try {
@@ -475,7 +654,7 @@ export class UnifiedPDFRenderer {
             
             // Add chart with proper boundaries and spacing
             this.pdf.addImage(chartImageData, 'PNG', this.margins.left, this.currentY, availableWidth, chartHeight);
-            this.currentY += chartHeight + this.layoutOptimizer.getOptimalSpacing('chart', 'medium');
+            this.currentY += chartHeight + this.getSpacing('chart', platformBranding);
             
             // Add chart description if available
             if (chart.description) {
@@ -484,7 +663,7 @@ export class UnifiedPDFRenderer {
               this.pdf.setFont('helvetica', 'italic');
               const descLines = this.pdf.splitTextToSize(chart.description, availableWidth);
               this.pdf.text(descLines, this.margins.left, this.currentY);
-              this.currentY += descLines.length * 4 + 8;
+              this.currentY += descLines.length * 4 + this.getSpacing('section', platformBranding);
             }
           } else {
             console.error('Chart rendering failed - invalid image data:', chartImageData?.substring(0, 50));
@@ -533,26 +712,35 @@ export class UnifiedPDFRenderer {
   }
 
   private getOptimalChartHeight(dimensions?: 'ultra-compact' | 'compact' | 'standard' | 'large'): number {
+    // More compact chart heights for better page utilization
     switch (dimensions) {
-      case 'ultra-compact': return 65; // Increased from 50 for better visibility
-      case 'compact': return 80; // Increased from 65
-      case 'large': return 140; // Increased from 120
+      case 'ultra-compact': return 40; // Very compact for tight layouts
+      case 'compact': return 55; // Compact but readable
+      case 'large': return 100; // Large but not excessive
       case 'standard':
-      default: return 110; // Increased from 100
+      default: return 70; // Standard compact size
     }
   }
 
-  private calculateKPIHeight(kpis: any[], branding: BrandingData): number {
+  private calculateKPIHeight(kpis: any[], branding: BrandingData, fitOneRow?: boolean): number {
     const layoutDensity = branding.reportLayout?.layoutDensity || 'standard';
-    const maxKpisPerRow = branding.reportLayout?.maxKpisPerRow || 4;
-    const cardHeight = layoutDensity === 'compact' ? 22 : layoutDensity === 'spacious' ? 32 : 26;
-    const cardSpacing = layoutDensity === 'compact' ? 3 : layoutDensity === 'spacious' ? 8 : 5;
-    const headerHeight = layoutDensity === 'compact' ? 0 : 12;
+    const maxKpisPerRow = fitOneRow ? kpis.length : (branding.reportLayout?.maxKpisPerRow || 4);
+    // Use compact heights when fitOneRow is true
+    const cardHeight = fitOneRow ? 20 : (layoutDensity === 'compact' ? 30 : layoutDensity === 'spacious' ? 45 : 30);
+    const cardSpacing = fitOneRow ? 2 : (layoutDensity === 'compact' ? 6 : layoutDensity === 'spacious' ? 12 : 6);
+    const headerHeight = 10; // Fixed header height (same for all densities)
+    const sectionSpacing = this.getSpacing('section', branding);
+    const kpiSpacing = this.getSpacing('kpi', branding);
     const rows = Math.ceil(kpis.length / maxKpisPerRow);
-    return headerHeight + (rows * cardHeight) + ((rows - 1) * cardSpacing) + 10;
+    return headerHeight + sectionSpacing + (rows * cardHeight) + ((rows - 1) * cardSpacing) + kpiSpacing;
   }
 
-  private async addDataTables(tableData: any[], platformBranding: BrandingData, reportType: string): Promise<void> {
+  private async addDataTables(
+    tableData: any[], 
+    platformBranding: BrandingData, 
+    reportType: string,
+    reportConfig?: any
+  ): Promise<void> {
     if (!tableData || tableData.length === 0) {
       // Clean "no data" section
       this.checkPageBreak(25);
@@ -580,26 +768,60 @@ export class UnifiedPDFRenderer {
     this.pdf.setFontSize(11);
     this.pdf.setFont('helvetica', 'bold');
     this.pdf.text('DETAILED BREAKDOWN', this.margins.left + 5, this.currentY + 7);
-    this.currentY += 16;
+    this.currentY += 10; // Add header height first
+    this.currentY += this.getSpacing('section', platformBranding);
 
-    // Get table headers and calculate optimal column widths
-    const headers = Object.keys(tableData[0]);
+    // Use report config columns if available for proper formatting and alignment
+    const columnConfig = reportConfig?.table?.columns;
+    let headers: string[];
+    let columnKeys: string[];
+    let columnAlignments: string[];
+    let columnFormats: any[];
+
+    if (columnConfig) {
+      // Use configured columns with proper order and formatting
+      headers = columnConfig.map((col: any) => col.label);
+      columnKeys = columnConfig.map((col: any) => col.key);
+      columnAlignments = columnConfig.map((col: any) => col.align || 'left');
+      columnFormats = columnConfig.map((col: any) => ({
+        format: col.format,
+        decimals: col.decimals
+      }));
+    } else {
+      // Fallback to dynamic headers from data
+      headers = Object.keys(tableData[0]);
+      columnKeys = Object.keys(tableData[0]);
+      columnAlignments = headers.map(() => 'left');
+      columnFormats = headers.map(() => ({}));
+      headers = headers.map(this.formatTableHeader.bind(this));
+    }
+
+    // Enhanced column width calculation using optimizer
     const availableWidth = this.pageWidth - (this.margins.left + this.margins.right);
-    const columnWidth = availableWidth / headers.length;
+    const columnWidths = this.layoutOptimizer.calculateColumnWidths(headers, availableWidth);
     
-    // Professional table headers
+    // Professional table headers with proper alignment
     this.pdf.setFillColor(245, 245, 245);
     this.pdf.setDrawColor(200, 200, 200);
-    this.pdf.setLineWidth(0.3);
     this.pdf.rect(this.margins.left, this.currentY, availableWidth, 10, 'FD');
     
     this.pdf.setTextColor(60, 60, 60);
     this.pdf.setFontSize(9);
     this.pdf.setFont('helvetica', 'bold');
     
+    let currentX = this.margins.left;
     headers.forEach((header, index) => {
-      const xPos = this.margins.left + (index * columnWidth);
-      this.pdf.text(this.formatTableHeader(header), xPos + 3, this.currentY + 7);
+      const align = columnAlignments[index];
+      let textX = currentX + 3;
+      
+      if (align === 'center') {
+        textX = currentX + columnWidths[index] / 2;
+      } else if (align === 'right') {
+        textX = currentX + columnWidths[index] - 3;
+      }
+
+      this.pdf.text(header, textX, this.currentY + 7, { align: align as any });
+      currentX += columnWidths[index];
     });
     
     this.currentY += 10;
@@ -627,10 +849,36 @@ export class UnifiedPDFRenderer {
       this.pdf.setFontSize(8);
       this.pdf.setFont('helvetica', 'normal');
       
-      headers.forEach((header, index) => {
-        const xPos = this.margins.left + (index * columnWidth);
-        const cellValue = this.formatTableValue(row[header], header);
-        this.pdf.text(cellValue, xPos + 3, this.currentY + 6);
+      let currentX = this.margins.left;
+      columnKeys.forEach((key, index) => {
+        const value = row[key];
+        const align = columnAlignments[index];
+        const format = columnFormats[index];
+        
+        // Format value using column configuration
+        let formattedValue = value;
+        if (format.format) {
+          formattedValue = this.formatTableValue(value, key, format.format, format.decimals);
+        } else {
+          formattedValue = this.formatTableValue(value, key);
+        }
+
+        let textX = currentX + 3;
+        if (align === 'center') {
+          textX = currentX + columnWidths[index] / 2;
+        } else if (align === 'right') {
+          textX = currentX + columnWidths[index] - 3;
+        }
+
+        // Ensure text fits within column width
+        const maxWidth = columnWidths[index] - 6;
+        const fittedText = this.fitTextToWidth(String(formattedValue), maxWidth, 8);
+        
+        this.pdf.setFontSize(fittedText.fontSize);
+        this.pdf.text(fittedText.text, textX, this.currentY + 6, { align: align as any });
+        this.pdf.setFontSize(8); // Reset font size
+
+        currentX += columnWidths[index];
       });
       
       this.currentY += 8;
@@ -645,7 +893,7 @@ export class UnifiedPDFRenderer {
       this.currentY += 12;
     }
 
-    this.currentY += 8;
+    this.currentY += this.getSpacing('table', platformBranding);
   }
 
   private async renderChartToPDF(chartConfig: any, platformBranding: BrandingData): Promise<string | null> {
@@ -786,15 +1034,20 @@ export class UnifiedPDFRenderer {
   }
 
   private async addReportContent(content: ReportContent, platformBranding: BrandingData, chartData?: any, template?: any): Promise<void> {
+    // Check if table-only layout is requested
+    const isTableOnly = (content as any).layoutOptions?.tableOnly || false;
+    
     // Report title and period with template styling
+    this.updateProgress(55, 'Adding report header...');
     const reportColor = this.hexToRgb(platformBranding.primaryColor);
     this.pdf.setTextColor(reportColor.r, reportColor.g, reportColor.b);
     this.pdf.setFontSize(14);
     this.pdf.setFont('helvetica', 'bold');
     this.pdf.text(content.reportPeriod, this.margins.left, this.currentY);
-    this.currentY += 15;
+    this.currentY += this.getSpacing('section', platformBranding);
 
-    // Executive Summary with template content styling
+    // Executive Summary with template content styling (always include)
+    this.updateProgress(60, 'Adding executive summary...');
     const contentStyle = template?.content?.sections?.content?.style || {};
     const textColor = this.hexToRgb(contentStyle.color || '#374151');
     this.pdf.setTextColor(textColor.r, textColor.g, textColor.b);
@@ -802,15 +1055,24 @@ export class UnifiedPDFRenderer {
     this.pdf.setFont('helvetica', 'normal');
     const summaryLines = this.pdf.splitTextToSize(content.summary, this.pageWidth - (this.margins.left + this.margins.right));
     this.pdf.text(summaryLines, this.margins.left, this.currentY);
-    this.currentY += summaryLines.length * (contentStyle.lineHeight || 1.4) * 4 + 15;
+    this.currentY += summaryLines.length * (contentStyle.lineHeight || 1.4) * 4 + this.getSpacing('summary', platformBranding);
 
-    // Add KPIs section with template
-    if (content.kpis && content.kpis.length > 0) {
-      await this.addKPISection(content.kpis, platformBranding, template);
+    // Skip KPIs section if table-only mode or if disabled in layout options
+    const shouldIncludeKPIs = !isTableOnly && 
+                              (content.layoutOptions?.includeKPIs !== false) && 
+                              content.kpis && 
+                              content.kpis.length > 0;
+    
+    if (shouldIncludeKPIs) {
+      this.updateProgress(65, 'Adding KPI dashboard cards...');
+      await this.addKPISection(content.kpis, platformBranding, template, {
+        fitOneRow: content.layoutOptions?.kpiFitOneRow !== false,
+        compact: content.layoutOptions?.kpiFitOneRow !== false
+      });
     }
 
-    // Add charts section only if includeCharts is true
-    if (content.includeCharts === true) {
+    // Skip charts section if table-only mode or if includeCharts is false
+    if (!isTableOnly && content.includeCharts === true) {
       if (content.charts && content.charts.length > 0) {
         console.log(`Rendering ${content.charts.length} charts in PDF:`, content.charts.map(c => c.title));
         await this.addDynamicCharts(content.charts, platformBranding);
@@ -848,9 +1110,18 @@ export class UnifiedPDFRenderer {
       }
     }
 
-    // Add detailed data tables
-    if (content.tableData && content.tableData.length > 0) {
-      await this.addDataTables(content.tableData, platformBranding, content.type);
+    // Add detailed data tables with robust compatibility fallback - always render even if empty
+    // In table-only mode, prioritize tables with more rows per page
+    this.updateProgress(75, 'Adding detailed data tables...');
+    const dataToUse = content.tableData || (content as any).data || (content as any).table || [];
+    if (isTableOnly) {
+      // Increase rows per page for table-only layout
+      await this.addDataTables(dataToUse, platformBranding, content.type, {
+        ...((content as any).reportConfig || {}),
+        maxRowsPerPage: 25 // Increased from default for table-only PDFs
+      });
+    } else {
+      await this.addDataTables(dataToUse, platformBranding, content.type, (content as any).reportConfig);
     }
   }
 
@@ -960,45 +1231,55 @@ export class UnifiedPDFRenderer {
     const branding = platformBranding || this.getDefaultBranding();
     
     try {
-      // Add professional header using template
+      // Step 1: Add professional header using template
+      this.updateProgress(5, 'Adding document header...');
       await this.addHeaderWithLogo(branding, template);
       
-      // Add document title with template styling
+      // Step 2: Add document title with template styling
+      this.updateProgress(15, 'Adding document title...');
       this.addDocumentTitle(document.title, branding, template);
       
-      // Add landlord section if provided (from billing data)
+      // Step 3: Add landlord section if provided (from billing data)
       if (billingData?.billFrom) {
+        this.updateProgress(25, 'Adding landlord information...');
         await this.addLandlordSection(billingData.billFrom, branding);
       }
       
-      // Handle different document types with template-aware rendering
+      // Step 4: Handle different document types with template-aware rendering
+      this.updateProgress(35, 'Rendering document content...');
       switch (document.type) {
         case 'invoice':
+          this.updateProgress(50, 'Rendering invoice content...');
           this.addInvoiceContent(document.content as InvoiceContent, branding, template, billingData);
           break;
         case 'report':
+          this.updateProgress(50, 'Rendering report content...');
           await this.addReportContent(document.content as ReportContent, branding, chartData, template);
           break;
         case 'letter':
         case 'notice':
         case 'lease':
+          this.updateProgress(50, 'Rendering letter content...');
           this.addLetterContent(document.content as LetterContent, branding);
           break;
         default:
           throw new Error(`Unsupported document type: ${document.type}`);
-          throw new Error(`Unsupported document type: ${document.type}`);
       }
       
-      // Add professional footer using template on all pages
+      // Step 5: Add professional footer using template on all pages
+      this.updateProgress(85, 'Adding document footer...');
       const totalPages = this.pdf.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         this.pdf.setPage(i);
         this.addFooter(branding, template);
       }
       
-      // Generate filename and save
+      // Step 6: Generate filename and save
+      this.updateProgress(95, 'Saving PDF document...');
       const filename = this.generateFilename(document, billingData?.billFrom);
       this.pdf.save(filename);
+      
+      this.updateProgress(100, 'PDF document completed!');
       
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -1039,7 +1320,17 @@ export class UnifiedPDFRenderer {
       primaryColor: '#1B365D', // Navy
       secondaryColor: '#64748B', // Grey
       footerText: 'Powered by Zira Technologies • www.ziratechnologies.com',
-      websiteUrl: 'www.ziratechnologies.com'
+      websiteUrl: 'www.ziratechnologies.com',
+      reportLayout: {
+        chartDimensions: 'compact',
+        kpiStyle: 'cards',
+        sectionSpacing: 'tight',
+        chartSpacing: 'minimal',
+        showGridlines: true,
+        layoutDensity: 'compact',
+        contentFlow: 'optimized',
+        maxKpisPerRow: 4
+      }
     };
   }
 }

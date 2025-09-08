@@ -14,6 +14,11 @@ import { PropertyDetailsDialog } from "@/components/properties/PropertyDetailsDi
 import { BulkUploadDropdown } from "@/components/bulk-upload/BulkUploadDropdown";
 import { KpiGrid } from "@/components/kpi/KpiGrid";
 import { KpiStatCard } from "@/components/kpi/KpiStatCard";
+import { FeatureGate } from "@/components/ui/feature-gate";
+import { ContextualUpgradePrompt } from "@/components/feature-access/ContextualUpgradePrompt";
+import { FEATURES } from "@/hooks/usePlanFeatureAccess";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
+import { TablePaginator } from "@/components/ui/table-paginator";
 
 interface Property {
   id: string;
@@ -33,11 +38,13 @@ interface Property {
 
 const Properties = () => {
   const [properties, setProperties] = useState<Property[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
   const [isMobile, setIsMobile] = useState(false);
+  const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ pageSize: 12 });
 
   useEffect(() => {
     fetchProperties();
@@ -47,18 +54,34 @@ const Properties = () => {
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  }, [page, pageSize, searchTerm, filterType]);
 
   const fetchProperties = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      
+      let query = supabase
         .from("properties" as any)
-        .select("*")
+        .select("*", { count: 'exact' });
+
+      // Apply search filter
+      if (searchTerm) {
+        query = query.or(`name.ilike.%${searchTerm}%,address.ilike.%${searchTerm}%,city.ilike.%${searchTerm}%`);
+      }
+
+      // Apply type filter
+      if (filterType !== "all") {
+        query = query.eq('property_type', filterType);
+      }
+
+      // Apply pagination
+      const { data, error, count } = await query
+        .range(offset, offset + pageSize - 1)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       setProperties((data as unknown as Property[]) || []);
+      setTotalCount(count || 0);
     } catch (error) {
       console.error("Error fetching properties:", error);
       toast.error("Failed to fetch properties");
@@ -67,18 +90,10 @@ const Properties = () => {
     }
   };
 
-  const filteredProperties = properties.filter((property) => {
-    const matchesSearch = 
-      property.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.city.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesFilter = filterType === "all" || property.property_type === filterType;
-    
-    return matchesSearch && matchesFilter;
-  });
+  // No client-side filtering needed since we're doing server-side pagination
+  const filteredProperties = properties;
 
-  const propertyTypes = [...new Set(properties.map(p => p.property_type))];
+  const propertyTypes = ["residential", "commercial", "mixed"];
 
   const getPropertyTypeColor = (type: string) => {
     const colors: Record<string, string> = {
@@ -130,7 +145,13 @@ const Properties = () => {
             </p>
           </div>
           <div className="flex items-center gap-3 self-stretch sm:self-auto">
-            <BulkUploadDropdown type="properties" onSuccess={fetchProperties} />
+            <FeatureGate 
+              feature={FEATURES.BULK_OPERATIONS}
+              fallbackTitle="Bulk Operations"
+              fallbackDescription="Upload multiple properties at once with CSV import."
+            >
+              <BulkUploadDropdown type="properties" onSuccess={fetchProperties} />
+            </FeatureGate>
             <PropertyUnitsWizard onPropertyAdded={fetchProperties} />
           </div>
         </div>
@@ -217,6 +238,22 @@ const Properties = () => {
             </div>
           </div>
         </Card>
+        {/* Upgrade Prompt for Property Limits */}
+        {properties.length > 0 && properties.length >= 5 && (
+          <ContextualUpgradePrompt
+            feature={FEATURES.PROPERTIES_MAX}
+            title="Expand Your Property Portfolio"
+            description="You're managing several properties! Upgrade to add unlimited properties and unlock advanced management features."
+            benefits={[
+              "Unlimited property additions",
+              "Advanced reporting and analytics",
+              "Bulk operations and CSV imports",
+              "Priority customer support"
+            ]}
+            variant="banner"
+          />
+        )}
+
         {/* Properties Content */}
         {filteredProperties.length === 0 ? (
           <Card className="bg-card">
@@ -362,6 +399,18 @@ const Properties = () => {
               </CardContent>
             </Card>
           )
+        )}
+        
+        {/* Pagination */}
+        {filteredProperties.length > 0 && (
+          <TablePaginator
+            currentPage={page}
+            totalPages={Math.ceil(totalCount / pageSize)}
+            pageSize={pageSize}
+            totalItems={totalCount}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         )}
       </div>
     </DashboardLayout>

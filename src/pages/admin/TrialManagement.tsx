@@ -8,7 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TablePaginator } from "@/components/ui/table-paginator";
 import { Switch } from "@/components/ui/switch";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { 
   Users, 
   Calendar, 
@@ -88,11 +90,28 @@ const TrialManagement = () => {
   const [analytics, setAnalytics] = useState<TrialAnalytics | null>(null);
   const [settings, setSettings] = useState<TrialSettings | null>(null);
   const [trialUsers, setTrialUsers] = useState<TrialUser[]>([]);
+  const [totalUsers, setTotalUsers] = useState(0);
   const [savingSettings, setSavingSettings] = useState(false);
   const [policyHistory, setPolicyHistory] = useState<PolicyHistoryEntry[]>([]);
+  
+  // URL-based pagination for trial users
+  const { page, pageSize, setPage } = useUrlPageParam({ 
+    pageSize: 10, 
+    defaultPage: 1 
+  });
+  // Pagination variables for trial users
+  const totalItems = totalUsers || 0;
+  const totalPages = Math.ceil(totalItems / pageSize);
+
   useEffect(() => {
     fetchAllData();
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      fetchTrialUsers(page, pageSize);
+    }
+  }, [page, pageSize]);
 
   // SEO: title, meta description, canonical
   useEffect(() => {
@@ -121,7 +140,7 @@ const TrialManagement = () => {
       await Promise.all([
         fetchAnalytics(),
         fetchSettings(),
-        fetchTrialUsers()
+        fetchTrialUsers(page, pageSize)
       ]);
     } catch (error) {
       console.error('Error fetching trial management data:', error);
@@ -199,17 +218,20 @@ const TrialManagement = () => {
     }
   };
 
-  const fetchTrialUsers = async () => {
-    const { data } = await supabase
+  const fetchTrialUsers = async (page = 1, limit = 10) => {
+    const offset = (page - 1) * limit;
+    
+    const { data, count } = await supabase
       .from('landlord_subscriptions')
       .select(`
         landlord_id,
         status,
         trial_start_date,
         trial_end_date
-      `)
+      `, { count: 'exact' })
       .in('status', ['trial', 'trial_expired', 'suspended'])
-      .order('trial_end_date', { ascending: true });
+      .order('trial_end_date', { ascending: true })
+      .range(offset, offset + limit - 1);
 
     if (data) {
       const usersWithStats = await Promise.all(
@@ -259,6 +281,7 @@ const TrialManagement = () => {
       );
 
       setTrialUsers(usersWithStats);
+      setTotalUsers(count || 0);
     }
   };
 
@@ -512,6 +535,17 @@ const TrialManagement = () => {
                     ))}
                   </TableBody>
                 </Table>
+                
+                {totalPages > 1 && (
+                  <TablePaginator
+                    currentPage={page}
+                    totalPages={totalPages}
+                    pageSize={pageSize}
+                    totalItems={totalItems}
+                    onPageChange={setPage}
+                    showPageSizeSelector={false}
+                  />
+                )}
               </CardContent>
             </Card>
           </TabsContent>

@@ -19,6 +19,7 @@ import { LandlordServiceChargeMpesaDialog } from "./LandlordServiceChargeMpesaDi
 import { useAuth } from "@/hooks/useAuth";
 import { ServiceChargeInvoiceModal } from "./ServiceChargeInvoiceModal";
 import { UnifiedPDFRenderer } from "@/utils/unifiedPDFRenderer";
+import { TablePaginator } from "@/components/ui/table-paginator";
 import { format } from "date-fns";
 import { 
   CreditCard, 
@@ -119,6 +120,9 @@ export const EnhancedBillingPage = () => {
   const [showMpesaDialog, setShowMpesaDialog] = useState(false);
   const [selectedInvoiceForPayment, setSelectedInvoiceForPayment] = useState<any>(null);
   const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false);
+  const [invoicesPage, setInvoicesPage] = useState(1);
+  const [totalInvoices, setTotalInvoices] = useState(0);
+  const invoicesPageSize = 10;
 
   const handlePaymentSuccess = () => {
     setShowMpesaDialog(false);
@@ -165,7 +169,7 @@ export const EnhancedBillingPage = () => {
         supabase.removeChannel(channel);
       };
     }
-  }, [user]);
+  }, [user, invoicesPage]);
 
   const fetchBillingData = async () => {
     try {
@@ -227,13 +231,14 @@ export const EnhancedBillingPage = () => {
         }
       }
 
-      // Fetch service charge invoices
-      const { data: serviceInvoices, error: invoicesError } = await supabase
-        .from('service_charge_invoices')
-        .select('*')
-        .eq('landlord_id', user?.id)
-        .order('created_at', { ascending: false })
-        .limit(20);
+        // Fetch service charge invoices with pagination
+        const invoicesOffset = (invoicesPage - 1) * invoicesPageSize;
+        const { data: serviceInvoices, error: invoicesError, count: invoicesCount } = await supabase
+          .from('service_charge_invoices')
+          .select('*', { count: 'exact' })
+          .eq('landlord_id', user?.id)
+          .order('created_at', { ascending: false })
+          .range(invoicesOffset, invoicesOffset + invoicesPageSize - 1);
 
       if (invoicesError) throw invoicesError;
 
@@ -256,60 +261,62 @@ export const EnhancedBillingPage = () => {
         .eq('landlord_id', user?.id)
         .single();
 
-      setBillingData({
-        current_plan: {
-          id: subscription?.billing_plan?.id || '',
-          name: subscription?.billing_plan?.name || 'Professional',
-          billing_cycle: subscription?.billing_plan?.billing_cycle || 'monthly',
-          currency: subscription?.billing_plan?.currency || 'KES',
-          next_billing_date: subscription?.next_billing_date,
-          features: Array.isArray(subscription?.billing_plan?.features) 
-            ? subscription.billing_plan.features.map(f => String(f))
-            : ['Property Management', 'Tenant Communication', 'Payment Processing', 'Maintenance Tracking'],
-          max_properties: subscription?.billing_plan?.max_properties || 0,
-          max_units: subscription?.billing_plan?.max_units || 0,
-          sms_credits_included: subscription?.billing_plan?.sms_credits_included || 0,
-          billing_model: subscription?.billing_plan?.billing_model || 'percentage',
-          percentage_rate: subscription?.billing_plan?.percentage_rate,
-          fixed_amount_per_unit: subscription?.billing_plan?.fixed_amount_per_unit,
-        },
-        sms_credits_balance: subscription?.sms_credits_balance || 100,
-        current_usage: {
-          properties_count: propertiesData?.length || 0,
-          units_count: unitsData?.length || 0,
-          this_month_rent_collected: thisMonthRentCollected,
-          calculated_service_charge: calculatedServiceCharge,
-          sms_credits_used: 0, // Will be calculated from actual SMS usage
-          sms_charges: 7.50, // Sample SMS charges for demo (3 messages × 2.50)
-          transactions: thisMonthPayments || []
-        },
-        // Add sample data if no invoices exist
-        service_charge_invoices: serviceInvoices && serviceInvoices.length > 0 
-          ? serviceInvoices.map(invoice => ({
-          id: invoice.id,
-          invoice_number: invoice.invoice_number,
-          billing_period_start: invoice.billing_period_start,
-          billing_period_end: invoice.billing_period_end,
-          rent_collected: invoice.rent_collected,
-          service_charge_amount: invoice.service_charge_amount,
-          sms_charges: invoice.sms_charges,
-          whatsapp_charges: (invoice as any).whatsapp_charges || 0,
-          other_charges: invoice.other_charges,
-          total_amount: invoice.total_amount,
-          status: invoice.status,
-          due_date: invoice.due_date,
-          payment_date: invoice.payment_date,
-          currency: invoice.currency
-        }))
-          : [], // No sample data - use empty array when no invoices exist
-        approved_payment_methods: paymentMethods || [],
-        payment_preferences: {
-          preferred_payment_method: preferences?.preferred_payment_method || 'mpesa',
-          mpesa_phone_number: preferences?.mpesa_phone_number,
-          auto_payment_enabled: preferences?.auto_payment_enabled || false,
-          payment_reminders_enabled: preferences?.payment_reminders_enabled || true
-        }
-      });
+        setBillingData({
+          current_plan: {
+            id: subscription?.billing_plan?.id || '',
+            name: subscription?.billing_plan?.name || 'Professional',
+            billing_cycle: subscription?.billing_plan?.billing_cycle || 'monthly',
+            currency: subscription?.billing_plan?.currency || 'KES',
+            next_billing_date: subscription?.next_billing_date,
+            features: Array.isArray(subscription?.billing_plan?.features) 
+              ? subscription.billing_plan.features.map(f => String(f))
+              : ['Property Management', 'Tenant Communication', 'Payment Processing', 'Maintenance Tracking'],
+            max_properties: subscription?.billing_plan?.max_properties || 0,
+            max_units: subscription?.billing_plan?.max_units || 0,
+            sms_credits_included: subscription?.billing_plan?.sms_credits_included || 0,
+            billing_model: subscription?.billing_plan?.billing_model || 'percentage',
+            percentage_rate: subscription?.billing_plan?.percentage_rate,
+            fixed_amount_per_unit: subscription?.billing_plan?.fixed_amount_per_unit,
+          },
+          sms_credits_balance: subscription?.sms_credits_balance || 100,
+          current_usage: {
+            properties_count: propertiesData?.length || 0,
+            units_count: unitsData?.length || 0,
+            this_month_rent_collected: thisMonthRentCollected,
+            calculated_service_charge: calculatedServiceCharge,
+            sms_credits_used: 0, // Will be calculated from actual SMS usage
+            sms_charges: 7.50, // Sample SMS charges for demo (3 messages × 2.50)
+            transactions: thisMonthPayments || []
+          },
+          // Add sample data if no invoices exist
+          service_charge_invoices: serviceInvoices && serviceInvoices.length > 0 
+            ? serviceInvoices.map(invoice => ({
+            id: invoice.id,
+            invoice_number: invoice.invoice_number,
+            billing_period_start: invoice.billing_period_start,
+            billing_period_end: invoice.billing_period_end,
+            rent_collected: invoice.rent_collected,
+            service_charge_amount: invoice.service_charge_amount,
+            sms_charges: invoice.sms_charges,
+            whatsapp_charges: (invoice as any).whatsapp_charges || 0,
+            other_charges: invoice.other_charges,
+            total_amount: invoice.total_amount,
+            status: invoice.status,
+            due_date: invoice.due_date,
+            payment_date: invoice.payment_date,
+            currency: invoice.currency
+          }))
+            : [], // No sample data - use empty array when no invoices exist
+          approved_payment_methods: paymentMethods || [],
+          payment_preferences: {
+            preferred_payment_method: preferences?.preferred_payment_method || 'mpesa',
+            mpesa_phone_number: preferences?.mpesa_phone_number,
+            auto_payment_enabled: preferences?.auto_payment_enabled || false,
+            payment_reminders_enabled: preferences?.payment_reminders_enabled || true
+          }
+        });
+
+        setTotalInvoices(invoicesCount || 0);
 
     } catch (error) {
       console.error('Error fetching billing data:', error);
@@ -997,104 +1004,119 @@ Thank you!`}
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Invoice #</TableHead>
-                  <TableHead>Period</TableHead>
-                  <TableHead>Rent Collected</TableHead>
-                  <TableHead>Charges Breakdown</TableHead>
-                  <TableHead>Total Amount</TableHead>
-                  <TableHead>Due Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredInvoices.map((invoice) => (
-                  <TableRow key={invoice.id}>
-                    <TableCell className="font-medium">
-                      {invoice.invoice_number}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(invoice.billing_period_start).toLocaleDateString()} - {' '}
-                      {new Date(invoice.billing_period_end).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>
-                      {formatCurrency(invoice.rent_collected, invoice.currency)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-1">
-                        <div className="text-sm">
-                          <span className="text-muted-foreground">Service:</span> {formatCurrency(invoice.service_charge_amount, invoice.currency)}
-                        </div>
-                        {(invoice.sms_charges || 0) > 0 && (
-                          <div className="text-sm">
-                            <span className="text-muted-foreground">SMS:</span> {formatCurrency(invoice.sms_charges, invoice.currency)}
-                          </div>
-                        )}
-                        {(invoice.other_charges || 0) > 0 && (
-                          <div className="text-sm">
-                            <span className="text-muted-foreground">Admin:</span> {formatCurrency(invoice.other_charges, invoice.currency)}
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {formatCurrency(invoice.total_amount, invoice.currency)}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(invoice.due_date).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>
-                      {getStatusBadge(invoice.status)}
-                    </TableCell>
-                     <TableCell>
-                       <div className="flex items-center space-x-1">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            className="hover:bg-blue-50 hover:text-blue-700"
-                            onClick={() => viewInvoiceDetails(invoice)}
-                          >
-                            <Eye className="h-4 w-4 mr-1" />
-                            View
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            className="hover:bg-green-50 hover:text-green-700"
-                            onClick={() => downloadInvoice(invoice)}
-                          >
-                            <Download className="h-4 w-4 mr-1" />
-                            Download
-                          </Button>
-                          {invoice.status === 'pending' && (
-                            <Button 
-                              variant="default" 
-                              size="sm" 
-                              className="bg-green-600 hover:bg-green-700 text-white"
-                              onClick={() => handleInvoicePayment(invoice)}
-                            >
-                              <CreditCard className="h-4 w-4 mr-1" />
-                              Pay Now
-                            </Button>
-                          )}
-                          {invoice.status === 'paid' && (
-                            <Badge className="bg-green-100 text-green-800">
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              Paid
-                            </Badge>
-                          )}
-                       </div>
-                     </TableCell>
+            <div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Invoice #</TableHead>
+                    <TableHead>Period</TableHead>
+                    <TableHead>Rent Collected</TableHead>
+                    <TableHead>Charges Breakdown</TableHead>
+                    <TableHead>Total Amount</TableHead>
+                    <TableHead>Due Date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredInvoices.map((invoice) => (
+                    <TableRow key={invoice.id}>
+                      <TableCell className="font-medium">
+                        {invoice.invoice_number}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(invoice.billing_period_start).toLocaleDateString()} - {' '}
+                        {new Date(invoice.billing_period_end).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        {formatCurrency(invoice.rent_collected, invoice.currency)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <div className="text-sm">
+                            <span className="text-muted-foreground">Service:</span> {formatCurrency(invoice.service_charge_amount, invoice.currency)}
+                          </div>
+                          {(invoice.sms_charges || 0) > 0 && (
+                            <div className="text-sm">
+                              <span className="text-muted-foreground">SMS:</span> {formatCurrency(invoice.sms_charges, invoice.currency)}
+                            </div>
+                          )}
+                          {(invoice.other_charges || 0) > 0 && (
+                            <div className="text-sm">
+                              <span className="text-muted-foreground">Admin:</span> {formatCurrency(invoice.other_charges, invoice.currency)}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {formatCurrency(invoice.total_amount, invoice.currency)}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(invoice.due_date).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        {getStatusBadge(invoice.status)}
+                      </TableCell>
+                       <TableCell>
+                         <div className="flex items-center space-x-1">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              className="hover:bg-blue-50 hover:text-blue-700"
+                              onClick={() => viewInvoiceDetails(invoice)}
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              View
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              className="hover:bg-green-50 hover:text-green-700"
+                              onClick={() => downloadInvoice(invoice)}
+                            >
+                              <Download className="h-4 w-4 mr-1" />
+                              Download
+                            </Button>
+                            {invoice.status === 'pending' && (
+                              <Button 
+                                variant="default" 
+                                size="sm" 
+                                className="bg-green-600 hover:bg-green-700 text-white"
+                                onClick={() => handleInvoicePayment(invoice)}
+                              >
+                                <CreditCard className="h-4 w-4 mr-1" />
+                                Pay Now
+                              </Button>
+                            )}
+                            {invoice.status === 'paid' && (
+                              <Badge className="bg-green-100 text-green-800">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Paid
+                              </Badge>
+                            )}
+                         </div>
+                       </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              
+              {Math.ceil(totalInvoices / invoicesPageSize) > 1 && (
+                <div className="mt-4">
+                  <TablePaginator
+                    currentPage={invoicesPage}
+                    totalPages={Math.ceil(totalInvoices / invoicesPageSize)}
+                    pageSize={invoicesPageSize}
+                    totalItems={totalInvoices}
+                    onPageChange={setInvoicesPage}
+                    showPageSizeSelector={false}
+                  />
+                </div>
+              )}
+            </div>
           )}
         </CardContent>
-          </Card>
+      </Card>
 
           {/* Detailed Transactions for Reconciliation */}
           <Card>

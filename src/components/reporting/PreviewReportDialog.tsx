@@ -16,6 +16,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
+import { MarketComparisonToggle } from '@/components/reports/MarketComparisonToggle';
 
 interface PreviewReportDialogProps {
   open: boolean;
@@ -85,16 +86,21 @@ export const PreviewReportDialog = ({
   isGenerating = false
 }: PreviewReportDialogProps) => {
   const [period, setPeriod] = useState<PeriodPreset>(reportConfig.defaultPeriod);
+  const [comparisonMode, setComparisonMode] = useState<'portfolio' | 'market'>('portfolio');
   const [underlyingData, setUnderlyingData] = useState<{
     expenses: any[];
     revenue: any[];
   }>({ expenses: [], revenue: [] });
   const [showUnderlying, setShowUnderlying] = useState(false);
   const [showCharts, setShowCharts] = useState(false); // Charts off by default for performance
+  const [includeKPIs, setIncludeKPIs] = useState(true); // Include KPIs by default
+  const [kpiFitOneRow, setKpiFitOneRow] = useState(true); // Fit KPIs in one row by default
+  const [tableOnlyPDF, setTableOnlyPDF] = useState(false); // Full PDF by default
   const abortControllerRef = useRef<AbortController | null>(null);
   
   const filters: ReportFilters = {
     periodPreset: period,
+    comparisonMode: comparisonMode,
     ...getPeriodDates(period)
   };
 
@@ -113,7 +119,13 @@ export const PreviewReportDialog = ({
   });
 
   const handleGeneratePDF = () => {
-    onGeneratePDF?.(filters);
+    const filtersWithOptions = { 
+      ...filters, 
+      tableOnly: tableOnlyPDF,
+      includeKPIs,
+      kpiFitOneRow
+    };
+    onGeneratePDF?.(filtersWithOptions);
   };
 
   const getPortfolioScope = () => {
@@ -203,6 +215,19 @@ export const PreviewReportDialog = ({
                 </Select>
               </div>
               
+              {/* Market Comparison Toggle - Only for Market Rent Analysis */}
+              {reportConfig.id === 'market-rent' && (
+                <div className="col-span-full">
+                  <MarketComparisonToggle
+                    comparisonMode={comparisonMode}
+                    onModeChange={setComparisonMode}
+                    sampleSize={reportData?.kpis?.total_sample_size}
+                    unitTypes={reportData?.kpis?.unit_types_analyzed}
+                    locations={reportData?.kpis?.locations_analyzed}
+                  />
+                </div>
+              )}
+              
               {/* Charts Toggle for Performance */}
               <div className="flex items-center gap-2">
                 <Switch 
@@ -213,6 +238,44 @@ export const PreviewReportDialog = ({
                 <Label htmlFor="show-charts" className="text-sm text-muted-foreground cursor-pointer">
                   <BarChart3 className="h-4 w-4 inline mr-1" />
                   Charts {showCharts ? '(slower)' : '(faster)'}
+                </Label>
+              </div>
+              
+              {/* Include KPIs Toggle */}
+              <div className="flex items-center gap-2">
+                <Switch 
+                  id="include-kpis" 
+                  checked={includeKPIs} 
+                  onCheckedChange={setIncludeKPIs}
+                />
+                <Label htmlFor="include-kpis" className="text-sm text-muted-foreground cursor-pointer">
+                  📊 Include KPIs
+                </Label>
+              </div>
+
+              {/* KPI One Row Toggle */}
+              {includeKPIs && (
+                <div className="flex items-center gap-2">
+                  <Switch 
+                    id="kpi-one-row" 
+                    checked={kpiFitOneRow} 
+                    onCheckedChange={setKpiFitOneRow}
+                  />
+                  <Label htmlFor="kpi-one-row" className="text-sm text-muted-foreground cursor-pointer">
+                    ↔️ Compact KPIs
+                  </Label>
+                </div>
+              )}
+              
+              {/* Table-only PDF Toggle */}
+              <div className="flex items-center gap-2">
+                <Switch 
+                  id="table-only-pdf" 
+                  checked={tableOnlyPDF} 
+                  onCheckedChange={setTableOnlyPDF}
+                />
+                <Label htmlFor="table-only-pdf" className="text-sm text-muted-foreground cursor-pointer">
+                  📋 Table-only PDF
                 </Label>
               </div>
               

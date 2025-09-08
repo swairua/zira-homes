@@ -25,6 +25,8 @@ interface BillingPlan {
   sms_credits_included: number;
   features: string[];
   is_active: boolean;
+  is_custom: boolean;
+  contact_link?: string;
   currency: string;
 }
 
@@ -204,6 +206,27 @@ export const EditBillingPlanDialog: React.FC<EditBillingPlanDialogProps> = ({
                 />
                 <Label htmlFor="plan-active">Active Plan</Label>
               </div>
+
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="plan-custom"
+                  checked={editedPlan.is_custom}
+                  onCheckedChange={(checked) => setEditedPlan({ ...editedPlan, is_custom: checked })}
+                />
+                <Label htmlFor="plan-custom">Custom Pricing (Enterprise)</Label>
+              </div>
+
+              {editedPlan.is_custom && (
+                <div className="space-y-2">
+                  <Label htmlFor="contact-link">Contact Link (for quotes)</Label>
+                  <Input
+                    id="contact-link"
+                    placeholder="/support?topic=enterprise"
+                    value={editedPlan.contact_link || ''}
+                    onChange={(e) => setEditedPlan({ ...editedPlan, contact_link: e.target.value })}
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -213,52 +236,67 @@ export const EditBillingPlanDialog: React.FC<EditBillingPlanDialogProps> = ({
               <CardTitle>Billing Model & Limits</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="billing-model">Billing Model</Label>
-                <Select 
-                  value={editedPlan.billing_model} 
-                  onValueChange={(value: 'percentage' | 'fixed_per_unit' | 'tiered') => 
-                    setEditedPlan({ ...editedPlan, billing_model: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="percentage">Percentage</SelectItem>
-                    <SelectItem value="fixed_per_unit">Fixed per Unit</SelectItem>
-                    <SelectItem value="tiered">Tiered Pricing</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {!editedPlan.is_custom && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="billing-model">Billing Model</Label>
+                    <Select 
+                      value={editedPlan.billing_model} 
+                      onValueChange={(value: 'percentage' | 'fixed_per_unit' | 'tiered') => 
+                        setEditedPlan({ ...editedPlan, billing_model: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="percentage">Percentage</SelectItem>
+                        <SelectItem value="fixed_per_unit">Fixed per Unit</SelectItem>
+                        <SelectItem value="tiered">Tiered Pricing</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              {editedPlan.billing_model === 'percentage' && (
-                <div className="space-y-2">
-                  <Label htmlFor="percentage-rate">Percentage Rate (%)</Label>
-                  <Input
-                    id="percentage-rate"
-                    type="number"
-                    step="0.1"
-                    value={editedPlan.percentage_rate || 0}
-                    onChange={(e) => setEditedPlan({ 
-                      ...editedPlan, 
-                      percentage_rate: parseFloat(e.target.value) || 0 
-                    })}
-                  />
-                </div>
+                  {editedPlan.billing_model === 'percentage' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="percentage-rate">Percentage Rate (%)</Label>
+                      <Input
+                        id="percentage-rate"
+                        type="number"
+                        step="0.1"
+                        value={editedPlan.percentage_rate || 0}
+                        onChange={(e) => setEditedPlan({ 
+                          ...editedPlan, 
+                          percentage_rate: parseFloat(e.target.value) || 0 
+                        })}
+                      />
+                    </div>
+                  )}
+
+                  {editedPlan.billing_model === 'fixed_per_unit' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="fixed-amount">Fixed Amount per Unit</Label>
+                      <Input
+                        id="fixed-amount"
+                        type="number"
+                        value={editedPlan.fixed_amount_per_unit || 0}
+                        onChange={(e) => setEditedPlan({ 
+                          ...editedPlan, 
+                          fixed_amount_per_unit: parseFloat(e.target.value) || 0 
+                        })}
+                      />
+                    </div>
+                  )}
+                </>
               )}
 
-              {editedPlan.billing_model === 'fixed_per_unit' && (
-                <div className="space-y-2">
-                  <Label htmlFor="fixed-amount">Fixed Amount per Unit</Label>
-                  <Input
-                    id="fixed-amount"
-                    type="number"
-                    value={editedPlan.fixed_amount_per_unit || 0}
-                    onChange={(e) => setEditedPlan({ 
-                      ...editedPlan, 
-                      fixed_amount_per_unit: parseFloat(e.target.value) || 0 
-                    })}
-                  />
+              {editedPlan.is_custom && (
+                <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                  <p className="text-sm text-purple-800 font-medium">
+                    Custom Pricing Plan
+                  </p>
+                  <p className="text-xs text-purple-600 mt-1">
+                    Pricing will be negotiated on a case-by-case basis. Standard pricing fields are disabled.
+                  </p>
                 </div>
               )}
 
@@ -311,16 +349,46 @@ export const EditBillingPlanDialog: React.FC<EditBillingPlanDialogProps> = ({
               <CardTitle>Features</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex space-x-2">
-                <Input
-                  placeholder="Add feature..."
-                  value={newFeature}
-                  onChange={(e) => setNewFeature(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && addFeature()}
-                />
-                <Button onClick={addFeature} size="sm">
-                  <Plus className="h-4 w-4" />
-                </Button>
+              <div className="space-y-3">
+                <div className="flex space-x-2">
+                  <Input
+                    placeholder="Add custom feature..."
+                    value={newFeature}
+                    onChange={(e) => setNewFeature(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && addFeature()}
+                  />
+                  <Button onClick={addFeature} size="sm">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                
+                <div className="text-sm text-muted-foreground">
+                  <p className="font-medium mb-2">Quick Add Common Features:</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    {[
+                      'reports.advanced', 'reports.financial', 'integrations.api', 
+                      'integrations.accounting', 'team.roles', 'branding.white_label',
+                      'support.priority', 'operations.bulk', 'notifications.sms',
+                      'tenant.portal', 'documents.templates', 'billing.automated'
+                    ].map((feature) => (
+                      <button
+                        key={feature}
+                        type="button"
+                        className="text-left text-xs px-2 py-1 hover:bg-muted rounded border"
+                        onClick={() => {
+                          if (!editedPlan?.features.includes(feature)) {
+                            setEditedPlan({
+                              ...editedPlan!,
+                              features: [...editedPlan!.features, feature]
+                            });
+                          }
+                        }}
+                      >
+                        {feature}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -341,7 +409,7 @@ export const EditBillingPlanDialog: React.FC<EditBillingPlanDialogProps> = ({
           </Card>
 
           {/* Tiered Pricing (if applicable) */}
-          {editedPlan.billing_model === 'tiered' && (
+          {editedPlan.billing_model === 'tiered' && !editedPlan.is_custom && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">

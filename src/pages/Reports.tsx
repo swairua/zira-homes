@@ -1,40 +1,31 @@
-
-import { useState, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  FileText, 
-  Calendar, 
-  TrendingUp, 
-  Users, 
-  Building2, 
-  DollarSign,
-  Download,
-  BarChart3,
-  Eye,
-  PieChart,
-  Wrench,
-  UserX,
-  AlertTriangle,
-  LineChart,
-  Calculator
-} from "lucide-react";
+import { FileText, Download, Eye, Calendar, Crown, CheckCircle2, BarChart3, DollarSign, Building2, TrendingUp, Users, PieChart, Wrench, UserX, AlertTriangle, LineChart, Calculator, CalendarDays, ArrowRight, Lock } from "lucide-react";
 import { reportConfigs } from "@/lib/reporting/config";
-import { PreviewReportDialog } from "@/components/reporting/PreviewReportDialog";
-import { PDFGenerationProgress } from "@/components/ui/pdf-generation-progress";
-import { ReportPreloadManager } from "@/components/reporting/ReportPreloadManager";
-import { QuickExpiryCheck } from "@/components/reports/QuickExpiryCheck";
-import { ReportKpiCards } from "@/components/reports/ReportKpiCards";
-import { useAuth } from "@/hooks/useAuth";
-import { useExecutiveSummary } from "@/hooks/useExecutiveSummary";
 import { useOptimizedReportGeneration } from "@/hooks/useOptimizedReportGeneration";
-import { useReportPrefetch } from "@/hooks/useReportPrefetch";
-import { testPDFHealth } from "@/utils/testPDFGeneration";
-import { fmtCurrency } from "@/lib/format";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { ReportViewModal } from "@/components/reports/ReportViewModal";
+import { PreviewReportDialog } from "@/components/reporting/PreviewReportDialog";
+import { ReportConfig } from "@/lib/reporting/types";
+import { FeatureGate } from "@/components/ui/feature-gate";
+import { FEATURES } from "@/hooks/usePlanFeatureAccess";
+import { getReportFeature, canAccessReport } from "@/lib/reporting/reportAccess";
+import { usePlanFeatureAccess } from "@/hooks/usePlanFeatureAccess";
+import { PlanUpgradeButton } from "@/components/feature-access/PlanUpgradeButton";
+import { useReportPrefetch } from "@/hooks/useReportPrefetch";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeFeatures } from "@/utils/featureNormalization";
+import { useExecutiveSummary } from "@/hooks/useExecutiveSummary";
+import { ReportPreloadManager } from "@/components/reporting/ReportPreloadManager";
+import { fmtCurrency, fmtCurrencyCompact } from "@/lib/format";
+import { DisabledActionWrapper } from "@/components/feature-access/DisabledActionWrapper";
+import { ReportKpiCards } from "@/components/reports/ReportKpiCards";
+import { QuickExpiryCheck } from "@/components/reports/QuickExpiryCheck";
+import { PDFGenerationProgress } from "@/components/ui/pdf-generation-progress";
 
 const Reports = () => {
   const [selectedReport, setSelectedReport] = useState<any>(null);
@@ -42,18 +33,21 @@ const Reports = () => {
   const [progressOpen, setProgressOpen] = useState(false);
   const [currentGeneratingReport, setCurrentGeneratingReport] = useState<string>("");
   const [userRole, setUserRole] = useState<string>('landlord');
+  const [userFeatures, setUserFeatures] = useState<string[]>([]);
+  
   const { user } = useAuth();
   const { 
     generateOptimizedReport, 
     isActive: isGenerating, 
     progress, 
-    currentStep 
+    currentStep,
+    isComplete 
   } = useOptimizedReportGeneration();
   const { prefetchReportData } = useReportPrefetch();
 
-  // Fetch user role
+  // Fetch user role and features
   useEffect(() => {
-    const fetchUserRole = async () => {
+    const fetchUserRoleAndFeatures = async () => {
       if (!user) return;
 
       try {
@@ -66,6 +60,7 @@ const Reports = () => {
 
         if (tenant) {
           setUserRole("tenant");
+          setUserFeatures([FEATURES.BASIC_REPORTING]); // Tenants get basic reporting
           return;
         }
 
@@ -79,6 +74,9 @@ const Reports = () => {
           const roles = userRoles.map(r => r.role);
           if (roles.includes("Admin")) {
             setUserRole("admin");
+            // Admins get all features
+            setUserFeatures(Object.values(FEATURES));
+            return;
           } else if (roles.includes("Landlord")) {
             setUserRole("landlord");
           } else if (roles.includes("Manager")) {
@@ -91,14 +89,45 @@ const Reports = () => {
         } else {
           setUserRole("landlord"); // Default fallback
         }
+
+        // Fetch user's plan features for non-admin users
+        const { data: subscription } = await supabase
+          .from("landlord_subscriptions")
+          .select(`
+            billing_plans!inner(features)
+          `)
+          .eq("landlord_id", user.id)
+          .eq("status", "active")
+          .single();
+
+        if (subscription && subscription.billing_plans) {
+          const planFeatures = (subscription.billing_plans as any).features || [];
+          // Normalize feature names to match our constants
+          setUserFeatures(normalizeFeatures(planFeatures));
+        } else {
+          // Default to basic features for users without active subscriptions
+          setUserFeatures([FEATURES.BASIC_REPORTING]);
+        }
       } catch (error) {
-        console.error("Error fetching user role:", error);
+        console.error("Error fetching user role and features:", error);
         setUserRole("landlord"); // Default fallback
+        setUserFeatures([FEATURES.BASIC_REPORTING]);
       }
     };
 
-    fetchUserRole();
+    fetchUserRoleAndFeatures();
   }, [user]);
+
+  // Auto-close progress dialog when PDF generation is complete
+  useEffect(() => {
+    if (isComplete && progressOpen) {
+      setTimeout(() => {
+        setProgressOpen(false);
+        setCurrentGeneratingReport("");
+      }, 1500); // Show success briefly before closing
+    }
+  }, [isComplete, progressOpen]);
+
 
   // Basic SEO for the page
   useEffect(() => {
@@ -121,40 +150,25 @@ const Reports = () => {
     canonical.href = window.location.href;
   }, []);
 
-  // Filter reports based on user role
-  const availableReports = reportConfigs.filter(config => 
-    config.roles.includes(userRole as any)
-  );
+  // Get all reports for user role (don't filter by features - we want to show locked ones too)
+  const allReportsForRole = reportConfigs
+    .filter(config => config.roles.includes(userRole as any));
+  
+  // Separate available and locked reports
+  const availableReports = allReportsForRole
+    .filter(config => userFeatures.includes(getReportFeature(config.id)));
+  
+  const lockedReports = allReportsForRole
+    .filter(config => !userFeatures.includes(getReportFeature(config.id)));
+
+  // Debug logging for counts
+  console.log(`Reports: ${availableReports.length} available, ${lockedReports.length} locked, ${allReportsForRole.length} total`);
+  console.log('User Role:', userRole);
+  console.log('User Features:', userFeatures);
+  console.log('Available Reports:', availableReports.map(r => r.id));
+  console.log('Locked Reports:', lockedReports.map(r => r.id));
 
   const handlePreviewReport = (config: any) => {
-    // Compute filters from default period for instant prefetch
-    const getPeriodDates = (preset: string) => {
-      const now = new Date();
-      switch (preset) {
-        case 'current_period':
-          return { startDate: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0], 
-                   endDate: new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0] };
-        case 'last_12_months':
-          return { startDate: new Date(now.getFullYear() - 1, now.getMonth(), 1).toISOString().split('T')[0], 
-                   endDate: now.toISOString().split('T')[0] };
-        case 'ytd':
-          return { startDate: new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0], 
-                   endDate: now.toISOString().split('T')[0] };
-        default:
-          return { startDate: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0], 
-                   endDate: new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0] };
-      }
-    };
-
-    const dates = getPeriodDates(config.defaultPeriod);
-    const filters = {
-      periodPreset: config.defaultPeriod,
-      ...dates
-    };
-
-    // Instant prefetch before opening preview
-    prefetchReportData(config.queryId, filters, config.title);
-    
     setSelectedReport(config);
     setPreviewOpen(true);
   };
@@ -164,17 +178,22 @@ const Reports = () => {
       setCurrentGeneratingReport(reportConfig.title);
       setProgressOpen(true);
       
+      // Extract table-only option from filters
+      const { tableOnly, ...cleanFilters } = filters;
+      
       // Add date range to filters if using preset
       const updatedFilters = {
-        ...filters,
-        startDate: filters.startDate,
-        endDate: filters.endDate
+        ...cleanFilters,
+        startDate: cleanFilters.startDate,
+        endDate: cleanFilters.endDate
       };
       
       await generateOptimizedReport(
         reportConfig.queryId, // Use queryId for data fetching
+        reportConfig.id, // Use reportId for PDF config
         reportConfig.title,
-        updatedFilters
+        updatedFilters,
+        { tableOnly } // Pass tableOnly option separately
       );
     } catch (error) {
       console.error('Failed to generate report:', error);
@@ -207,7 +226,15 @@ const Reports = () => {
   const leaseExpiryReport = availableReports.find(config => config.id === 'lease-expiry');
 
   // Get executive summary data
-  const { totalRevenue, netOperatingIncome, outstandingAmount, isLoading: summaryLoading } = useExecutiveSummary();
+  const { 
+    totalRevenue, 
+    netOperatingIncome, 
+    outstandingAmount, 
+    collectionRate,
+    occupancyRate,
+    periodLabel,
+    isLoading: summaryLoading 
+  } = useExecutiveSummary();
 
   const handleViewLeaseExpiryDetails = () => {
     if (leaseExpiryReport) {
@@ -241,187 +268,334 @@ const Reports = () => {
         filters={{ periodPreset: 'current_period' }}
       />
       <div className="bg-tint-gray p-3 sm:p-4 lg:p-6 space-y-8">
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-primary">Reports</h1>
-          <p className="text-muted-foreground">
-            Generate financial and operational reports
-          </p>
-        </div>
+        <FeatureGate 
+          feature={FEATURES.BASIC_REPORTING}
+          fallbackTitle="Advanced Reporting"
+          fallbackDescription="Generate comprehensive financial and operational reports with advanced analytics."
+          allowReadOnly={true}
+          readOnlyMessage="Basic reports only - upgrade for advanced features"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-primary">Reports</h1>
+              <p className="text-muted-foreground">
+                Generate financial and operational reports
+              </p>
+            </div>
+            {lockedReports.length > 0 && (
+              <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20">
+                <Lock className="h-3 w-3 mr-1" />
+                {lockedReports.length} Premium report{lockedReports.length > 1 ? 's' : ''} available
+              </Badge>
+            )}
+          </div>
 
-        {/* Executive Summary Section */}
-        {executiveSummaryReport && (
-          <Card className="bg-gradient-to-r from-primary/10 to-accent/10 border-primary/20">
-            <CardHeader>
-              <CardTitle className="text-primary flex items-center gap-2">
-                <BarChart3 className="h-5 w-5" />
-                Executive Summary Report
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <h4 className="font-semibold mb-2 text-foreground">Portfolio Overview</h4>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Our property management portfolio spans multiple premium properties, 
-                    maintaining strong collection rates and occupancy levels.
-                  </p>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Total Revenue (YTD)</span>
-                      {summaryLoading ? (
-                        <div className="h-4 w-16 bg-muted animate-pulse rounded"></div>
-                      ) : (
-                        <span className="font-medium text-success">{fmtCurrency(totalRevenue)}</span>
-                      )}
+          {/* Executive Summary Report Card */}
+          {executiveSummaryReport && (
+            <Card className="hover:shadow-elevated transition-all duration-500 border-border/20 bg-gradient-to-br from-background to-background/80 overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent pointer-events-none" />
+              <CardHeader className="pb-4 relative">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-xl bg-gradient-to-br from-primary/10 to-primary/20 shadow-inner">
+                      <BarChart3 className="h-6 w-6 text-primary" />
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Net Operating Income</span>
-                      {summaryLoading ? (
-                        <div className="h-4 w-16 bg-muted animate-pulse rounded"></div>
-                      ) : (
-                        <span className="font-medium text-success">{fmtCurrency(netOperatingIncome)}</span>
-                      )}
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Outstanding Balances</span>
-                      {summaryLoading ? (
-                        <div className="h-4 w-16 bg-muted animate-pulse rounded"></div>
-                      ) : (
-                        <span className="font-medium text-warning">{fmtCurrency(outstandingAmount)}</span>
-                      )}
+                    <div>
+                      <CardTitle className="text-lg font-bold text-foreground tracking-tight">
+                        {executiveSummaryReport.title}
+                      </CardTitle>
+                      <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                        {executiveSummaryReport.description}
+                      </p>
                     </div>
                   </div>
+                  <Badge variant="secondary" className="bg-gradient-to-r from-success to-success/90 text-white border-0 shadow-sm">
+                    Ready
+                  </Badge>
                 </div>
-                <div>
-                  <h4 className="font-semibold mb-2 text-foreground">Key Insights</h4>
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-2">
-                      <div className="h-2 w-2 bg-success rounded-full mt-1.5 flex-shrink-0"></div>
-                      <p className="text-sm text-muted-foreground">Real-time collection tracking</p>
+              </CardHeader>
+              <CardContent className="pt-0 relative">
+                <div className="space-y-6">
+                  {/* Main Financial Metrics */}
+                  <div className="grid grid-cols-3 gap-8">
+                    <div className="text-center group">
+                      <div className="text-muted-foreground mb-3 text-xs font-semibold uppercase tracking-wide">Revenue ({periodLabel})</div>
+                      {summaryLoading ? (
+                        <div className="h-10 bg-muted animate-pulse rounded-lg"></div>
+                      ) : (
+                        <div className="text-3xl font-bold text-success transition-transform group-hover:scale-105 duration-200">
+                          {fmtCurrencyCompact(totalRevenue)}
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-start gap-2">
-                      <div className="h-2 w-2 bg-warning rounded-full mt-1.5 flex-shrink-0"></div>
-                      <p className="text-sm text-muted-foreground">Lease renewal monitoring</p>
+                    <div className="text-center group">
+                      <div className="text-muted-foreground mb-3 text-xs font-semibold uppercase tracking-wide">Net Income</div>
+                      {summaryLoading ? (
+                        <div className="h-10 bg-muted animate-pulse rounded-lg"></div>
+                      ) : (
+                        <div className={`text-3xl font-bold transition-transform group-hover:scale-105 duration-200 ${
+                          netOperatingIncome >= 0 ? 'text-success' : 'text-destructive'
+                        }`}>
+                          {fmtCurrencyCompact(netOperatingIncome)}
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-start gap-2">
-                      <div className="h-2 w-2 bg-accent rounded-full mt-1.5 flex-shrink-0"></div>
-                      <p className="text-sm text-muted-foreground">Maintenance cost optimization</p>
+                    <div className="text-center group">
+                      <div className="text-muted-foreground mb-3 text-xs font-semibold uppercase tracking-wide">Outstanding</div>
+                      {summaryLoading ? (
+                        <div className="h-10 bg-muted animate-pulse rounded-lg"></div>
+                      ) : (
+                        <div className="text-3xl font-bold text-warning transition-transform group-hover:scale-105 duration-200">
+                          {fmtCurrencyCompact(outstandingAmount)}
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="flex gap-2 mt-4">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="flex-1 border-primary text-primary hover:bg-primary hover:text-primary-foreground"
-                      onClick={() => handleGenerateReport(executiveSummaryReport, { periodPreset: 'current_period' })}
-                      disabled={isGenerating}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      {isGenerating ? `${Math.round(progress)}%` : 'Download Summary'}
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="border-orange-500 text-orange-600 hover:bg-orange-500 hover:text-white"
-                      onClick={testPDFHealth}
-                    >
-                      Test PDF
-                    </Button>
+
+                  {/* Period Badge */}
+                  <div className="flex items-center justify-center py-2">
+                    <div className="px-4 py-2 bg-gradient-to-r from-muted/60 to-muted/40 rounded-full">
+                      <span className="text-sm font-semibold text-foreground">
+                        {periodLabel}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
-        {/* Quick Expiry Check */}
-        <QuickExpiryCheck onViewDetails={handleViewLeaseExpiryDetails} hideWhenEmpty />
-
-        {/* KPI Summary Cards */}
-        <ReportKpiCards onReportClick={handleKpiClick} />
-
-        {/* Reports Grid */}
-        <div id="reports-grid" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {availableReports.map((config) => {
-            const IconComponent = getReportIcon(config.id);
-            
-            return (
-              <Card key={config.id} className="hover:shadow-elevated transition-all duration-300 border-border/50">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-primary/10">
-                        <IconComponent className="h-5 w-5 text-primary" />
+                  {/* Performance Metrics */}
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-r from-border/10 via-border/5 to-border/10 rounded-lg"></div>
+                    <div className="relative bg-background/80 backdrop-blur-sm rounded-lg p-4 border border-border/20">
+                      <div className="grid grid-cols-2 gap-8">
+                        <div className="text-center group">
+                          <div className="text-muted-foreground mb-3 text-xs font-semibold uppercase tracking-wide">Collection Rate</div>
+                          {summaryLoading ? (
+                            <div className="h-8 bg-muted animate-pulse rounded-lg"></div>
+                          ) : (
+                            <div className="text-2xl font-bold text-primary transition-transform group-hover:scale-105 duration-200">
+                              {(collectionRate || 0).toFixed(1)}%
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-center group">
+                          <div className="text-muted-foreground mb-3 text-xs font-semibold uppercase tracking-wide">Occupancy</div>
+                          {summaryLoading ? (
+                            <div className="h-8 bg-muted animate-pulse rounded-lg"></div>
+                          ) : (
+                            <div className="text-2xl font-bold text-primary transition-transform group-hover:scale-105 duration-200">
+                              {(occupancyRate || 0).toFixed(1)}%
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <CardTitle className="text-base font-semibold text-foreground">
-                          {config.title}
-                        </CardTitle>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {config.description}
-                        </p>
-                      </div>
                     </div>
-                    <Badge variant="secondary" className="bg-success text-white">
-                      Ready
-                    </Badge>
                   </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Period:</span>
-                      <span className="font-medium text-foreground">{config.defaultPeriod.replace(/_/g, ' ')}</span>
-                    </div>
-                    <div className="flex gap-2">
+
+                  {/* Action Buttons */}
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <DisabledActionWrapper 
+                      feature={getReportFeature(executiveSummaryReport.id) as any}
+                      fallbackTitle="Preview Report"
+                      fallbackDescription="Preview executive summary with advanced analytics and insights."
+                    >
                       <Button
                         variant="outline"
                         size="sm"
-                        className="flex-1 border-primary text-primary hover:bg-primary hover:text-primary-foreground"
-                        onClick={() => handlePreviewReport(config)}
+                        className="border border-border/40 text-foreground hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all duration-200 font-medium w-full"
+                        onClick={() => handlePreviewReport(executiveSummaryReport)}
                       >
-                        <Eye className="h-4 w-4 mr-1" />
+                        <Eye className="h-3 w-3 mr-1.5" />
                         Preview
                       </Button>
+                    </DisabledActionWrapper>
+                    <DisabledActionWrapper 
+                      feature={getReportFeature(executiveSummaryReport.id) as any}
+                      fallbackTitle="Generate PDF"
+                      fallbackDescription="Generate comprehensive PDF report with executive summary."
+                    >
                       <Button
+                        variant="default"
                         size="sm"
-                        className="flex-1 bg-primary hover:bg-primary/90"
-                        onClick={() => handleGenerateReport(config, { periodPreset: config.defaultPeriod })}
-                        disabled={isGenerating}
+                        className="bg-gradient-to-r from-primary to-primary/90 text-primary-foreground border-0 hover:shadow-elevated transition-all duration-200 font-medium w-full"
+                        onClick={() => handleGenerateReport(executiveSummaryReport, { periodPreset: executiveSummaryReport.defaultPeriod })}
                       >
-                        <Download className="h-4 w-4 mr-1" />
-                        Generate
+                        <Download className="h-3 w-3 mr-1.5" />
+                        PDF
                       </Button>
-                    </div>
+                    </DisabledActionWrapper>
                   </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-        {/* Preview Dialog */}
-        {selectedReport && (
-          <PreviewReportDialog
-            open={previewOpen}
-            onOpenChange={setPreviewOpen}
-            reportConfig={selectedReport}
-            onGeneratePDF={(filters) => handleGenerateReport(selectedReport, filters)}
-            isGenerating={isGenerating}
+          {/* Report KPIs */}
+          <ReportKpiCards 
+            availableCount={availableReports.length}
+            totalCount={allReportsForRole.length}
+            onReportClick={handleKpiClick}
           />
-        )}
 
-        {/* PDF Generation Progress Dialog */}
-        <PDFGenerationProgress
-          open={progressOpen}
-          onOpenChange={setProgressOpen}
-          isGenerating={isGenerating}
-          progress={progress}
-          currentStep={currentStep}
-          isComplete={false}
-          reportTitle={currentGeneratingReport}
-        />
+          {/* Lease Expiry Alert */}
+          <QuickExpiryCheck 
+            onViewDetails={handleViewLeaseExpiryDetails}
+          />
+
+          {/* All Reports Grid */}
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-foreground">Other Reports</h2>
+              <div className="text-sm text-muted-foreground">
+                {availableReports.length - (executiveSummaryReport ? 1 : 0)} of {allReportsForRole.length - (executiveSummaryReport ? 1 : 0)} reports available
+              </div>
+            </div>
+
+            {/* Available Reports Section */}
+            {availableReports.filter(config => config.id !== 'executive-summary').length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium text-foreground">Available Reports</h3>
+                <div id="reports-grid" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {availableReports
+                    .filter(config => config.id !== 'executive-summary')
+                    .map((config) => {
+                      const Icon = getReportIcon(config.id);
+                      return (
+                        <Card key={config.id} className="hover:shadow-elevated transition-all duration-300 border-border/20 bg-gradient-to-br from-background to-background/80 overflow-hidden relative group">
+                          <div className="absolute inset-0 bg-gradient-to-br from-primary/3 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                          <CardHeader className="pb-3 relative">
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-lg bg-gradient-to-br from-primary/10 to-primary/20">
+                                  <Icon className="h-5 w-5 text-primary" />
+                                </div>
+                                <CardTitle className="text-base font-semibold text-foreground leading-tight">
+                                  {config.title}
+                                </CardTitle>
+                              </div>
+                              <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                                Available
+                              </Badge>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="pt-0 relative">
+                            <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+                              {config.description}
+                            </p>
+                            
+                            <div className="grid grid-cols-2 gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="border border-border/40 text-foreground hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all duration-200 font-medium w-full"
+                                onClick={() => handlePreviewReport(config)}
+                              >
+                                <Eye className="h-3 w-3 mr-1.5" />
+                                Preview
+                              </Button>
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="bg-gradient-to-r from-primary to-primary/90 text-primary-foreground border-0 hover:shadow-elevated transition-all duration-200 font-medium w-full"
+                                onClick={() => handleGenerateReport(config, { periodPreset: config.defaultPeriod })}
+                              >
+                                <Download className="h-3 w-3 mr-1.5" />
+                                PDF
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
+            {/* Locked Reports Section */}
+            {lockedReports.filter(config => config.id !== 'executive-summary').length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium text-muted-foreground">Premium Reports (Locked)</h3>
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {lockedReports
+                    .filter(config => config.id !== 'executive-summary')
+                    .map((config) => {
+                      const Icon = getReportIcon(config.id);
+                      return (
+                        <Card key={config.id} className="relative overflow-hidden opacity-75 cursor-not-allowed">
+                          {/* Enhanced blur overlay */}
+                           <div className="absolute inset-0 bg-background/60 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                             <div className="text-center p-4">
+                               <Lock className="h-6 w-6 mx-auto mb-2 text-primary" />
+                               <p className="text-sm font-medium text-foreground mb-1">{config.title}</p>
+                               <p className="text-xs text-muted-foreground mb-3">
+                                 Advanced {config.id.includes('financial') || config.id.includes('profit') || config.id.includes('cash') ? 'financial' : 'operational'} insights & analytics
+                               </p>
+                               <PlanUpgradeButton size="sm" className="text-xs">
+                                 <Crown className="h-3 w-3 mr-1" />
+                                 Unlock Pro
+                               </PlanUpgradeButton>
+                             </div>
+                           </div>
+                          
+                          <CardHeader className="pb-3">
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-lg bg-gradient-to-br from-primary/10 to-primary/20">
+                                  <Icon className="h-5 w-5 text-primary" />
+                                </div>
+                                <CardTitle className="text-base font-semibold">
+                                  {config.title}
+                                </CardTitle>
+                              </div>
+                              <Badge variant="secondary" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                                Pro
+                              </Badge>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="pt-0">
+                            <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
+                              {config.description}
+                            </p>
+                            <div className="grid grid-cols-2 gap-2">
+                              <Button variant="outline" size="sm" disabled>
+                                <Eye className="h-3 w-3 mr-1.5" />
+                                Preview
+                              </Button>
+                              <Button variant="default" size="sm" disabled>
+                                <Download className="h-3 w-3 mr-1.5" />
+                                PDF
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Preview Dialog */}
+          {selectedReport && (
+            <PreviewReportDialog
+              open={previewOpen}
+              onOpenChange={setPreviewOpen}
+              reportConfig={selectedReport}
+              onGeneratePDF={(filters) => handleGenerateReport(selectedReport, filters)}
+              isGenerating={isGenerating}
+            />
+          )}
+
+          {/* PDF Generation Progress Dialog */}
+          <PDFGenerationProgress
+            open={progressOpen}
+            onOpenChange={setProgressOpen}
+            isGenerating={isGenerating}
+            progress={progress}
+            currentStep={currentStep}
+            isComplete={false}
+            reportTitle={currentGeneratingReport}
+          />
+        </FeatureGate>
       </div>
     </DashboardLayout>
   );

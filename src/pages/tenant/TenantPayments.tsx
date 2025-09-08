@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TablePaginator } from "@/components/ui/table-paginator";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TenantLayout } from "@/components/TenantLayout";
@@ -70,6 +71,11 @@ export default function TenantPayments() {
     status: "all",
     dateRange: "all"
   });
+  
+  // Pagination states
+  const [invoicesPage, setInvoicesPage] = useState(1);
+  const [paymentsPage, setPaymentsPage] = useState(1);
+  const pageSize = 10;
 
   useEffect(() => {
     if (user) {
@@ -301,7 +307,7 @@ export default function TenantPayments() {
       };
 
       console.log('Generating PDF with template and branding...');
-      await renderer.generateDocument(documentData, brandingData, template);
+      await renderer.generateDocument(documentData, brandingData, null, null, template);
       console.log('PDF generated successfully with Admin template and branding');
       toast({
         title: "Download Ready",
@@ -393,7 +399,7 @@ export default function TenantPayments() {
       };
 
       console.log('Generating receipt PDF with template and branding...');
-      await renderer.generateDocument(documentData, brandingData, template);
+      await renderer.generateDocument(documentData, brandingData, null, null, template);
       console.log('Receipt PDF generated successfully with Admin template and branding');
       toast({
         title: "Receipt Ready",
@@ -462,6 +468,11 @@ export default function TenantPayments() {
     });
   }, [paymentData, filters]);
 
+  const paginatedInvoices = useMemo(() => {
+    const startIndex = (invoicesPage - 1) * pageSize;
+    return filteredInvoices.slice(startIndex, startIndex + pageSize);
+  }, [filteredInvoices, invoicesPage, pageSize]);
+
   const filteredPayments = useMemo(() => {
     if (!paymentData?.payments) return [];
     
@@ -474,6 +485,11 @@ export default function TenantPayments() {
       return matchesSearch;
     });
   }, [paymentData?.payments, filters]);
+
+  const paginatedPayments = useMemo(() => {
+    const startIndex = (paymentsPage - 1) * pageSize;
+    return filteredPayments.slice(startIndex, startIndex + pageSize);
+  }, [filteredPayments, paymentsPage, pageSize]);
 
   const groupPaymentsByMonth = (payments: any[]) => {
     const grouped: { [key: string]: any[] } = {};
@@ -717,8 +733,8 @@ export default function TenantPayments() {
                         <TableHead className="font-semibold">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
-                    <TableBody>
-                      {filteredInvoices.map((invoice) => (
+                     <TableBody>
+                       {paginatedInvoices.map((invoice) => (
                         <TableRow key={invoice.id} className="hover:bg-muted/20 transition-colors">
                           <TableCell>
                             <div className="space-y-1">
@@ -822,9 +838,21 @@ export default function TenantPayments() {
                           </TableCell>
                         </TableRow>
                       ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                     </TableBody>
+                   </Table>
+                   
+                   <div className="mt-4">
+                     <TablePaginator
+                       currentPage={invoicesPage}
+                       totalPages={Math.ceil(filteredInvoices.length / pageSize)}
+                       pageSize={pageSize}
+                       totalItems={filteredInvoices.length}
+                       onPageChange={setInvoicesPage}
+                       onPageSizeChange={() => {}} // Fixed page size for now
+                       showPageSizeSelector={false}
+                     />
+                   </div>
+                 </div>
               )}
             </CardContent>
           </Card>
@@ -878,8 +906,8 @@ export default function TenantPayments() {
                         <TableHead className="font-semibold">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
-                    <TableBody>
-                      {filteredPayments.map((payment) => (
+                     <TableBody>
+                       {paginatedPayments.map((payment) => (
                         <TableRow key={payment.id} className="hover:bg-muted/20 transition-colors">
                           <TableCell>
                             <div className="space-y-1">
@@ -967,9 +995,21 @@ export default function TenantPayments() {
                            </TableCell>
                         </TableRow>
                       ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                     </TableBody>
+                   </Table>
+                   
+                   <div className="mt-4">
+                     <TablePaginator
+                       currentPage={paymentsPage}
+                       totalPages={Math.ceil(filteredPayments.length / pageSize)}
+                       pageSize={pageSize}
+                       totalItems={filteredPayments.length}
+                       onPageChange={setPaymentsPage}
+                       onPageSizeChange={() => {}} // Fixed page size for now
+                       showPageSizeSelector={false}
+                     />
+                   </div>
+                 </div>
               )}
             </CardContent>
           </Card>

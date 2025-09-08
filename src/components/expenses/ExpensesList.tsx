@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { ExpenseWithDetails } from "@/hooks/useExpenseData";
 import { format } from "date-fns";
 import { Eye, DollarSign, Zap, Calendar, RotateCcw } from "lucide-react";
+import { TablePaginator } from "@/components/ui/table-paginator";
+import { useState } from "react";
 
 interface ExpensesListProps {
   expenses: ExpenseWithDetails[];
@@ -12,6 +14,8 @@ interface ExpensesListProps {
 }
 
 export function ExpensesList({ expenses, loading }: ExpensesListProps) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   if (loading) {
     return (
       <Card>
@@ -76,6 +80,11 @@ export function ExpensesList({ expenses, loading }: ExpensesListProps) {
     );
   };
 
+  // Pagination logic
+  const totalPages = Math.ceil(expenses.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedExpenses = expenses.slice(startIndex, startIndex + pageSize);
+
   return (
     <Card>
       <CardHeader>
@@ -83,7 +92,7 @@ export function ExpensesList({ expenses, loading }: ExpensesListProps) {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {expenses.map((expense) => (
+          {paginatedExpenses.map((expense) => (
             <div 
               key={expense.id} 
               className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/30 transition-colors"
@@ -149,6 +158,16 @@ export function ExpensesList({ expenses, loading }: ExpensesListProps) {
             </div>
           ))}
         </div>
+        
+        <TablePaginator
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          totalItems={expenses.length}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          showPageSizeSelector={true}
+        />
       </CardContent>
     </Card>
   );

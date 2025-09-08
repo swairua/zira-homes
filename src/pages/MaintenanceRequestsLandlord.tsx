@@ -14,6 +14,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { sendMaintenanceNotification } from "@/utils/notifications";
+import { FeatureGate } from "@/components/ui/feature-gate";
+import { FEATURES } from "@/hooks/usePlanFeatureAccess";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
+import { TablePaginator } from "@/components/ui/table-paginator";
 import { 
   Wrench, Search, Filter, Eye, Calendar, AlertTriangle, Clock, CheckCircle, 
   MessageSquare, Image as ImageIcon, User, Settings, Bell, Mail, 
@@ -100,6 +104,7 @@ const MaintenanceRequestsLandlord = () => {
   const { user } = useAuth();
   const [requests, setRequests] = useState<MaintenanceRequest[]>([]);
   const [serviceProviders, setServiceProviders] = useState<ServiceProvider[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -113,6 +118,7 @@ const MaintenanceRequestsLandlord = () => {
   const [properties, setProperties] = useState<any[]>([]);
   const [rejectReason, setRejectReason] = useState("");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ pageSize: 10 });
 
   // API Keys placeholder notice
   const [showApiKeyNotice, setShowApiKeyNotice] = useState(true);
@@ -135,20 +141,56 @@ const MaintenanceRequestsLandlord = () => {
       
       if (!userProperties || userProperties.length === 0) {
         setRequests([]);
+        setTotalCount(0);
         setLoading(false);
         return;
       }
 
       const propertyIds = userProperties.map(p => p.id);
 
-      // Fetch maintenance requests for these properties
-      const { data: maintenanceRequests, error: requestsError } = await supabase
+      // Build maintenance requests query with filters and pagination
+      let query = supabase
         .from("maintenance_requests")
-        .select("*")
-        .in("property_id", propertyIds)
+        .select("*", { count: 'exact' })
+        .in("property_id", propertyIds);
+
+      // Apply search filter
+      if (searchTerm) {
+        query = query.or(`title.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
+      }
+
+      // Apply status filter
+      if (filterStatus !== "all") {
+        query = query.eq('status', filterStatus);
+      }
+
+      // Apply priority filter
+      if (filterPriority !== "all") {
+        query = query.eq('priority', filterPriority);
+      }
+
+      // Apply property filter
+      if (filterProperty !== "all") {
+        query = query.eq('property_id', filterProperty);
+      }
+
+      // Apply category filter
+      if (filterCategory !== "all") {
+        query = query.eq('category', filterCategory);
+      }
+
+      // Apply date range filter
+      if (dateRange.from && dateRange.to) {
+        query = query.gte('submitted_date', dateRange.from).lte('submitted_date', dateRange.to);
+      }
+
+      // Apply pagination and ordering
+      const { data: maintenanceRequests, error: requestsError, count } = await query
+        .range(offset, offset + pageSize - 1)
         .order("submitted_date", { ascending: false });
 
       if (requestsError) throw requestsError;
+      setTotalCount(count || 0);
 
       if (!maintenanceRequests || maintenanceRequests.length === 0) {
         setRequests([]);
@@ -259,7 +301,7 @@ const MaintenanceRequestsLandlord = () => {
   useEffect(() => {
     fetchMaintenanceRequests();
     fetchServiceProviders();
-  }, [user]);
+  }, [user, page, pageSize, searchTerm, filterStatus, filterPriority, filterProperty, filterCategory, dateRange]);
 
   const handleStatusChange = async (requestId: string, newStatus: string, oldStatus: string) => {
     try {
@@ -397,29 +439,8 @@ const MaintenanceRequestsLandlord = () => {
     }
   };
 
-  const filteredRequests = requests.filter((request) => {
-    const matchesSearch = 
-      request.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      request.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      `${request.tenants?.first_name} ${request.tenants?.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      request.units?.unit_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      request.properties?.name?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = filterStatus === "all" || request.status === filterStatus;
-    const matchesPriority = filterPriority === "all" || request.priority === filterPriority;
-    const matchesProperty = filterProperty === "all" || request.property_id === filterProperty;
-    const matchesCategory = filterCategory === "all" || request.category === filterCategory;
-    
-    let matchesDate = true;
-    if (dateRange.from && dateRange.to) {
-      const requestDate = new Date(request.submitted_date);
-      const fromDate = new Date(dateRange.from);
-      const toDate = new Date(dateRange.to);
-      matchesDate = requestDate >= fromDate && requestDate <= toDate;
-    }
-    
-    return matchesSearch && matchesStatus && matchesPriority && matchesProperty && matchesCategory && matchesDate;
-  });
+  // No client-side filtering needed since we're doing server-side pagination
+  const filteredRequests = requests;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1005,6 +1026,11 @@ const MaintenanceRequestsLandlord = () => {
 
   return (
     <DashboardLayout>
+      <FeatureGate 
+        feature={FEATURES.MAINTENANCE_TRACKING}
+        fallbackTitle="Maintenance Management"
+        fallbackDescription="Track maintenance requests, manage service providers, and automate workflows."
+      >
       <div className="p-6 space-y-6">
         {/* Header */}
         <div className="flex justify-between items-center">
@@ -1227,6 +1253,20 @@ const MaintenanceRequestsLandlord = () => {
                 </p>
               </div>
             )}
+            
+            {/* Pagination for maintenance requests */}
+            {filteredRequests.length > 0 && (
+              <div className="px-6 pb-4">
+                <TablePaginator
+                  currentPage={page}
+                  totalPages={Math.ceil(totalCount / pageSize)}
+                  pageSize={pageSize}
+                  totalItems={totalCount}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -1239,6 +1279,7 @@ const MaintenanceRequestsLandlord = () => {
           </TabsContent>
         </Tabs>
       </div>
+      </FeatureGate>
     </DashboardLayout>
   );
 };

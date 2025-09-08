@@ -85,10 +85,10 @@ export class BrandingFetcher {
     // Extract colors from JSON field
     const colors = dbBranding.colors || {};
     
-    // Improve logo reliability - avoid data: URLs that may fail during PDF generation
+    // Handle logo URLs - preserve data URLs and use valid fallback
     let logoUrl = dbBranding.logo_url || defaults.logoUrl;
-    if (!logoUrl || logoUrl.startsWith('data:')) {
-      logoUrl = '/zira-logo.png'; // Runtime-served fallback
+    if (!logoUrl) {
+      logoUrl = '/src/assets/zira-logo.png'; // Valid fallback path
     }
     
     return {

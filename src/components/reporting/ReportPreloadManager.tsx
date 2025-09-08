@@ -18,13 +18,14 @@ export function ReportPreloadManager({
   const { preloadReport } = useOptimizedReportGeneration();
 
   useEffect(() => {
-    // Preload popular reports in the background
+    // Preload popular reports in the background - prioritize Financial Summary
     const popularReports = [
-      'financial-summary',
+      'financial-summary', // High priority - comprehensive overview
+      'rent-collection',
       'property-performance',
+      'executive-summary',
       'profit-loss', 
       'expense-summary',
-      'cash-flow',
       'executive-summary'
     ];
 

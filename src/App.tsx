@@ -1,12 +1,14 @@
+
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { HashRouter } from "react-router-dom";
+import { BrowserRouter } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
-import { AppRoutes } from "@/components/AppRoutes";
+import { AppRoutes } from "@/routes/AppRoutes";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/hooks/useAuth";
 import { RoleProvider } from "@/context/RoleContext";
+import { ImpersonationBanner } from "@/components/security/ImpersonationBanner";
 import { queryClient } from "@/config/queryClient";
 import "./App.css";
 
@@ -23,10 +25,11 @@ function App() {
           <RoleProvider>
             <QueryClientProvider client={queryClient}>
             <TooltipProvider>
-              <HashRouter>
+              <BrowserRouter basename={import.meta.env.VITE_BASE_PATH || "/"}>
+                <ImpersonationBanner />
                 <AppRoutes />
                 <Toaster />
-              </HashRouter>
+              </BrowserRouter>
             </TooltipProvider>
             </QueryClientProvider>
           </RoleProvider>

@@ -12,9 +12,12 @@ import { toast } from "sonner";
 import { FileText, Search, Filter, Plus, Eye, Edit, Download, Send, Calendar, DollarSign } from "lucide-react";
 import { InvoiceDetailsDialog } from "@/components/invoices/InvoiceDetailsDialog";
 import { CreateInvoiceDialog } from "@/components/invoices/CreateInvoiceDialog";
+import { BulkInvoiceGenerationDialog } from "@/components/invoices/BulkInvoiceGenerationDialog";
 import { useInvoiceActions } from "@/hooks/useInvoiceActions";
 import { KpiGrid } from "@/components/kpi/KpiGrid";
 import { KpiStatCard } from "@/components/kpi/KpiStatCard";
+import { TablePaginator } from "@/components/ui/table-paginator";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 
 interface Invoice {
   id: string;
@@ -25,6 +28,9 @@ interface Invoice {
   due_date: string;
   amount: number;
   status: string;
+  computed_status: string;
+  amount_paid_total: number;
+  outstanding_amount: number;
   description: string | null;
   created_at: string;
   leases?: {
@@ -44,69 +50,60 @@ interface Invoice {
 
 const Invoices = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const { downloadInvoice, sendInvoice } = useInvoiceActions();
+  const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ pageSize: 10 });
 
-  // Fetch invoices from Supabase with proper RLS
+  // Fetch invoices using the secure RPC function with pagination
   const fetchInvoices = async () => {
     try {
-      console.log("🔍 Starting invoices fetch");
+      console.log("🔍 Starting invoice overview fetch with pagination", { page, pageSize, offset });
       
-      // Get invoices data
-      const { data: invoicesData, error: invoicesError } = await supabase
-        .from('invoices')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // Use secure RPC function instead of direct view access
+      const { data, error } = await supabase.rpc('get_invoice_overview', {
+        p_limit: pageSize,
+        p_offset: offset,
+        p_status: filterStatus !== "all" ? filterStatus : null,
+        p_search: searchTerm || null
+      });
 
-      if (invoicesError) {
-        console.error('❌ Invoices query error:', invoicesError);
-        throw invoicesError;
+      if (error) {
+        console.error('❌ Invoice overview RPC error:', error);
+        throw error;
       }
 
-      // Get related data separately
-      const [tenantsResult, leasesResult, unitsResult, propertiesResult] = await Promise.all([
-        supabase.from("tenants").select("id, first_name, last_name, email"),
-        supabase.from("leases").select("id, unit_id"),
-        supabase.from("units").select("id, unit_number, property_id"),
-        supabase.from("properties").select("id, name")
-      ]);
+      // Get total count for pagination (we'll need to make a separate call for this)
+      const { count } = await supabase.rpc('get_invoice_overview', {
+        p_limit: 999999, // Get all for count
+        p_offset: 0,
+        p_status: filterStatus !== "all" ? filterStatus : null,
+        p_search: searchTerm || null
+      });
 
-      if (tenantsResult.error) throw tenantsResult.error;
-      if (leasesResult.error) throw leasesResult.error;
-      if (unitsResult.error) throw unitsResult.error;
-      if (propertiesResult.error) throw propertiesResult.error;
-
-      // Create lookup maps
-      const tenantMap = new Map(tenantsResult.data?.map(t => [t.id, t]) || []);
-      const leaseMap = new Map(leasesResult.data?.map(l => [l.id, l]) || []);
-      const unitMap = new Map(unitsResult.data?.map(u => [u.id, u]) || []);
-      const propertyMap = new Map(propertiesResult.data?.map(p => [p.id, p]) || []);
-
-      // Join data manually
-      const joinedInvoices = invoicesData?.map(invoice => {
-        const tenant = tenantMap.get(invoice.tenant_id);
-        const lease = leaseMap.get(invoice.lease_id);
-        const unit = lease ? unitMap.get(lease.unit_id) : null;
-        const property = unit ? propertyMap.get(unit.property_id) : null;
-        
-        return {
-          ...invoice,
-          tenants: tenant || { first_name: '', last_name: '', email: '' },
-          leases: {
-            units: {
-              unit_number: unit?.unit_number || '',
-              properties: {
-                name: property?.name || ''
-              }
+      // Transform data to match expected interface
+      const transformedInvoices = (data || []).map((invoice: any) => ({
+        ...invoice,
+        tenants: {
+          first_name: invoice.first_name || '',
+          last_name: invoice.last_name || '',
+          email: invoice.email || ''
+        },
+        leases: {
+          units: {
+            unit_number: invoice.unit_number || '',
+            properties: {
+              name: invoice.property_name || ''
             }
           }
-        };
-      }) || [];
+        }
+      }));
 
-      console.log("🔗 Joined invoices:", joinedInvoices.length);
-      setInvoices(joinedInvoices);
+      console.log("🔗 Invoice overview loaded:", transformedInvoices.length, "of", (data || []).length);
+      setInvoices(transformedInvoices as Invoice[]);
+      setTotalCount((data || []).length);
     } catch (error) {
       console.error('💥 Error in fetchInvoices:', error);
       toast.error('Failed to load invoices');
@@ -122,16 +119,7 @@ const Invoices = () => {
       await fetchInvoices();
     };
     loadInvoices();
-  }, []);
-
-  const filteredInvoices = invoices.filter((invoice) => {
-    const matchesSearch = 
-      invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      `${invoice.tenants?.first_name} ${invoice.tenants?.last_name}`.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === "all" || invoice.status === filterStatus;
-    
-    return matchesSearch && matchesStatus;
-  });
+  }, [page, pageSize, searchTerm, filterStatus]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -147,9 +135,11 @@ const Invoices = () => {
   };
 
   const totalInvoiced = invoices.reduce((sum, invoice) => sum + invoice.amount, 0);
-  const totalPaid = invoices.filter(i => i.status === "paid").reduce((sum, invoice) => sum + invoice.amount, 0);
-  const totalPending = invoices.filter(i => i.status === "pending").reduce((sum, invoice) => sum + invoice.amount, 0);
-  const totalOverdue = invoices.filter(i => i.status === "overdue").reduce((sum, invoice) => sum + invoice.amount, 0);
+  const totalPaid = invoices.reduce((sum, invoice) => sum + (invoice.amount_paid_total || 0), 0);
+  const totalOutstanding = invoices.reduce((sum, invoice) => sum + (invoice.outstanding_amount || 0), 0);
+  const totalOverdue = invoices.filter(i => (i.computed_status || i.status) === "overdue").reduce((sum, invoice) => sum + (invoice.outstanding_amount || 0), 0);
+
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   return (
     <DashboardLayout>
@@ -162,7 +152,8 @@ const Invoices = () => {
               Manage tenant invoices and billing
             </p>
           </div>
-          <div className="self-stretch sm:self-auto">
+          <div className="flex gap-3 self-stretch sm:self-auto">
+            <BulkInvoiceGenerationDialog onInvoicesGenerated={fetchInvoices} />
             <CreateInvoiceDialog onInvoiceCreated={fetchInvoices} />
           </div>
         </div>
@@ -186,9 +177,9 @@ const Invoices = () => {
             isLoading={loading}
           />
           <KpiStatCard
-            title="Pending"
-            value={formatAmount(totalPending)}
-            subtitle="Awaiting payment"
+            title="Outstanding"
+            value={formatAmount(totalOutstanding)}
+            subtitle="Total unpaid"
             icon={Calendar}
             gradient="card-gradient-orange"
             isLoading={loading}
@@ -249,9 +240,9 @@ const Invoices = () => {
               </Card>
             ))}
           </div>
-        ) : filteredInvoices.length > 0 ? (
+        ) : invoices.length > 0 ? (
           <div className="space-y-4">
-            {filteredInvoices.map((invoice) => (
+            {invoices.map((invoice) => (
               <Card key={invoice.id} className="bg-card hover:shadow-elevated transition-all duration-300 border-border">
                 <CardContent className="p-6">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -277,8 +268,11 @@ const Invoices = () => {
                     <div className="flex items-end sm:items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
                       <div className="text-left sm:text-right">
                         <p className="font-semibold text-lg sm:text-xl text-primary">{formatAmount(invoice.amount)}</p>
-                        <Badge className={getStatusColor(invoice.status)}>
-                          {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                        <p className="text-sm text-muted-foreground">
+                          Paid: {formatAmount(invoice.amount_paid_total || 0)} | Outstanding: {formatAmount(invoice.outstanding_amount || 0)}
+                        </p>
+                        <Badge className={getStatusColor(invoice.computed_status || invoice.status)}>
+                          {(invoice.computed_status || invoice.status).charAt(0).toUpperCase() + (invoice.computed_status || invoice.status).slice(1)}
                         </Badge>
                       </div>
                       <div className="flex gap-2">
@@ -319,6 +313,16 @@ const Invoices = () => {
                 </CardContent>
               </Card>
             ))}
+            
+            {/* Pagination */}
+            <TablePaginator
+              currentPage={page}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              totalItems={totalCount}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         ) : (
           <Card className="bg-card">

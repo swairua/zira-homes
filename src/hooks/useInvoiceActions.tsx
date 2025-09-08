@@ -69,8 +69,7 @@ export const useInvoiceActions = () => {
         }
       };
       
-      // Use real billing data instead of localStorage
-      await renderer.generateDocument(documentData, branding, enhancedInvoice.billingData);
+      await renderer.generateDocument(documentData, branding, enhancedInvoice.billingData, null, template);
       toast.success(`Invoice ${invoice.invoice_number} downloaded successfully!`);
     } catch (error) {
       console.error('Error downloading invoice:', error);

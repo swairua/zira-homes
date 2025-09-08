@@ -24,6 +24,16 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // SECURITY FIX: Verify JWT token and authorization
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return new Response(
+        JSON.stringify({ error: 'Authorization required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const token = authHeader.replace('Bearer ', '');
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -34,6 +44,39 @@ Deno.serve(async (req) => {
         }
       }
     );
+
+    // Verify the JWT token and get user
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid or expired token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check if the caller has Admin role using RPC function
+    const { data: hasAdminRole, error: roleCheckError } = await supabase
+      .rpc('has_role', { _user_id: user.id, _role: 'Admin' });
+
+    if (roleCheckError || !hasAdminRole) {
+      // Log unauthorized access attempt
+      await supabase.rpc('log_security_event', {
+        _event_type: 'unauthorized_access',
+        _severity: 'high',
+        _details: { 
+          action: 'create_custom_trial_attempt', 
+          user_id: user.id,
+          ip_address: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown'
+        },
+        _user_id: user.id,
+        _ip_address: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || null
+      });
+
+      return new Response(
+        JSON.stringify({ error: 'Insufficient permissions. Admin role required.' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     const requestData: CreateUserRequest = await req.json();
     

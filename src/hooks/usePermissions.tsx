@@ -25,7 +25,15 @@ export const usePermissions = () => {
         .rpc('get_user_permissions', { _user_id: user.id });
 
       if (error) throw error;
-      setPermissions(data || []);
+      
+      // Map the RPC response to match the Permission interface
+      const mappedPermissions: Permission[] = (data || []).map(item => ({
+        permission_name: item.permission_name,
+        category: 'general', // Default category since RPC doesn't return this
+        description: item.permission_name // Use permission name as description
+      }));
+      
+      setPermissions(mappedPermissions);
     } catch (error) {
       console.error('Error fetching user permissions:', error);
       setPermissions([]);

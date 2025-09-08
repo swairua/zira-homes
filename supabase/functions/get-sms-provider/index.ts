@@ -19,6 +19,48 @@ const handler = async (req: Request): Promise<Response> => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // SECURITY FIX: Verify user is authenticated and has admin role
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Authentication required'
+      }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    // Verify JWT token and check admin role
+    const { data: { user }, error: authError } = await supabase.auth.getUser(
+      authHeader.replace('Bearer ', '')
+    );
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Invalid authentication'
+      }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    // Check if user has admin role
+    const { data: hasAdminRole, error: roleError } = await supabase
+      .rpc('has_role', { _user_id: user.id, _role: 'Admin' });
+
+    if (roleError || !hasAdminRole) {
+      console.warn(`Unauthorized SMS provider access attempt by user: ${user.id}`);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Administrative privileges required'
+      }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
     // Query the actual SMS providers configuration
     const { data: providers, error } = await supabase
       .from('sms_providers')
@@ -28,28 +70,13 @@ const handler = async (req: Request): Promise<Response> => {
       .single();
 
     if (error || !providers) {
-      console.log('No active default provider found, using fallback');
-      // Fallback to mock provider
-      const mockProvider = {
-        provider_name: 'InHouse SMS',
-        is_active: true,
-        is_default: true,
-        config_data: {
-          username: 'ZIRA TECH',
-          authorization_token: 'f22b2aa230b02b428a71023c7eb7f7bb9d440f38',
-          unique_identifier: '77',
-          sender_id: 'ZIRA TECH',
-          sender_type: '10',
-          base_url: 'http://68.183.101.252:803/bulk_api/'
-        }
-      };
-
+      console.log('No active default provider found');
       return new Response(JSON.stringify({
-        success: true,
-        provider: mockProvider,
-        message: 'Fallback SMS provider retrieved successfully'
+        success: false,
+        error: 'No SMS provider configured',
+        message: 'Please configure an SMS provider in admin settings'
       }), {
-        status: 200,
+        status: 404,
         headers: {
           'Content-Type': 'application/json',
           ...corsHeaders,
@@ -57,9 +84,21 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
+    // Return provider data without sensitive fields
+    const safeProvider = {
+      id: providers.id,
+      provider_name: providers.provider_name,
+      sender_id: providers.sender_id,
+      sender_type: providers.sender_type,
+      is_active: providers.is_active,
+      is_default: providers.is_default,
+      // Never expose secrets to client
+      has_credentials: !!(providers.authorization_token || providers.username)
+    };
+
     return new Response(JSON.stringify({
       success: true,
-      provider: providers,
+      provider: safeProvider,
       message: 'Active SMS provider retrieved successfully'
     }), {
       status: 200,

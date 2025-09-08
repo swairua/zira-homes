@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { TablePaginator } from "@/components/ui/table-paginator";
 import { Clock, User, AlertCircle } from "lucide-react";
 import { SupportTicket } from "@/hooks/useSupportData";
 import { formatDistanceToNow } from "date-fns";
@@ -23,6 +24,13 @@ export function SupportTicketList({
   statusFilter = "",
   priorityFilter = ""
 }: SupportTicketListProps) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, priorityFilter]);
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'urgent': return 'bg-destructive text-destructive-foreground';
@@ -52,24 +60,42 @@ export function SupportTicketList({
     return matchesSearch && matchesStatus && matchesPriority;
   });
 
+  // Client-side pagination
+  const totalItems = filteredTickets.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedTickets = filteredTickets.slice(startIndex, endIndex);
+
   if (filteredTickets.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-8 text-center">
-        <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-        <h3 className="text-lg font-semibold text-foreground mb-2">No tickets found</h3>
-        <p className="text-muted-foreground">
-          {searchQuery || statusFilter || priorityFilter 
-            ? "Try adjusting your filters to see more results."
-            : "No support tickets have been created yet."
-          }
-        </p>
-      </div>
+      <>
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+          <h3 className="text-lg font-semibold text-foreground mb-2">No tickets found</h3>
+          <p className="text-muted-foreground">
+            {searchQuery || statusFilter || priorityFilter 
+              ? "Try adjusting your filters to see more results."
+              : "No support tickets have been created yet."
+            }
+          </p>
+        </div>
+        <TablePaginator
+          currentPage={currentPage}
+          totalPages={Math.ceil(Math.max(totalItems, 1) / pageSize)}
+          pageSize={pageSize}
+          totalItems={totalItems}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          showPageSizeSelector={true}
+        />
+      </>
     );
   }
 
   return (
     <div className="space-y-4">
-      {filteredTickets.map((ticket) => (
+      {paginatedTickets.map((ticket) => (
         <Card 
           key={ticket.id} 
           className={`cursor-pointer transition-all hover:shadow-md ${
@@ -140,6 +166,16 @@ export function SupportTicketList({
           </CardContent>
         </Card>
       ))}
+      
+      <TablePaginator
+        currentPage={currentPage}
+        totalPages={Math.ceil(Math.max(totalItems, 1) / pageSize)}
+        pageSize={pageSize}
+        totalItems={totalItems}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={setPageSize}
+        showPageSizeSelector={true}
+      />
     </div>
   );
 }

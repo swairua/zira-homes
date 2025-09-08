@@ -246,9 +246,9 @@ export const ReportRenderer = ({ reportId, filters, className, isPrintMode = fal
           <p className="text-muted-foreground">{config.description}</p>
         </div>
 
-        {/* KPIs */}
+        {/* KPIs - Compact spacing for Financial Summary */}
         <TooltipProvider>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 ${reportId === 'financial-summary' ? 'gap-3' : 'gap-4'}`}>
             {config.kpis.map((kpi) => {
               const value = data.kpis[kpi.key] ?? 0;
               const fullValue = formatValue(value, kpi.format, kpi.decimals);
@@ -257,7 +257,7 @@ export const ReportRenderer = ({ reportId, filters, className, isPrintMode = fal
               
               return (
                 <Card key={kpi.key}>
-                  <CardContent className="p-4">
+                  <CardContent className={reportId === 'financial-summary' ? 'p-3' : 'p-4'}>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div className="text-2xl font-bold text-foreground min-w-0 truncate">

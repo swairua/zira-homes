@@ -1,5 +1,7 @@
 import SubUserManagement from "@/components/landlord/SubUserManagement";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { FeatureGate } from "@/components/ui/feature-gate";
+import { FEATURES } from "@/hooks/usePlanFeatureAccess";
 
 export default function SubUsers() {
   return (
@@ -11,7 +13,15 @@ export default function SubUsers() {
             Manage sub-users and their permissions for your organization.
           </p>
         </div>
-        <SubUserManagement />
+        <FeatureGate 
+          feature={FEATURES.SUB_USERS}
+          fallbackTitle="Team Management"
+          fallbackDescription="Add team members with custom permissions and role-based access control."
+          allowReadOnly={true}
+          readOnlyMessage="View-only mode - upgrade to manage sub-users"
+        >
+          <SubUserManagement />
+        </FeatureGate>
       </div>
     </DashboardLayout>
   );

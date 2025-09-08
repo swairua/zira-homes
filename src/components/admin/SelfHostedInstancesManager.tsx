@@ -10,6 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { TablePaginator } from '@/components/ui/table-paginator';
+import { useUrlPageParam } from '@/hooks/useUrlPageParam';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
 import { Server, Plus, Eye, Pause, Play, Trash2, Copy } from 'lucide-react';
@@ -36,19 +38,30 @@ export function SelfHostedInstancesManager() {
   });
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ defaultPage: 1, pageSize: 10 });
 
-  const { data: instances, isLoading } = useQuery({
-    queryKey: ['self-hosted-instances'],
+  const { data: instancesData, isLoading } = useQuery({
+    queryKey: ['self-hosted-instances', page, pageSize],
     queryFn: async () => {
+      // Get total count
+      const { count } = await supabase
+        .from('self_hosted_instances')
+        .select('*', { count: 'exact', head: true });
+
+      // Get paginated data
       const { data, error } = await supabase
         .from('self_hosted_instances')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(offset, offset + pageSize - 1);
       
       if (error) throw error;
-      return data as SelfHostedInstance[];
+      return { instances: data as SelfHostedInstance[], total: count || 0 };
     }
   });
+
+  const instances = instancesData?.instances || [];
+  const totalInstances = instancesData?.total || 0;
 
   const createInstanceMutation = useMutation({
     mutationFn: async (instanceData: typeof newInstance) => {
@@ -258,6 +271,19 @@ export function SelfHostedInstancesManager() {
               </TableBody>
             </Table>
           )}
+          
+          {/* Pagination */}
+          <div className="mt-4">
+            <TablePaginator
+              currentPage={page}
+              totalPages={Math.ceil(totalInstances / pageSize)}
+              pageSize={pageSize}
+              totalItems={totalInstances}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              showPageSizeSelector={true}
+            />
+          </div>
         </CardContent>
       </Card>
 

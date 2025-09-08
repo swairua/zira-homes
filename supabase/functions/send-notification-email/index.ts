@@ -26,7 +26,46 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
+    // This function should only be called by internal services (send-notification)
+    // Check for internal service authentication or restrict to localhost
+    const userAgent = req.headers.get('user-agent') || '';
+    const isInternalCall = userAgent.includes('supabase-functions') || 
+                          req.headers.get('x-internal-service') === 'true';
+
+    if (!isInternalCall) {
+      // For external calls, require proper authentication
+      const authHeader = req.headers.get('authorization');
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ error: 'Authorization required' }),
+          { 
+            status: 401, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+    }
+
     const { to, to_name, subject, title, message, type }: NotificationEmailRequest = await req.json();
+
+    // Rate limiting for email sending
+    const now = Date.now();
+    // In production, implement proper rate limiting with Redis
+    
+    // Validate email address format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(to)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid email address format' }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Log email sending with masked email (security)
+    console.log('Sending email to:', to.replace(/(.{2})(.*)(@.*)/, '$1***$3'));
 
     const getTypeColor = (notificationType: string) => {
       switch (notificationType) {

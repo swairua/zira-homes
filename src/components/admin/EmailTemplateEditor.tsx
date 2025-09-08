@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Edit, Save, Eye, X, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { createSafeHtml } from "@/utils/xssProtection";
 
 interface EmailTemplate {
   id: string;
@@ -333,7 +334,7 @@ const EmailTemplateEditor = () => {
                 <h4 className="font-medium mb-2">HTML Preview:</h4>
                 <div 
                   className="border p-4 rounded bg-white text-sm flex-1 overflow-y-auto min-h-[200px]"
-                  dangerouslySetInnerHTML={{ __html: previewTemplate.html_content }}
+                  dangerouslySetInnerHTML={createSafeHtml(previewTemplate.html_content)}
                 />
               </div>
             </CardContent>

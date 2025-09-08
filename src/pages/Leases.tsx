@@ -16,6 +16,11 @@ import { useForm } from "react-hook-form";
 import { format } from "date-fns";
 import { KpiGrid } from "@/components/kpi/KpiGrid";
 import { KpiStatCard } from "@/components/kpi/KpiStatCard";
+import { DisabledActionWrapper } from "@/components/feature-access/DisabledActionWrapper";
+import { FEATURES } from "@/hooks/usePlanFeatureAccess";
+import { LeaseExpiryManager } from "@/components/lease/LeaseExpiryManager";
+import { TablePaginator } from "@/components/ui/table-paginator";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 
 interface Lease {
   id: string;
@@ -57,6 +62,11 @@ const Leases = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<LeaseFormData>();
+  
+  const { page, pageSize, setPage, setPageSize } = useUrlPageParam({
+    pageSize: 10,
+    defaultPage: 1
+  });
 
 
   const fetchLeases = async () => {
@@ -163,10 +173,11 @@ const Leases = () => {
 
       if (tenantsError) throw tenantsError;
 
-      // Get units for user's properties only
+      // Get ONLY vacant units for user's properties to prevent duplicate active leases
       const { data: unitsData, error: unitsError } = await supabase
         .from("units")
-        .select("id, unit_number, property_id");
+        .select("id, unit_number, property_id, status")
+        .eq('status', 'vacant');
 
       if (unitsError) throw unitsError;
 
@@ -178,16 +189,16 @@ const Leases = () => {
 
       if (propertiesError) throw propertiesError;
 
-      // Create property map and filter units
+      // Create property map and filter units to only those owned by user
       const propertyMap = new Map(propertiesData?.map(p => [p.id, p]) || []);
-      const userUnits = unitsData?.filter(unit => propertyMap.has(unit.property_id))
+      const userVacantUnits = unitsData?.filter(unit => propertyMap.has(unit.property_id))
         .map(unit => ({
           ...unit,
           properties: propertyMap.get(unit.property_id)
         })) || [];
 
       setTenants(tenantsData || []);
-      setUnits(userUnits);
+      setUnits(userVacantUnits);
     } catch (error) {
       console.error("Error fetching tenants and units:", error);
     }
@@ -205,7 +216,8 @@ const Leases = () => {
         .insert([{
           ...data,
           monthly_rent: Number(data.monthly_rent),
-          security_deposit: Number(data.security_deposit)
+          security_deposit: Number(data.security_deposit),
+          status: 'active' // Explicitly set status
         }]);
 
       if (error) throw error;
@@ -247,6 +259,16 @@ const Leases = () => {
     lease.units.unit_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
     lease.units.properties.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredLeases.length / pageSize);
+  const startIndex = (page - 1) * pageSize;
+  const paginatedLeases = filteredLeases.slice(startIndex, startIndex + pageSize);
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, setPage]);
 
   return (
     <DashboardLayout>
@@ -421,6 +443,26 @@ const Leases = () => {
           </div>
         </Card>
 
+        {/* Enhanced Lease Expiry Management */}
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>Lease Expiry Management</span>
+                <DisabledActionWrapper feature={FEATURES.ADVANCED_REPORTING}>
+                  <Button variant="outline" size="sm">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Advanced Manager
+                  </Button>
+                </DisabledActionWrapper>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <LeaseExpiryManager />
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Leases Content */}
         <Card className="bg-card">
           <CardHeader>
@@ -435,7 +477,7 @@ const Leases = () => {
               </div>
             ) : (
               <div className="space-y-4">
-                {filteredLeases.map((lease) => (
+                {paginatedLeases.map((lease) => (
                   <div key={lease.id} className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-accent/5 transition-colors">
                     <div className="flex items-center space-x-4">
                       <div className="p-2 bg-accent/10 rounded-lg">
@@ -467,6 +509,16 @@ const Leases = () => {
                     </div>
                   </div>
                 ))}
+                
+                <TablePaginator
+                  currentPage={page}
+                  totalPages={totalPages}
+                  pageSize={pageSize}
+                  totalItems={filteredLeases.length}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                  showPageSizeSelector={true}
+                />
               </div>
             )}
           </CardContent>

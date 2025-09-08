@@ -5,6 +5,7 @@ import { UnifiedPDFRenderer } from '@/utils/unifiedPDFRenderer';
 import { PDFTemplateService } from '@/utils/pdfTemplateService';
 import { buildUnifiedReportContent } from '@/utils/reportContentBuilder';
 import { getReportData } from '@/lib/reporting/queries';
+import { getReportConfig } from '@/lib/reporting/config';
 import { toast } from 'sonner';
 
 interface PDFGenerationState {
@@ -36,8 +37,15 @@ export const usePDFGeneration = () => {
     reportId: string,
     queryId: string,
     filters: any,
-    includeCharts: boolean = false // Disable charts for uniform, reliable PDFs
+    includeCharts: boolean = false, // Disable charts for uniform, reliable PDFs
+    options: { 
+      tableOnly?: boolean;
+      includeKPIs?: boolean;
+      kpiFitOneRow?: boolean;
+    } = {}
   ) => {
+    const startTime = performance.now();
+    
     try {
       setState({
         isGenerating: true,
@@ -46,8 +54,15 @@ export const usePDFGeneration = () => {
         isComplete: false
       });
 
-      // Step 1: Try to use cached report data first for instant PDF generation
-      updateProgress(20, 'Loading report data...');
+      // Step 1: Get report configuration
+      updateProgress(10, 'Loading report configuration...');
+      const reportConfig = getReportConfig(reportId);
+      if (!reportConfig) {
+        throw new Error(`Report configuration not found for: ${reportId}`);
+      }
+
+      // Step 2: Try to use cached report data first for instant PDF generation
+      updateProgress(25, 'Loading report data...');
       console.time('PDF Report Data Fetch');
       
       // Try to get cached data first
@@ -68,29 +83,43 @@ export const usePDFGeneration = () => {
       
       console.log('Fetched report data:', reportData);
 
-      // Step 2: Fetch template and branding
-      updateProgress(40, 'Loading PDF template and branding...');
+      // Step 3: Fetch template and branding (use Admin role for consistent report styling)
+      updateProgress(45, 'Loading PDF template and branding...');
       const { template, branding } = await PDFTemplateService.getTemplateAndBranding(
         'report' as any,
-        'Landlord'
+        'Admin'
       );
+      
+      console.log('PDF template and branding loaded:', {
+        templateId: template?.id,
+        templateName: template?.name,
+        brandingCompany: branding?.companyName,
+        role: 'Admin'
+      });
 
-      // Step 3: Build report content
-      updateProgress(60, 'Building report content...');
+      // Step 4: Build report content
+      updateProgress(65, 'Building report content...');
       const period = filters.periodPreset?.replace(/_/g, ' ') || 'Current Period';
       const reportContent = buildUnifiedReportContent({
         reportType: reportId, // Use kebab-case reportId for content building
         period,
         sourceData: reportData,
-        summaryOverride: null,
+        summaryOverride: reportConfig.description,
       });
 
-      // Step 4: Initialize PDF renderer
-      updateProgress(80, 'Initializing PDF renderer...');
+      // Step 5: Initialize PDF renderer with progress callback
+      updateProgress(75, 'Initializing PDF renderer...');
       const pdfRenderer = new UnifiedPDFRenderer();
 
-      // Step 5: Generate PDF
-      updateProgress(90, 'Rendering PDF document...');
+      // Set up progress callback for PDF renderer
+      pdfRenderer.setProgressCallback((progress: number, step: string) => {
+        // Map PDF renderer progress (0-100) to our remaining progress range (75-98)
+        const mappedProgress = 75 + (progress * 0.23); // 23% range for PDF rendering
+        updateProgress(mappedProgress, step);
+      });
+
+      // Step 6: Generate PDF with progress tracking
+      updateProgress(78, 'Rendering PDF document...');
       const document = {
         type: 'report' as const,
         title: reportTitle,
@@ -102,14 +131,33 @@ export const usePDFGeneration = () => {
           tableData: reportContent.tableData,
           charts: [], // No charts for uniform, reliable PDFs
           includeCharts: false, // Focus on KPIs and tables only
+          reportConfig: reportConfig, // Pass config for proper table formatting
+          layoutOptions: { 
+            tableOnly: options.tableOnly || false,
+            includeKPIs: options.includeKPIs !== false,
+            kpiFitOneRow: options.kpiFitOneRow !== false
+          }
         },
       };
 
-      await pdfRenderer.generateDocument(document, branding);
+      await pdfRenderer.generateDocument(document, branding, null, null, template);
 
-      // Step 6: Download PDF
-      updateProgress(100, 'Downloading PDF...');
-      // The PDF is auto-downloaded by the renderer
+      // Step 7: Download PDF
+      updateProgress(100, 'PDF generated successfully!');
+
+      // Calculate execution time and log report generation
+      const endTime = performance.now();
+      const executionTimeMs = Math.round(endTime - startTime);
+      
+      // Log the report generation for KPI tracking
+      try {
+        const { useReportGeneration } = await import('./useReportGeneration');
+        const { logReportGeneration } = useReportGeneration();
+        await logReportGeneration(reportId, filters, executionTimeMs);
+        console.log('📊 Successfully logged report generation:', { reportId, executionTimeMs });
+      } catch (logError) {
+        console.warn('Failed to log report generation:', logError);
+      }
 
       setState(prev => ({
         ...prev,

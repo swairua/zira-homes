@@ -30,6 +30,7 @@ export const reportConfigs: ReportConfig[] = [
     ],
     table: {
       columns: [
+        { key: 'payment_date', label: 'Date', align: 'left', format: 'date' },
         { key: 'property_name', label: 'Property', align: 'left' },
         { key: 'unit_number', label: 'Unit', align: 'left' },
         { key: 'tenant_name', label: 'Tenant', align: 'left' },
@@ -69,6 +70,7 @@ export const reportConfigs: ReportConfig[] = [
     table: {
       columns: [
         { key: 'category', label: 'Category', align: 'left' },
+        { key: 'type', label: 'Type', align: 'center' },
         { key: 'amount', label: 'Amount', align: 'right', format: 'currency' },
         { key: 'percentage', label: 'Percentage', align: 'right', format: 'percent' }
       ]
@@ -141,10 +143,10 @@ export const reportConfigs: ReportConfig[] = [
     ],
     table: {
       columns: [
+        { key: 'created_date', label: 'Date', align: 'left', format: 'date' },
         { key: 'property_name', label: 'Property', align: 'left' },
         { key: 'category', label: 'Category', align: 'left' },
         { key: 'status', label: 'Status', align: 'center' },
-        { key: 'created_date', label: 'Created', align: 'left', format: 'date' },
         { key: 'cost', label: 'Cost', align: 'right', format: 'currency' }
       ]
     }
@@ -173,10 +175,10 @@ export const reportConfigs: ReportConfig[] = [
     ],
     table: {
       columns: [
+        { key: 'lease_end_date', label: 'Lease End Date', align: 'left', format: 'date' },
         { key: 'property_name', label: 'Property', align: 'left' },
         { key: 'unit_number', label: 'Unit', align: 'left' },
         { key: 'tenant_name', label: 'Tenant', align: 'left' },
-        { key: 'lease_end_date', label: 'Expiry Date', align: 'left', format: 'date' },
         { key: 'monthly_rent', label: 'Monthly Rent', align: 'right', format: 'currency' },
         { key: 'days_until_expiry', label: 'Days Left', align: 'right', format: 'number' }
       ]
@@ -206,10 +208,10 @@ export const reportConfigs: ReportConfig[] = [
     ],
     table: {
       columns: [
+        { key: 'lease_end_date', label: 'Lease End Date', align: 'left', format: 'date' },
         { key: 'property_name', label: 'Property', align: 'left' },
         { key: 'unit_number', label: 'Unit', align: 'left' },
         { key: 'tenant_name', label: 'Former Tenant', align: 'left' },
-        { key: 'move_out_date', label: 'Move Out Date', align: 'left', format: 'date' },
         { key: 'tenancy_duration', label: 'Tenancy Duration', align: 'right', format: 'duration' }
       ]
     }
@@ -233,6 +235,7 @@ export const reportConfigs: ReportConfig[] = [
     ],
     table: {
       columns: [
+        { key: 'due_date', label: 'Due Date', align: 'left', format: 'date' },
         { key: 'tenant_name', label: 'Tenant', align: 'left' },
         { key: 'property_name', label: 'Property', align: 'left' },
         { key: 'outstanding_amount', label: 'Outstanding', format: 'currency', align: 'right' },
@@ -255,11 +258,12 @@ export const reportConfigs: ReportConfig[] = [
       { key: 'avg_yield', label: 'Average Yield', format: 'percent', decimals: 2 }
     ],
     charts: [
-      { id: 'revenue_vs_expenses', type: 'bar', xKey: 'property', yKeys: ['revenue', 'expenses'] },
-      { id: 'yield_comparison', type: 'line', xKey: 'property', yKeys: ['yield'] }
+      { id: 'revenue_vs_expenses', type: 'bar', xKey: 'property_name', yKeys: ['revenue', 'expenses'] },
+      { id: 'yield_comparison', type: 'line', xKey: 'property_name', yKeys: ['yield'] }
     ],
     table: {
       columns: [
+        { key: 'report_period', label: 'Date', align: 'left', format: 'date' },
         { key: 'property_name', label: 'Property', align: 'left' },
         { key: 'revenue', label: 'Revenue', format: 'currency', align: 'right' },
         { key: 'expenses', label: 'Expenses', format: 'currency', align: 'right' },
@@ -287,6 +291,7 @@ export const reportConfigs: ReportConfig[] = [
     ],
     table: {
       columns: [
+        { key: 'transaction_date', label: 'Date', align: 'left', format: 'date' },
         { key: 'category', label: 'Category', align: 'left' },
         { key: 'amount', label: 'Amount', format: 'currency', align: 'right' },
         { key: 'percentage', label: 'Percentage', format: 'percent', align: 'right' }
@@ -312,6 +317,7 @@ export const reportConfigs: ReportConfig[] = [
     ],
     table: {
       columns: [
+        { key: 'report_date', label: 'Date', align: 'left', format: 'date' },
         { key: 'month', label: 'Month', align: 'left' },
         { key: 'revenue', label: 'Revenue', format: 'currency', align: 'right' },
         { key: 'expenses', label: 'Expenses', format: 'currency', align: 'right' },
@@ -338,10 +344,12 @@ export const reportConfigs: ReportConfig[] = [
     ],
     table: {
       columns: [
-        { key: 'category', label: 'Category', align: 'left' },
+        { key: 'expense_date', label: 'Date', align: 'left', format: 'date' },
+        { key: 'expense_category', label: 'Category', align: 'left' },
+        { key: 'description', label: 'Description', align: 'left' },
         { key: 'amount', label: 'Amount', format: 'currency', align: 'right' },
-        { key: 'percentage', label: 'Percentage', format: 'percent', align: 'right' },
-        { key: 'count', label: 'Count', format: 'number', align: 'center' }
+        { key: 'property_name', label: 'Property', align: 'left' },
+        { key: 'vendor', label: 'Vendor', align: 'left' }
       ]
     }
   },
@@ -364,6 +372,7 @@ export const reportConfigs: ReportConfig[] = [
     ],
     table: {
       columns: [
+        { key: 'period_end', label: 'Date', align: 'left', format: 'date' },
         { key: 'month', label: 'Month', align: 'left' },
         { key: 'inflow', label: 'Cash Inflow', format: 'currency', align: 'right' },
         { key: 'outflow', label: 'Cash Outflow', format: 'currency', align: 'right' },
@@ -382,14 +391,22 @@ export const reportConfigs: ReportConfig[] = [
       { key: 'avg_market_rent', label: 'Avg Market Rent', format: 'currency' },
       { key: 'avg_current_rent', label: 'Avg Current Rent', format: 'currency' },
       { key: 'rent_variance', label: 'Rent Variance', format: 'percent', decimals: 1 },
-      { key: 'optimization_potential', label: 'Optimization Potential', format: 'currency' }
+      { key: 'optimization_potential', label: 'Optimization Potential', format: 'currency' },
+      { key: 'platform_avg_rent', label: 'Platform Avg Rent', format: 'currency' },
+      { key: 'total_sample_size', label: 'Sample Size', format: 'number' },
+      { key: 'unit_types_analyzed', label: 'Unit Types', format: 'number' },
+      { key: 'locations_analyzed', label: 'Locations', format: 'number' }
     ],
     charts: [
       { id: 'rent_comparison', type: 'bar', xKey: 'property', yKeys: ['current_rent', 'market_rent'] },
+      { id: 'rent_by_type', type: 'bar', xKey: 'unit_type', yKeys: ['avg_rent', 'median_rent'] },
+      { id: 'rent_by_location', type: 'bar', xKey: 'location', yKeys: ['avg_rent'] },
+      { id: 'yearly_trends', type: 'line', xKey: 'year', yKeys: ['avg_rent'] },
       { id: 'variance_analysis', type: 'line', xKey: 'property', yKeys: ['variance'] }
     ],
     table: {
       columns: [
+        { key: 'analysis_date', label: 'Date', align: 'left', format: 'date' },
         { key: 'property_name', label: 'Property', align: 'left' },
         { key: 'unit_type', label: 'Unit Type', align: 'left' },
         { key: 'current_rent', label: 'Current Rent', format: 'currency', align: 'right' },
@@ -417,6 +434,7 @@ export const reportConfigs: ReportConfig[] = [
     ],
     table: {
       columns: [
+        { key: 'report_date', label: 'Date', align: 'left', format: 'date' },
         { key: 'property_name', label: 'Property', align: 'left' },
         { key: 'units', label: 'Units', format: 'number', align: 'center' },
         { key: 'revenue', label: 'Revenue', format: 'currency', align: 'right' },

@@ -30,6 +30,48 @@ const handler = async (req: Request): Promise<Response> => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Authenticate user from JWT token
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid authentication token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check if user has appropriate role (Admin, Landlord, Manager, or Agent)
+    const { data: hasValidRole, error: roleError } = await supabase.rpc('has_role', {
+      _user_id: user.id,
+      _role: 'Admin'
+    });
+
+    const { data: hasLandlordRole } = await supabase.rpc('has_role', {
+      _user_id: user.id,
+      _role: 'Landlord'
+    });
+
+    const { data: hasManagerRole } = await supabase.rpc('has_role', {
+      _user_id: user.id,
+      _role: 'Manager'
+    });
+
+    if (roleError || (!hasValidRole && !hasLandlordRole && !hasManagerRole)) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: Insufficient permissions' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const { 
       maintenance_request_id, 
       notification_type, 

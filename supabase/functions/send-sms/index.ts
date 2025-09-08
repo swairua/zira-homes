@@ -50,38 +50,165 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { provider_name, phone_number, message, landlord_id, provider_config }: SMSRequest = await req.json();
-
-    const sanitizedMessage = sanitizeForSMS(message || "");
-
-    console.log('SMS Request:', { provider_name, phone_number, preview: sanitizedMessage.substring(0, 50) + '...' });
-
     // Initialize Supabase client
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Authenticate user from JWT token
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid authentication token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check if user has appropriate role (Admin, Landlord, Manager, Agent, or system)
+    const { data: hasValidRole, error: roleError } = await supabase.rpc('has_role', {
+      _user_id: user.id,
+      _role: 'Admin'
+    });
+
+    const { data: hasLandlordRole } = await supabase.rpc('has_role', {
+      _user_id: user.id,
+      _role: 'Landlord'
+    });
+
+    const { data: hasManagerRole } = await supabase.rpc('has_role', {
+      _user_id: user.id,
+      _role: 'Manager'
+    });
+
+    if (roleError || (!hasValidRole && !hasLandlordRole && !hasManagerRole)) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: Insufficient permissions for SMS sending' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const requestBody = await req.json();
+    const { phone_number, message, provider_id } = requestBody;
+    
+    // Input validation and sanitization
+    if (!phone_number || !message) {
+      return new Response(JSON.stringify({ error: 'Phone and message are required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // Validate phone number format
+    const phoneRegex = /^(\+?254|0)?[17]\d{8}$/;
+    if (!phoneRegex.test(phone_number.replace(/\s/g, ''))) {
+      return new Response(JSON.stringify({ error: 'Invalid phone number format' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // Message length validation
+    if (message.length > 1600) {
+      return new Response(JSON.stringify({ error: 'Message too long (max 1600 characters)' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Fetch provider configuration securely from database
+    let provider = null;
+    if (provider_id) {
+      const { data: providerData, error: providerError } = await supabase
+        .from('sms_providers')
+        .select('*')
+        .eq('id', provider_id)
+        .eq('is_active', true)
+        .single();
+
+      if (providerError || !providerData) {
+        console.error('SMS provider not found:', provider_id, providerError);
+        return new Response(JSON.stringify({ error: 'SMS provider not configured' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      provider = providerData;
+    } else {
+      // Get default provider
+      const { data: defaultProvider, error: defaultError } = await supabase
+        .from('sms_providers')
+        .select('*')
+        .eq('is_active', true)
+        .eq('is_default', true)
+        .single();
+
+      if (defaultError || !defaultProvider) {
+        console.error('No default SMS provider found:', defaultError);
+        return new Response(JSON.stringify({ error: 'No SMS provider configured' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      provider = defaultProvider;
+    }
+
+    // SSRF protection - enforce HTTPS and domain allowlist
+    if (provider.base_url) {
+      const url = new URL(provider.base_url);
+      const allowedDomains = ['advantasms.com', 'twilio.com', 'africastalking.com'];
+      
+      if (url.protocol !== 'https:' || 
+          !allowedDomains.some(domain => url.hostname.endsWith(domain))) {
+        console.error('Blocked unsafe SMS provider URL:', provider.base_url);
+        return new Response(JSON.stringify({ error: 'SMS provider not supported' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    const sanitizedMessage = sanitizeForSMS(message || "");
+
+    console.log('SMS Request:', { 
+      provider_name: provider.provider_name, 
+      phone_number: `***${phone_number.slice(-4)}`, // Mask phone number in logs
+      message_length: sanitizedMessage.length 
+    });
+
+    // Enhanced SSRF protection - this block was incorrectly referencing provider_config
+    // The provider configuration is already fetched securely from database above
+
     let smsResponse;
     let smsStatus = 'pending';
     let smsCost = 2.50; // Default cost per SMS in KES
 
     try {
-      switch (provider_name.toLowerCase()) {
+      switch (provider.provider_name.toLowerCase()) {
         case 'inhouse sms':
-          smsResponse = await sendInHouseSMS(phone_number, sanitizedMessage, provider_config);
+          smsResponse = await sendInHouseSMS(phone_number, sanitizedMessage, provider);
           smsStatus = 'sent';
           break;
         case 'twilio':
-          smsResponse = await sendTwilioSMS(phone_number, sanitizedMessage, provider_config);
+          smsResponse = await sendTwilioSMS(phone_number, sanitizedMessage, provider);
           smsStatus = 'sent';
           break;
         case "africa's talking":
-          smsResponse = await sendAfricasTalkingSMS(phone_number, sanitizedMessage, provider_config);
+          smsResponse = await sendAfricasTalkingSMS(phone_number, sanitizedMessage, provider);
           smsStatus = 'sent';
           break;
         default:
-          throw new Error(`Unsupported SMS provider: ${provider_name}`);
+          throw new Error(`Unsupported SMS provider: ${provider.provider_name}`);
       }
     } catch (smsError) {
       console.error('SMS sending failed:', smsError);
@@ -89,22 +216,19 @@ const handler = async (req: Request): Promise<Response> => {
       throw smsError;
     }
 
-    // Record SMS usage in database if landlord_id is provided
-    if (landlord_id) {
+    // Record SMS usage in database 
+    if (user) {
       try {
         const { error: usageError } = await supabase
           .from('sms_usage_logs')
           .insert({
-            landlord_id,
-            recipient_phone: phone_number,
-            message_content: sanitizedMessage,
-            provider_name: provider_name,
+            landlord_id: user.id,
+            recipient_phone: `***${phone_number.slice(-4)}`, // Masked phone number
+            message_content: `[${sanitizedMessage.length} chars]`, // Length only, no content
             cost: smsCost,
             status: smsStatus,
-            sent_at: new Date().toISOString(),
-            delivery_status: smsStatus === 'sent' ? 'delivered' : 'failed',
-            error_message: smsStatus === 'failed' ? 'SMS delivery failed' : null,
-            metadata: { provider_config: provider_config }
+            provider_name: provider.provider_name,
+            sent_at: new Date().toISOString()
           });
 
         if (usageError) {
@@ -117,14 +241,13 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    console.log('SMS sent successfully:', smsResponse);
+    console.log('SMS sent successfully via provider:', provider.provider_name);
 
     return new Response(JSON.stringify({
       success: true,
-      provider: provider_name,
+      provider: provider.provider_name,
       message: 'SMS sent successfully',
-      cost: smsCost,
-      response: smsResponse
+      cost: smsCost
     }), {
       status: 200,
       headers: {
@@ -150,56 +273,52 @@ const handler = async (req: Request): Promise<Response> => {
   }
 };
 
-async function sendInHouseSMS(phone: string, message: string, config: any) {
-  const url = config.base_url || 'http://68.183.101.252:803/bulk_api/';
+async function sendInHouseSMS(phone: string, message: string, provider: any) {
+  const url = provider.base_url || Deno.env.get('INHOUSE_SMS_URL') || 'https://api.example.com/sms/';
   
   // Enhanced phone number validation and formatting
   let formattedPhone = phone.replace(/\D/g, '');
   
-  // Validate phone number format
   if (formattedPhone.length < 9) {
     throw new Error(`Invalid phone number format: ${phone}. Must be at least 9 digits.`);
   }
   
-  // Convert different Kenyan formats to international format
   if (formattedPhone.startsWith('0')) {
-    formattedPhone = '254' + formattedPhone.substring(1); // Convert 07XX to 2547XX
+    formattedPhone = '254' + formattedPhone.substring(1);
   } else if (formattedPhone.startsWith('7') && formattedPhone.length === 9) {
-    formattedPhone = '254' + formattedPhone; // Convert 7XX to 2547XX
+    formattedPhone = '254' + formattedPhone;
   } else if (!formattedPhone.startsWith('254')) {
     formattedPhone = '254' + formattedPhone;
   }
   
-  // Validate final format
   if (!formattedPhone.startsWith('254') || formattedPhone.length !== 12) {
     throw new Error(`Invalid Kenyan phone number: ${phone}. Expected format: +254XXXXXXXXX`);
   }
 
-  // Validate message length (SMS limit is typically 160 characters for single SMS)
-  if (message.length > 320) { // Allow up to 2 SMS segments
-    console.warn(`SMS message is ${message.length} characters, may be split into multiple segments`);
-  }
-
-  const dataSet = [
-    {
-      username: config.username || config.config_data?.username || 'ZIRA TECH',
-      phone_number: formattedPhone,
-      unique_identifier: config.unique_identifier || config.config_data?.unique_identifier || '77',
-      sender_name: config.sender_id || 'ZIRA TECH',
-      message: message,
-      sender_type: parseInt(config.sender_type || config.config_data?.sender_type || '10')
-    }
-  ];
+  const dataSet = [{
+    username: provider.username || 'ZIRA TECH',
+    phone_number: formattedPhone,
+    unique_identifier: provider.unique_identifier || '77',
+    sender_name: provider.sender_id || 'ZIRA TECH',
+    message: message,
+    sender_type: parseInt(provider.sender_type || '10')
+  }];
 
   const requestBody = {
     dataSet: dataSet,
     timeStamp: Math.floor(Date.now() / 1000)
   };
 
-  // Enhanced authentication token handling
-  const authToken = config.authorization_token || config.api_key || config.config_data?.authorization_token;
-  if (!authToken || authToken === 'your-default-token') {
-    throw new Error('Valid SMS provider authentication token is required. Please configure your SMS provider properly.');
+  // SECURITY: Use environment variables for SMS credentials
+  let authToken = provider.authorization_token;
+  
+  // If credentials are encrypted or missing, use environment variables
+  if (!authToken || authToken === '[REDACTED]' || authToken.length < 10) {
+    authToken = Deno.env.get('INHOUSE_SMS_TOKEN') || Deno.env.get('SMS_PROVIDER_TOKEN');
+  }
+  
+  if (!authToken) {
+    throw new Error('SMS provider authentication token not configured. Please contact administrator.');
   }
 
   const headers = {
@@ -212,73 +331,24 @@ async function sendInHouseSMS(phone: string, message: string, config: any) {
     url,
     phone: formattedPhone,
     messageLength: message.length,
-    headers: { ...headers, Authorization: 'Token ***' },
-    bodySize: JSON.stringify(requestBody).length
+    headers: { ...headers, Authorization: 'Token ***' }
   });
 
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: headers,
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    throw new Error(`SMS API error: ${response.status} - ${response.statusText}`);
+  }
+
+  const responseText = await response.text();
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(requestBody),
-    });
-
-    const responseText = await response.text();
-    console.log('InHouse SMS Response:', {
-      status: response.status,
-      statusText: response.statusText,
-      bodySize: responseText.length,
-      body: responseText.substring(0, 200) + (responseText.length > 200 ? '...' : '')
-    });
-
-    if (!response.ok) {
-      // Enhanced error messages based on common HTTP status codes
-      let errorMessage = `InHouse SMS API error: ${response.status}`;
-      
-      switch (response.status) {
-        case 401:
-          errorMessage += ' - Unauthorized: Check your authentication token';
-          break;
-        case 403:
-          errorMessage += ' - Forbidden: Insufficient permissions';
-          break;
-        case 404:
-          errorMessage += ' - Not Found: Check API endpoint URL';
-          break;
-        case 429:
-          errorMessage += ' - Rate Limited: Too many requests';
-          break;
-        case 500:
-          errorMessage += ' - Server Error: Provider system issue';
-          break;
-        default:
-          errorMessage += ` - ${response.statusText}`;
-      }
-      
-      errorMessage += `. Response: ${responseText}`;
-      throw new Error(errorMessage);
-    }
-
-    try {
-      const parsedResponse = JSON.parse(responseText);
-      console.log('SMS sent successfully:', { 
-        phone: formattedPhone, 
-        messageId: parsedResponse.id || 'N/A',
-        status: parsedResponse.status || 'sent'
-      });
-      return parsedResponse;
-    } catch (parseError) {
-      console.log('Response not JSON, treating as success:', responseText);
-      return { 
-        success: true, 
-        raw_response: responseText,
-        phone: formattedPhone,
-        timestamp: new Date().toISOString()
-      };
-    }
-  } catch (fetchError) {
-    console.error('Network error sending SMS:', fetchError);
-    throw new Error(`SMS delivery failed: ${fetchError.message}. Please check network connectivity and provider settings.`);
+    return JSON.parse(responseText);
+  } catch {
+    return { success: true, raw_response: responseText };
   }
 }
 

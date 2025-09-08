@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { Bold, Italic, Underline, List, Link, Image, Code, Save } from 'lucide-react';
+import { sanitizeMarkdown, createSafeHtml } from '@/utils/xssProtection';
 
 interface WysiwygEditorProps {
   value: string;
@@ -66,20 +67,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({
   };
 
   const renderPreview = () => {
-    // Simple markdown to HTML conversion for preview
-    let html = value
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/`(.*?)`/g, '<code>$1</code>')
-      .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
-      .replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" style="max-width: 100%; height: auto;" />')
-      .replace(/^- (.+)$/gm, '<li>$1</li>')
-      .replace(/\n/g, '<br>');
-    
-    // Wrap list items
-    html = html.replace(/(<li>.*<\/li>)/g, '<ul>$1</ul>');
-    
-    return html;
+    return sanitizeMarkdown(value);
   };
 
   return (
@@ -165,7 +153,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({
         {isPreview ? (
           <div 
             className="min-h-[200px] p-4 border rounded-lg bg-background prose max-w-none"
-            dangerouslySetInnerHTML={{ __html: renderPreview() }}
+            dangerouslySetInnerHTML={createSafeHtml(renderPreview())}
           />
         ) : (
           <Textarea

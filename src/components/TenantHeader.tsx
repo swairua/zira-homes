@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useRole } from "@/context/RoleContext";
 import { useRouteTitle } from "@/hooks/useRouteTitle";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
-import { Bell, User, Sun, Moon, Monitor } from "lucide-react";
+import { Bell, User, Sun, Moon, Monitor, Settings, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
 import { supabase } from "@/integrations/supabase/client";
 import { NotificationsPopover } from "@/components/notifications/NotificationsPopover";
@@ -19,11 +19,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+// Prefetch tenant routes for faster navigation
+const prefetchTenantRoute = (path: string) => {
+  import(`../pages/tenant/${path}`).catch(() => {
+    // Silently handle prefetch failures
+  });
+};
+
 export function TenantHeader() {
   const { user, signOut } = useAuth();
   const { assignedRoles, effectiveRole, switchRole } = useRole();
   const routeTitle = useRouteTitle();
   const { theme, setTheme } = useTheme();
+  const navigate = useNavigate();
   const [userProfile, setUserProfile] = useState<{ first_name: string; last_name: string; avatar_url?: string } | null>(null);
 
   useEffect(() => {
@@ -138,17 +146,21 @@ export function TenantHeader() {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem asChild className="cursor-pointer">
-                <Link to="/tenant/profile" className="flex items-center">
-                  <User className="mr-2 h-4 w-4" />
-                  Profile
-                </Link>
+              <DropdownMenuItem 
+                onClick={() => navigate("/tenant/profile")}
+                onMouseEnter={() => prefetchTenantRoute("TenantProfile")}
+                className="cursor-pointer"
+              >
+                <User className="mr-2 h-4 w-4" />
+                Profile
               </DropdownMenuItem>
-              <DropdownMenuItem asChild className="cursor-pointer">
-                <Link to="/tenant/payment-preferences" className="flex items-center">
-                  <Bell className="mr-2 h-4 w-4" />
-                  Settings
-                </Link>
+              <DropdownMenuItem
+                onClick={() => navigate("/tenant/payment-preferences")}
+                onMouseEnter={() => prefetchTenantRoute("TenantPaymentPreferences")}
+                className="cursor-pointer"
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
               </DropdownMenuItem>
               {assignedRoles.length > 1 && (
                 <>
@@ -168,6 +180,7 @@ export function TenantHeader() {
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem className="cursor-pointer text-red-600" onClick={handleSignOut}>
+                <LogOut className="mr-2 h-4 w-4" />
                 Sign Out
               </DropdownMenuItem>
             </DropdownMenuContent>

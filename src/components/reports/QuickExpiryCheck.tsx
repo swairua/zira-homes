@@ -54,7 +54,7 @@ export function QuickExpiryCheck({ onViewDetails, hideWhenEmpty = false }: Quick
         const endDate = new Date(Date.now() + selectedTimeframe * 24 * 60 * 60 * 1000)
           .toISOString().split('T')[0];
 
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .rpc('get_lease_expiry_report', {
             p_start_date: startDate,
             p_end_date: endDate

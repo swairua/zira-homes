@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { navigateTo } from "@/utils/router";
 import { toast } from "sonner";
 
 interface NotificationRealtimeData {
@@ -52,7 +51,7 @@ export function useNotificationsRealtime({
                 label: "View",
                 onClick: () => {
                   // Navigate to notification or mark as read
-                  navigateTo("/notifications");
+                  window.location.href = "/notifications";
                 }
               }
             });

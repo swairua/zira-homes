@@ -8,6 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { TablePaginator } from '@/components/ui/table-paginator';
+import { useUrlPageParam } from '@/hooks/useUrlPageParam';
 import { formatDistanceToNow } from 'date-fns';
 import { Activity, AlertTriangle, TrendingUp, Users, Server, Clock, AlertCircle } from 'lucide-react';
 
@@ -16,14 +18,22 @@ interface TelemetryData {
   events: any[];
   errors: any[];
   instances: any[];
+  heartbeatsTotal?: number;
+  eventsTotal?: number;
+  errorsTotal?: number;
 }
 
 export function TelemetryDashboard() {
   const [timeRange, setTimeRange] = useState('7d');
   const [selectedInstance, setSelectedInstance] = useState<string | null>(null);
+  
+  // Pagination states for each tab
+  const { page: hbPage, pageSize: hbPageSize, offset: hbOffset, setPage: setHbPage, setPageSize: setHbPageSize } = useUrlPageParam({ defaultPage: 1, pageSize: 25 });
+  const { page: evPage, pageSize: evPageSize, offset: evOffset, setPage: setEvPage, setPageSize: setEvPageSize } = useUrlPageParam({ defaultPage: 1, pageSize: 25 });
+  const { page: erPage, pageSize: erPageSize, offset: erOffset, setPage: setErPage, setPageSize: setErPageSize } = useUrlPageParam({ defaultPage: 1, pageSize: 25 });
 
   const { data: telemetryData, isLoading } = useQuery({
-    queryKey: ['telemetry-dashboard', timeRange, selectedInstance],
+    queryKey: ['telemetry-dashboard', timeRange, selectedInstance, hbPage, hbPageSize, evPage, evPageSize, erPage, erPageSize],
     queryFn: async () => {
       const now = new Date();
       const startDate = new Date();
@@ -56,45 +66,45 @@ export function TelemetryDashboard() {
 
       const instanceIds = instances?.map(i => i.id) || [];
 
-      // Fetch heartbeats
-      const { data: heartbeats, error: heartbeatsError } = await supabase
+      // Fetch heartbeats with pagination
+      const { data: heartbeats, error: heartbeatsError, count: heartbeatsCount } = await supabase
         .from('telemetry_heartbeats')
         .select(`
           *,
           self_hosted_instances!inner(name, domain)
-        `)
+        `, { count: 'exact' })
         .gte('reported_at', startDate.toISOString())
         .in('instance_id', instanceIds)
         .order('reported_at', { ascending: false })
-        .limit(100);
+        .range(hbOffset, hbOffset + hbPageSize - 1);
 
       if (heartbeatsError) throw heartbeatsError;
 
-      // Fetch events
-      const { data: events, error: eventsError } = await supabase
+      // Fetch events with pagination
+      const { data: events, error: eventsError, count: eventsCount } = await supabase
         .from('telemetry_events')
         .select(`
           *,
           self_hosted_instances!inner(name, domain)
-        `)
+        `, { count: 'exact' })
         .gte('occurred_at', startDate.toISOString())
         .in('instance_id', instanceIds)
         .order('occurred_at', { ascending: false })
-        .limit(100);
+        .range(evOffset, evOffset + evPageSize - 1);
 
       if (eventsError) throw eventsError;
 
-      // Fetch errors
-      const { data: errors, error: errorsError } = await supabase
+      // Fetch errors with pagination
+      const { data: errors, error: errorsError, count: errorsCount } = await supabase
         .from('telemetry_errors')
         .select(`
           *,
           self_hosted_instances!inner(name, domain)
-        `)
+        `, { count: 'exact' })
         .gte('created_at', startDate.toISOString())
         .in('instance_id', instanceIds)
         .order('created_at', { ascending: false })
-        .limit(100);
+        .range(erOffset, erOffset + erPageSize - 1);
 
       if (errorsError) throw errorsError;
 
@@ -102,7 +112,10 @@ export function TelemetryDashboard() {
         instances: instances || [],
         heartbeats: heartbeats || [],
         events: events || [],
-        errors: errors || []
+        errors: errors || [],
+        heartbeatsTotal: heartbeatsCount || 0,
+        eventsTotal: eventsCount || 0,
+        errorsTotal: errorsCount || 0,
       } as TelemetryData;
     }
   });
@@ -255,47 +268,61 @@ export function TelemetryDashboard() {
                   No heartbeats found for the selected time range
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Instance</TableHead>
-                      <TableHead>Version</TableHead>
-                      <TableHead>Environment</TableHead>
-                      <TableHead>Online Users</TableHead>
-                      <TableHead>Reported</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {telemetryData?.heartbeats.map((heartbeat) => (
-                      <TableRow key={heartbeat.id}>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{heartbeat.self_hosted_instances.name}</p>
-                            {heartbeat.self_hosted_instances.domain && (
-                              <p className="text-xs text-muted-foreground">
-                                {heartbeat.self_hosted_instances.domain}
-                              </p>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>{heartbeat.app_version || 'Unknown'}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{heartbeat.environment || 'Unknown'}</Badge>
-                        </TableCell>
-                        <TableCell>{heartbeat.online_users || 0}</TableCell>
-                        <TableCell className="text-sm">
-                          {formatDistanceToNow(new Date(heartbeat.reported_at), { addSuffix: true })}
-                        </TableCell>
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Instance</TableHead>
+                        <TableHead>Version</TableHead>
+                        <TableHead>Environment</TableHead>
+                        <TableHead>Online Users</TableHead>
+                        <TableHead>Reported</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                    </TableHeader>
+                    <TableBody>
+                      {telemetryData?.heartbeats.map((heartbeat) => (
+                        <TableRow key={heartbeat.id}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{heartbeat.self_hosted_instances.name}</p>
+                              {heartbeat.self_hosted_instances.domain && (
+                                <p className="text-xs text-muted-foreground">
+                                  {heartbeat.self_hosted_instances.domain}
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>{heartbeat.app_version || 'Unknown'}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{heartbeat.environment || 'Unknown'}</Badge>
+                          </TableCell>
+                          <TableCell>{heartbeat.online_users || 0}</TableCell>
+                          <TableCell className="text-sm">
+                            {formatDistanceToNow(new Date(heartbeat.reported_at), { addSuffix: true })}
+                          </TableCell>
+                         </TableRow>
+                       ))}
+                     </TableBody>
+                   </Table>
+                   
+                   <div className="mt-4">
+                     <TablePaginator
+                       currentPage={hbPage}
+                       totalPages={Math.ceil((telemetryData?.heartbeatsTotal || 0) / hbPageSize)}
+                       pageSize={hbPageSize}
+                       totalItems={telemetryData?.heartbeatsTotal || 0}
+                       onPageChange={setHbPage}
+                       onPageSizeChange={setHbPageSize}
+                       showPageSizeSelector={true}
+                     />
+                   </div>
+                 </>
+               )}
+             </CardContent>
+           </Card>
+         </TabsContent>
 
-        <TabsContent value="events">
+         <TabsContent value="events">
           <Card>
             <CardHeader>
               <CardTitle>Recent Events</CardTitle>
@@ -307,51 +334,65 @@ export function TelemetryDashboard() {
                   No events found for the selected time range
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Instance</TableHead>
-                      <TableHead>Event Type</TableHead>
-                      <TableHead>Severity</TableHead>
-                      <TableHead>Occurred</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {telemetryData?.events.map((event) => (
-                      <TableRow key={event.id}>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{event.self_hosted_instances.name}</p>
-                            {event.self_hosted_instances.domain && (
-                              <p className="text-xs text-muted-foreground">
-                                {event.self_hosted_instances.domain}
-                              </p>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>{event.event_type}</TableCell>
-                        <TableCell>
-                          <Badge variant={
-                            event.severity === 'critical' ? 'destructive' :
-                            event.severity === 'error' ? 'destructive' :
-                            event.severity === 'warn' ? 'secondary' : 'outline'
-                          }>
-                            {event.severity || 'info'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {formatDistanceToNow(new Date(event.occurred_at), { addSuffix: true })}
-                        </TableCell>
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Instance</TableHead>
+                        <TableHead>Event Type</TableHead>
+                        <TableHead>Severity</TableHead>
+                        <TableHead>Occurred</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                    </TableHeader>
+                    <TableBody>
+                      {telemetryData?.events.map((event) => (
+                        <TableRow key={event.id}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{event.self_hosted_instances.name}</p>
+                              {event.self_hosted_instances.domain && (
+                                <p className="text-xs text-muted-foreground">
+                                  {event.self_hosted_instances.domain}
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>{event.event_type}</TableCell>
+                          <TableCell>
+                            <Badge variant={
+                              event.severity === 'critical' ? 'destructive' :
+                              event.severity === 'error' ? 'destructive' :
+                              event.severity === 'warn' ? 'secondary' : 'outline'
+                            }>
+                              {event.severity || 'info'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {formatDistanceToNow(new Date(event.occurred_at), { addSuffix: true })}
+                          </TableCell>
+                         </TableRow>
+                       ))}
+                     </TableBody>
+                   </Table>
+                   
+                   <div className="mt-4">
+                     <TablePaginator
+                       currentPage={evPage}
+                       totalPages={Math.ceil((telemetryData?.eventsTotal || 0) / evPageSize)}
+                       pageSize={evPageSize}
+                       totalItems={telemetryData?.eventsTotal || 0}
+                       onPageChange={setEvPage}
+                       onPageSizeChange={setEvPageSize}
+                       showPageSizeSelector={true}
+                     />
+                   </div>
+                 </>
+               )}
+             </CardContent>
+           </Card>
+         </TabsContent>
 
-        <TabsContent value="errors">
+         <TabsContent value="errors">
           <Card>
             <CardHeader>
               <CardTitle>Recent Errors</CardTitle>
@@ -363,56 +404,70 @@ export function TelemetryDashboard() {
                   No errors found for the selected time range
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Instance</TableHead>
-                      <TableHead>Message</TableHead>
-                      <TableHead>Severity</TableHead>
-                      <TableHead>Occurred</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {telemetryData?.errors.map((error) => (
-                      <TableRow key={error.id}>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{error.self_hosted_instances.name}</p>
-                            {error.self_hosted_instances.domain && (
-                              <p className="text-xs text-muted-foreground">
-                                {error.self_hosted_instances.domain}
-                              </p>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{error.message}</p>
-                            {error.url && (
-                              <p className="text-xs text-muted-foreground">{error.url}</p>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={
-                            error.severity === 'critical' ? 'destructive' :
-                            error.severity === 'error' ? 'destructive' : 'secondary'
-                          }>
-                            {error.severity}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {formatDistanceToNow(new Date(error.created_at), { addSuffix: true })}
-                        </TableCell>
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Instance</TableHead>
+                        <TableHead>Message</TableHead>
+                        <TableHead>Severity</TableHead>
+                        <TableHead>Occurred</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
-}
+                    </TableHeader>
+                    <TableBody>
+                      {telemetryData?.errors.map((error) => (
+                        <TableRow key={error.id}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{error.self_hosted_instances.name}</p>
+                              {error.self_hosted_instances.domain && (
+                                <p className="text-xs text-muted-foreground">
+                                  {error.self_hosted_instances.domain}
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{error.message}</p>
+                              {error.url && (
+                                <p className="text-xs text-muted-foreground">{error.url}</p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={
+                              error.severity === 'critical' ? 'destructive' :
+                              error.severity === 'error' ? 'destructive' : 'secondary'
+                            }>
+                              {error.severity}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {formatDistanceToNow(new Date(error.created_at), { addSuffix: true })}
+                          </TableCell>
+                        </TableRow>
+                       ))}
+                     </TableBody>
+                   </Table>
+                   
+                   <div className="mt-4">
+                     <TablePaginator
+                       currentPage={erPage}
+                       totalPages={Math.ceil((telemetryData?.errorsTotal || 0) / erPageSize)}
+                       pageSize={erPageSize}
+                       totalItems={telemetryData?.errorsTotal || 0}
+                       onPageChange={setErPage}
+                       onPageSizeChange={setErPageSize}
+                       showPageSizeSelector={true}
+                     />
+                   </div>
+                 </>
+               )}
+             </CardContent>
+           </Card>
+         </TabsContent>
+       </Tabs>
+     </div>
+   );
+ }

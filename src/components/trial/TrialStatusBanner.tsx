@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle, Clock, Ban, Zap, Download } from "lucide-react";
 import { useTrialManagement } from "@/hooks/useTrialManagement";
-import { navigateTo } from "@/utils/router";
 
 export function TrialStatusBanner() {
   const { trialStatus, loading } = useTrialManagement();
@@ -13,7 +12,7 @@ export function TrialStatusBanner() {
   if (loading || !trialStatus) return null;
 
   const handleUpgrade = () => {
-    navigateTo('/landlord/billing');
+    window.location.href = '/landlord/billing';
   };
 
   const handleExportData = () => {

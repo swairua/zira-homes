@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { errorReporter } from "@/utils/errorReporting";
-import { navigateTo } from "@/utils/router";
 import { logger } from "@/utils/logger";
 
 interface Props {
@@ -54,7 +53,7 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   private handleGoHome = () => {
-    navigateTo("/");
+    window.location.href = "/";
   };
 
   private handleRetry = () => {

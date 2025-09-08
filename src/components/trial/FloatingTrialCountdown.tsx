@@ -4,7 +4,6 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useTrialManagement } from "@/hooks/useTrialManagement";
 import { useAuth } from "@/hooks/useAuth";
-import { getCurrentPath } from "@/utils/router";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 
 export function FloatingTrialCountdown() {
@@ -28,7 +27,7 @@ export function FloatingTrialCountdown() {
   });
 
   // Smart display logic - hide during onboarding and on billing pages
-  const currentPath = getCurrentPath();
+  const currentPath = window.location.pathname;
   const isOnBillingPage = currentPath.includes('/billing') || currentPath.includes('/upgrade');
   const isOnOnboardingPage = currentPath.includes('/onboarding');
   

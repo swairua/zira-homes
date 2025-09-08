@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Lock, Zap, AlertTriangle } from "lucide-react";
 import { useTrialManagement } from "@/hooks/useTrialManagement";
-import { navigateTo } from "@/utils/router";
 
 interface FeatureGateProps {
   children: ReactNode;
@@ -36,7 +35,7 @@ export function FeatureGate({
   }
 
   const handleUpgrade = () => {
-    navigateTo('/landlord/billing');
+    window.location.href = '/landlord/billing';
   };
 
   // Allow access for active trials

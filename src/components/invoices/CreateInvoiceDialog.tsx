@@ -49,31 +49,92 @@ export const CreateInvoiceDialog = ({ onInvoiceCreated }: CreateInvoiceDialogPro
 
   const fetchLeases = async () => {
     try {
-      const { data, error } = await supabase
+      console.log("Fetching leases...");
+      
+      // Fetch leases separately 
+      const { data: leasesData, error: leasesError } = await supabase
         .from("leases")
-        .select(`
-          id,
-          monthly_rent,
-          tenant_id,
-          unit_id,
-          tenants (
-            first_name,
-            last_name
-          ),
-          units (
-            unit_number,
-            properties (
-              name
-            )
-          )
-        `)
-        .eq("status", "active");
+        .select("id, monthly_rent, tenant_id, unit_id, status")
+        .in("status", ["active", "current"])
+        .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setLeases(data || []);
+      if (leasesError) {
+        console.error("Error fetching leases:", leasesError);
+        throw leasesError;
+      }
+
+      if (!leasesData || leasesData.length === 0) {
+        console.log("No leases found");
+        setLeases([]);
+        return;
+      }
+
+      console.log("Found leases:", leasesData.length);
+
+      // Extract unique IDs
+      const tenantIds = [...new Set(leasesData.map(l => l.tenant_id).filter(Boolean))];
+      const unitIds = [...new Set(leasesData.map(l => l.unit_id).filter(Boolean))];
+
+      // Fetch tenants
+      const { data: tenantsData, error: tenantsError } = await supabase
+        .from("tenants")
+        .select("id, first_name, last_name")
+        .in("id", tenantIds);
+
+      if (tenantsError) {
+        console.error("Error fetching tenants:", tenantsError);
+        throw tenantsError;
+      }
+
+      // Fetch units
+      const { data: unitsData, error: unitsError } = await supabase
+        .from("units")
+        .select("id, unit_number, property_id")
+        .in("id", unitIds);
+
+      if (unitsError) {
+        console.error("Error fetching units:", unitsError);
+        throw unitsError;
+      }
+
+      // Extract property IDs and fetch properties
+      const propertyIds = [...new Set(unitsData?.map(u => u.property_id).filter(Boolean) || [])];
+      const { data: propertiesData, error: propertiesError } = await supabase
+        .from("properties")
+        .select("id, name")
+        .in("id", propertyIds);
+
+      if (propertiesError) {
+        console.error("Error fetching properties:", propertiesError);
+        throw propertiesError;
+      }
+
+      // Create lookup maps
+      const tenantsMap = new Map(tenantsData?.map(t => [t.id, t]) || []);
+      const unitsMap = new Map(unitsData?.map(u => [u.id, u]) || []);
+      const propertiesMap = new Map(propertiesData?.map(p => [p.id, p]) || []);
+
+      // Compose the data
+      const composedLeases = leasesData.map(lease => {
+        const tenant = tenantsMap.get(lease.tenant_id);
+        const unit = unitsMap.get(lease.unit_id);
+        const property = unit ? propertiesMap.get(unit.property_id) : null;
+
+        return {
+          ...lease,
+          tenants: tenant,
+          units: unit ? {
+            ...unit,
+            properties: property
+          } : null
+        };
+      });
+
+      console.log("Composed leases:", composedLeases.length);
+      setLeases(composedLeases);
     } catch (error) {
       console.error("Error fetching leases:", error);
-      toast.error("Failed to load leases");
+      toast.error("Failed to load leases. Please check console for details.");
     }
   };
 
@@ -95,13 +156,10 @@ export const CreateInvoiceDialog = ({ onInvoiceCreated }: CreateInvoiceDialogPro
         return;
       }
 
-      // Generate invoice number
-      const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
-
+      // Use database function to generate invoice number
       const { error } = await supabase
         .from("invoices")
         .insert({
-          invoice_number: invoiceNumber,
           lease_id: values.lease_id,
           tenant_id: selectedLease.tenant_id,
           amount: Number(values.amount),
@@ -145,7 +203,17 @@ export const CreateInvoiceDialog = ({ onInvoiceCreated }: CreateInvoiceDialogPro
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Lease</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select 
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      // Auto-fill amount from selected lease
+                      const selectedLease = leases.find(l => l.id === value);
+                      if (selectedLease) {
+                        form.setValue("amount", selectedLease.monthly_rent.toString());
+                      }
+                    }} 
+                    defaultValue={field.value}
+                  >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a lease" />
@@ -154,7 +222,7 @@ export const CreateInvoiceDialog = ({ onInvoiceCreated }: CreateInvoiceDialogPro
                     <SelectContent>
                       {leases.map((lease) => (
                         <SelectItem key={lease.id} value={lease.id}>
-                          {lease.tenants?.first_name} {lease.tenants?.last_name} - {lease.units?.properties?.name} ({lease.units?.unit_number})
+                          {lease.tenants?.first_name} {lease.tenants?.last_name} - {lease.units?.properties?.name} ({lease.units?.unit_number}) - {getGlobalCurrencySync()} {lease.monthly_rent}
                         </SelectItem>
                       ))}
                     </SelectContent>

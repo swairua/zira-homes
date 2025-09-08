@@ -16,6 +16,10 @@ import { BulkUploadDropdown } from "@/components/bulk-upload/BulkUploadDropdown"
 import { Building2, MapPin, Home, Search, Filter, Edit, Eye, LayoutGrid, List } from "lucide-react";
 import { KpiGrid } from "@/components/kpi/KpiGrid";
 import { KpiStatCard } from "@/components/kpi/KpiStatCard";
+import { FeatureGate } from "@/components/ui/feature-gate";
+import { FEATURES } from "@/hooks/usePlanFeatureAccess";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
+import { TablePaginator } from "@/components/ui/table-paginator";
 
 interface Unit {
   id: string;
@@ -47,11 +51,13 @@ const Units = () => {
   const { user } = useAuth();
   const [units, setUnits] = useState<Unit[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterProperty, setFilterProperty] = useState("all");
   const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
+  const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ pageSize: 12 });
 
   const fetchUnits = async () => {
     try {
@@ -62,20 +68,7 @@ const Units = () => {
         return;
       }
 
-      // First get units with a simple query, then join properties manually
-      const { data: unitsData, error: unitsError } = await supabase
-        .from("units")
-        .select("*")
-        .order("unit_number");
-
-      if (unitsError) {
-        console.error("❌ Units query error:", unitsError);
-        throw unitsError;
-      }
-
-      console.log("🏠 Units retrieved:", unitsData?.length || 0);
-
-      // Get properties separately  
+      // Get properties first for filtering
       const { data: propertiesData, error: propertiesError } = await supabase
         .from("properties")
         .select("id, name, address, owner_id, manager_id")
@@ -86,21 +79,90 @@ const Units = () => {
         throw propertiesError;
       }
 
-      console.log("📋 Properties retrieved:", propertiesData?.length || 0);
-
-      // Create a map for easy property lookup
       const propertyMap = new Map(propertiesData?.map(p => [p.id, p]) || []);
+      const propertyIds = propertiesData?.map(p => p.id) || [];
 
-      // Filter and join units with properties manually
-      const joinedUnits = unitsData?.filter(unit => {
-        return propertyMap.has(unit.property_id);
-      }).map(unit => ({
+      if (propertyIds.length === 0) {
+        setUnits([]);
+        setTotalCount(0);
+        setLoading(false);
+        return;
+      }
+
+      // Build units query with filters and pagination
+      let query = supabase
+        .from("units")
+        .select("*", { count: 'exact' })
+        .in("property_id", propertyIds);
+
+      // Apply search filter
+      if (searchTerm) {
+        query = query.or(`unit_number.ilike.%${searchTerm}%`);
+      }
+
+      // Apply status filter
+      if (filterStatus !== "all") {
+        query = query.eq('status', filterStatus);
+      }
+
+      // Apply property filter
+      if (filterProperty !== "all") {
+        query = query.eq('property_id', filterProperty);
+      }
+
+      // Apply pagination and ordering
+      const { data: unitsData, error: unitsError, count } = await query
+        .range(offset, offset + pageSize - 1)
+        .order("unit_number");
+
+      if (unitsError) {
+        console.error("❌ Units query error:", unitsError);
+        throw unitsError;
+      }
+
+      console.log("🏠 Units retrieved:", unitsData?.length || 0);
+      setTotalCount(count || 0);
+
+      // Join units with properties manually
+      const joinedUnits = unitsData?.map(unit => ({
         ...unit,
         properties: propertyMap.get(unit.property_id)
       })) || [];
 
       console.log("🔗 Joined units:", joinedUnits.length);
-      setUnits(joinedUnits);
+      
+      // Sync unit statuses to ensure they're up to date with current leases
+      for (const unit of joinedUnits) {
+        try {
+          const { error: syncError } = await supabase.rpc('sync_unit_status', {
+            p_unit_id: unit.id
+          });
+          if (syncError) {
+            console.warn(`Failed to sync status for unit ${unit.unit_number}:`, syncError);
+          }
+        } catch (syncError) {
+          console.warn(`Failed to sync status for unit ${unit.unit_number}:`, syncError);
+        }
+      }
+
+      // Refetch units after sync to get updated statuses
+      const { data: updatedUnitsData, error: refetchError } = await supabase
+        .from("units")
+        .select("*")
+        .order("unit_number");
+
+      if (!refetchError && updatedUnitsData) {
+        const updatedJoinedUnits = updatedUnitsData?.filter(unit => {
+          return propertyMap.has(unit.property_id);
+        }).map(unit => ({
+          ...unit,
+          properties: propertyMap.get(unit.property_id)
+        })) || [];
+        
+        setUnits(updatedJoinedUnits);
+      } else {
+        setUnits(joinedUnits);
+      }
     } catch (error) {
       console.error("💥 Error in fetchUnits:", error);
       toast.error(`Failed to fetch units: ${error.message || 'Unknown error'}`);
@@ -129,16 +191,10 @@ const Units = () => {
   useEffect(() => {
     fetchUnits();
     fetchProperties();
-  }, []);
+  }, [page, pageSize, searchTerm, filterStatus, filterProperty]);
 
-  const filteredUnits = units.filter((unit) => {
-    const matchesSearch = unit.unit_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         unit.properties?.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === "all" || unit.status === filterStatus;
-    const matchesProperty = filterProperty === "all" || unit.property_id === filterProperty;
-    
-    return matchesSearch && matchesStatus && matchesProperty;
-  });
+  // No client-side filtering needed since we're doing server-side pagination
+  const filteredUnits = units;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -165,7 +221,13 @@ const Units = () => {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <BulkUploadDropdown type="units" onSuccess={fetchUnits} />
+            <FeatureGate 
+              feature={FEATURES.BULK_OPERATIONS}
+              fallbackTitle="Bulk Operations"
+              fallbackDescription="Upload multiple units at once with CSV import."
+            >
+              <BulkUploadDropdown type="units" onSuccess={fetchUnits} />
+            </FeatureGate>
             <AddUnitDialog onUnitAdded={fetchUnits} />
           </div>
         </div>
@@ -436,6 +498,17 @@ const Units = () => {
           </Card>
         )}
 
+        {/* Pagination */}
+        {filteredUnits.length > 0 && (
+          <TablePaginator
+            currentPage={page}
+            totalPages={Math.ceil(totalCount / pageSize)}
+            pageSize={pageSize}
+            totalItems={totalCount}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
       </div>
     </DashboardLayout>
   );

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
-import { measureApiCall } from "@/utils/performanceMonitor";
+import { useTenantLeases } from "@/hooks/useTenantLeases";
+import { useTenantDashboardData } from "@/hooks/tenant/useTenantDashboardData";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { TenantLayout } from "@/components/TenantLayout";
+import { LeaseSelector } from "@/components/tenant/LeaseSelector";
 import {
   Home,
   CreditCard,
@@ -26,156 +27,34 @@ import {
   Mail,
   Shield,
   AlertCircle,
+  Building2,
 } from "lucide-react";
 import { format, differenceInDays, isAfter } from "date-fns";
 import { TenantQuickActions } from "@/components/tenant/TenantQuickActions";
-
 import { useTenantContacts } from "@/hooks/useTenantContacts";
 import { useNavigate } from "react-router-dom";
-
-interface TenantData {
-  tenant: any;
-  lease: any;
-  property: any;
-  unit: any;
-  currentInvoice: any;
-  recentPayments: any[];
-  maintenanceRequests: any[];
-  announcements: any[];
-}
 
 export default function TenantDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { contacts, loading: contactsLoading, error: contactsError } = useTenantContacts();
-  const [tenantData, setTenantData] = useState<TenantData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { leases, loading: leasesLoading, hasMultipleLeases, hasMultipleProperties, getActiveLease } = useTenantLeases();
+  const [selectedLeaseId, setSelectedLeaseId] = useState<string | null>(null);
+
+  // Get the lease to display data for
+  const activeLease = selectedLeaseId 
+    ? leases.find(l => l.id === selectedLeaseId) 
+    : getActiveLease();
+
+  // Use React Query hook for data fetching with caching - pass the activeLease for consistent data
+  const { data: tenantData, isLoading: dashboardLoading } = useTenantDashboardData(activeLease?.id);
 
   useEffect(() => {
-    console.log('TenantDashboard: User ID:', user?.id);
-    if (user) {
-      fetchTenantData();
+    // Set initial selected lease when leases load
+    if (leases.length > 0 && !selectedLeaseId) {
+      setSelectedLeaseId(getActiveLease()?.id || leases[0].id);
     }
-  }, [user]);
-
-  const fetchTenantData = async () => {
-    try {
-      const result = await measureApiCall("tenant-dashboard-load", async () => {
-        // Get tenant information with corrected foreign key relationships
-        const { data: tenant, error: tenantError } = await supabase
-          .from("tenants")
-          .select(`
-            *,
-            leases!leases_tenant_id_fkey (
-              *,
-              units!leases_unit_id_fkey (
-                *,
-                properties!units_property_id_fkey (
-                  *
-                )
-              )
-            )
-          `)
-          .eq("user_id", user?.id)
-          .maybeSingle();
-
-        if (tenantError) {
-          console.log("Tenant relational query error:", tenantError);
-          
-          // Fallback: try basic tenant query
-          const { data: basicTenant } = await supabase
-            .from("tenants")
-            .select("*")
-            .eq("user_id", user?.id)
-            .maybeSingle();
-
-          if (!basicTenant) {
-            return null;
-          }
-
-          // If we have a tenant but no relational data, show basic tenant info
-          return {
-            tenant: basicTenant,
-            lease: null,
-            property: null,
-            unit: null,
-            currentInvoice: null,
-            recentPayments: [],
-            maintenanceRequests: [],
-            announcements: [],
-          };
-        }
-
-        if (!tenant) {
-          return null;
-        }
-
-        const lease = tenant.leases[0];
-        const unit = lease?.units;
-        const property = unit?.properties;
-
-        // Parallel queries for dashboard data - optimized with limited columns
-        const [
-          currentInvoiceResult,
-          recentPaymentsResult,
-          maintenanceRequestsResult,
-          announcementsResult
-        ] = await Promise.all([
-          // Current invoice - only essential columns
-          supabase
-            .from("invoices")
-            .select("id, amount, due_date, status")
-            .eq("tenant_id", tenant.id)
-            .eq("status", "pending")
-            .order("due_date", { ascending: true })
-            .limit(1)
-            .maybeSingle(),
-          
-          // Recent payments - minimal columns
-          supabase
-            .from("payments")
-            .select("id, amount, payment_date, payment_method, status")
-            .eq("tenant_id", tenant.id)
-            .eq("status", "completed")
-            .order("payment_date", { ascending: false })
-            .limit(3),
-          
-          // Maintenance requests - essential info only  
-          supabase
-            .from("maintenance_requests")
-            .select("id, status, submitted_date, issue_type, priority")
-            .eq("tenant_id", tenant.id)
-            .order("submitted_date", { ascending: false })
-            .limit(3),
-          
-          // Announcements - limited columns
-          property?.id ? supabase
-            .from("tenant_announcements")
-            .select("id, title, content, created_at")
-            .eq("property_id", property.id)
-            .order("created_at", { ascending: false })
-            .limit(3) : Promise.resolve({ data: [] })
-        ]);
-
-        return {
-          tenant,
-          lease,
-          property,
-          unit,
-          currentInvoice: currentInvoiceResult.data,
-          recentPayments: recentPaymentsResult.data || [],
-          maintenanceRequests: maintenanceRequestsResult.data || [],
-          announcements: announcementsResult.data || [],
-        };
-      });
-
-      setTenantData(result);
-    } catch (error) {
-      console.error("Error fetching tenant data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [leases, selectedLeaseId, getActiveLease]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -203,15 +82,83 @@ export default function TenantDashboard() {
     }
   };
 
-  if (loading) {
+  // Show loading state while leases or dashboard data is loading
+  if (leasesLoading || (leases.length > 0 && dashboardLoading)) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
+      <TenantLayout>
+        <div className="container mx-auto p-2 sm:p-4 max-w-6xl space-y-4 sm:space-y-6">
+          {/* Loading skeletons for progressive rendering */}
+          <div className="mb-4 sm:mb-6 space-y-2">
+            <Skeleton className="h-8 w-64" />
+            <div className="space-y-1">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-4 w-40" />
+            </div>
+          </div>
+          
+          <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4">
+            {[...Array(4)].map((_, i) => (
+              <Card key={i}>
+                <CardContent className="p-2 sm:p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <Skeleton className="h-3 w-16" />
+                      <Skeleton className="h-5 w-20" />
+                    </div>
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          
+          <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
+            {[...Array(4)].map((_, i) => (
+              <Card key={i}>
+                <CardHeader>
+                  <Skeleton className="h-6 w-32" />
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </TenantLayout>
     );
   }
 
-  if (!tenantData) {
+  // Show empty state if no leases after loading is complete
+  if (!leasesLoading && leases.length === 0) {
+    return (
+      <TenantLayout>
+        <div className="container mx-auto p-6">
+          <div className="space-y-4">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground mb-2">Tenant Dashboard</h1>
+              <p className="text-muted-foreground">
+                You are logged in as: <strong>{user?.email}</strong>
+              </p>
+            </div>
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                No tenant profile found for this account. This dashboard is only accessible to tenant users. 
+                If you believe this is an error, please contact your property manager.
+              </AlertDescription>
+            </Alert>
+          </div>
+        </div>
+      </TenantLayout>
+    );
+  }
+
+  if (!tenantData || !activeLease) {
     return (
       <div className="container mx-auto p-6">
         <div className="space-y-4">
@@ -235,7 +182,7 @@ export default function TenantDashboard() {
 
   const { tenant, lease, property, unit, currentInvoice, recentPayments, maintenanceRequests, announcements } = tenantData;
 
-  // Show a message if tenant exists but has no active lease
+  // Show a message if tenant exists but no active lease
   if (tenant && !lease) {
     return (
       <div className="container mx-auto p-6">
@@ -285,8 +232,39 @@ export default function TenantDashboard() {
               <Shield className="h-4 w-4 flex-shrink-0" />
               <span className="truncate">Lease until {lease?.lease_end_date ? format(new Date(lease.lease_end_date), "MMM yyyy") : "N/A"}</span>
             </div>
+            {hasMultipleLeases() && (
+              <div className="flex items-center gap-1">
+                <Building2 className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate">
+                  {hasMultipleProperties() ? 
+                    `${leases.length} units across multiple properties` : 
+                    `${leases.length} units total`
+                  }
+                </span>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Multi-lease Selector */}
+        {hasMultipleLeases() && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Your Properties
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <LeaseSelector 
+                leases={leases}
+                selectedLeaseId={selectedLeaseId || activeLease?.id}
+                onLeaseSelect={setSelectedLeaseId}
+                showAsCards={false}
+              />
+            </CardContent>
+          </Card>
+        )}
 
         {/* Important Alerts */}
         <div className="space-y-4">

@@ -13,6 +13,8 @@ import { BulkUploadTenants } from "./BulkUploadTenants";
 import { BulkUploadUnits } from "./BulkUploadUnits";
 import { BulkUploadProperties } from "./BulkUploadProperties";
 import { BulkUploadHistory } from "./BulkUploadHistory";
+import { FeatureGate } from "@/components/ui/feature-gate";
+import { FEATURES } from "@/hooks/usePlanFeatureAccess";
 
 interface BulkUploadDropdownProps {
   type: "tenants" | "units" | "properties";
@@ -61,7 +63,11 @@ export function BulkUploadDropdown({ type, onSuccess }: BulkUploadDropdownProps)
   };
 
   return (
-    <>
+    <FeatureGate 
+      feature={FEATURES.BULK_OPERATIONS}
+      fallbackTitle="Bulk Operations"
+      fallbackDescription="Efficiently manage multiple properties with bulk upload and operations."
+    >
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" className="gap-2">
@@ -111,6 +117,6 @@ export function BulkUploadDropdown({ type, onSuccess }: BulkUploadDropdownProps)
           </div>
         </DialogContent>
       </Dialog>
-    </>
+    </FeatureGate>
   );
 }

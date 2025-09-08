@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -27,19 +28,29 @@ interface UserActivityDialogProps {
 export function UserActivityDialog({ userId, userName, open, onOpenChange }: UserActivityDialogProps) {
   const [activities, setActivities] = useState<UserActivityLog[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
     if (open && userId) {
-      fetchUserActivity();
+      fetchUserActivity(true);
     }
   }, [open, userId]);
 
-  const fetchUserActivity = async () => {
-    setLoading(true);
+  const fetchUserActivity = async (reset = true) => {
+    if (reset) {
+      setLoading(true);
+      setActivities([]);
+      setHasMore(true);
+    } else {
+      setLoadingMore(true);
+    }
+    
     try {
+      const currentOffset = reset ? 0 : activities.length;
       const { data: result, error } = await supabase.functions.invoke('get-user-audit', {
-        body: { userId, limit: 50, offset: 0 }
+        body: { userId, limit: 25, offset: currentOffset }
       });
 
       if (error) throw error;
@@ -49,7 +60,14 @@ export function UserActivityDialog({ userId, userName, open, onOpenChange }: Use
         throw new Error(response?.error || "Failed to fetch activity");
       }
 
-      setActivities(response.logs || []);
+      const newLogs = response.logs || [];
+      setHasMore(newLogs.length === 25);
+      
+      if (reset) {
+        setActivities(newLogs);
+      } else {
+        setActivities(prev => [...prev, ...newLogs]);
+      }
     } catch (error) {
       console.error('Error fetching user activity:', error);
       toast({
@@ -59,6 +77,13 @@ export function UserActivityDialog({ userId, userName, open, onOpenChange }: Use
       });
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  const loadMoreActivities = () => {
+    if (!loadingMore && hasMore) {
+      fetchUserActivity(false);
     }
   };
 
@@ -211,6 +236,27 @@ export function UserActivityDialog({ userId, userName, open, onOpenChange }: Use
                     </div>
                   ))
                 }
+                
+                {/* Load More Button */}
+                {hasMore && (
+                  <div className="text-center pt-4">
+                    <Button
+                      variant="outline"
+                      onClick={loadMoreActivities}
+                      disabled={loadingMore}
+                      className="w-full"
+                    >
+                      {loadingMore ? (
+                        <>
+                          <Clock className="h-4 w-4 mr-2 animate-spin" />
+                          Loading more activities...
+                        </>
+                      ) : (
+                        <>Load More Activities</>
+                      )}
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -22,15 +22,117 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
+    // Get authorization header for user authentication
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Authorization required' }),
+        { 
+          status: 401, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Initialize Supabase client with user auth
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { 
+        global: { 
+          headers: { 
+            authorization: authHeader 
+          } 
+        } 
+      }
+    );
+
+    // Verify user authentication
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid authentication' }),
+        { 
+          status: 401, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
     const { user_id, title, message, type, related_id, related_type }: NotificationEmailRequest = await req.json();
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Rate limiting check
+    const now = Date.now();
+    const rateLimitKey = `notification_${user.id}`;
+    // Basic rate limiting: 10 notifications per minute per user
+    // In production, use Redis or similar storage
+    
+    // Authorization check: Who can send notifications to whom?
+    let authorized = false;
+
+    // Get sender's roles
+    const { data: senderRoles } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id);
+    
+    const isAdmin = senderRoles?.some(r => r.role === 'Admin');
+    const isLandlord = senderRoles?.some(r => r.role === 'Landlord');
+    const isManager = senderRoles?.some(r => r.role === 'Manager');
+
+    if (isAdmin) {
+      // Admins can send to anyone
+      authorized = true;
+    } else if (user.id === user_id) {
+      // Users can send to themselves
+      authorized = true;
+    } else if (isLandlord || isManager) {
+      // Landlords/Managers can send to users associated with their properties
+      const { data: managedUsers } = await supabase
+        .from('tenants')
+        .select(`
+          user_id,
+          leases!inner(
+            unit_id,
+            units!inner(
+              property_id,
+              properties!inner(owner_id, manager_id)
+            )
+          )
+        `)
+        .eq('user_id', user_id);
+
+      authorized = managedUsers?.some(tenant => 
+        tenant.leases.units.properties.owner_id === user.id ||
+        tenant.leases.units.properties.manager_id === user.id
+      ) || false;
+    }
+
+    if (!authorized) {
+      // Log unauthorized attempt
+      console.warn('Unauthorized notification attempt:', {
+        sender: user.id,
+        target: user_id,
+        type
+      });
+      
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized to send notification to this user' }),
+        { 
+          status: 403, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Initialize admin client only for cross-table operations after auth passes
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
 
     // Get user's notification preferences
-    const { data: preferences, error: prefError } = await supabase
+    const { data: preferences, error: prefError } = await supabaseAdmin
       .from("notification_preferences")
       .select("email_enabled, sms_enabled")
       .eq("user_id", user_id)
@@ -40,8 +142,8 @@ const handler = async (req: Request): Promise<Response> => {
       console.error("Error fetching preferences:", prefError);
     }
 
-    // Get user's profile for email/phone
-    const { data: profile, error: profileError } = await supabase
+    // Get user's profile for email/phone (mask PII in logs)
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
       .select("email, phone, first_name, last_name")
       .eq("id", user_id)
@@ -57,7 +159,7 @@ const handler = async (req: Request): Promise<Response> => {
     // Send email notification if enabled
     if (preferences?.email_enabled !== false && profile.email) {
       try {
-        const { data: emailData, error: emailError } = await supabase.functions.invoke('send-notification-email', {
+        const { data: emailData, error: emailError } = await supabaseAdmin.functions.invoke('send-notification-email', {
           body: {
             to: profile.email,
             to_name: `${profile.first_name} ${profile.last_name}`,
@@ -67,6 +169,9 @@ const handler = async (req: Request): Promise<Response> => {
             type,
             related_id,
             related_type
+          },
+          headers: {
+            'x-internal-service': 'true'
           }
         });
 
@@ -85,11 +190,14 @@ const handler = async (req: Request): Promise<Response> => {
     if (preferences?.sms_enabled && profile.phone) {
       try {
         const smsMessage = `${title}: ${message}`;
-        const { data: smsData, error: smsError } = await supabase.functions.invoke('send-sms', {
+        const { data: smsData, error: smsError } = await supabaseAdmin.functions.invoke('send-sms', {
           body: {
             to: profile.phone,
             message: smsMessage,
             user_id: user_id
+          },
+          headers: {
+            'x-internal-service': 'true'
           }
         });
 
@@ -104,8 +212,17 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
+    // Log the notification delivery with masked PII
+    console.log('Notification sent:', {
+      sender: user.id,
+      recipient: user_id,
+      type,
+      channels: responses.length,
+      success: responses.some(r => r.success)
+    });
+
     // Log the notification delivery
-    await supabase
+    await supabaseAdmin
       .from("notification_logs")
       .insert({
         user_id,

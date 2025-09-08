@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_rate_limits: {
+        Row: {
+          created_at: string
+          endpoint: string
+          id: string
+          identifier: string
+          request_count: number
+          window_start: string
+        }
+        Insert: {
+          created_at?: string
+          endpoint: string
+          id?: string
+          identifier: string
+          request_count?: number
+          window_start?: string
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          id?: string
+          identifier?: string
+          request_count?: number
+          window_start?: string
+        }
+        Relationships: []
+      }
       approved_payment_methods: {
         Row: {
           configuration: Json | null
@@ -84,6 +111,7 @@ export type Database = {
         Row: {
           billing_cycle: string
           billing_model: string | null
+          contact_link: string | null
           created_at: string
           currency: string | null
           description: string | null
@@ -91,6 +119,7 @@ export type Database = {
           fixed_amount_per_unit: number | null
           id: string
           is_active: boolean | null
+          is_custom: boolean
           max_properties: number | null
           max_units: number | null
           name: string
@@ -103,6 +132,7 @@ export type Database = {
         Insert: {
           billing_cycle: string
           billing_model?: string | null
+          contact_link?: string | null
           created_at?: string
           currency?: string | null
           description?: string | null
@@ -110,6 +140,7 @@ export type Database = {
           fixed_amount_per_unit?: number | null
           id?: string
           is_active?: boolean | null
+          is_custom?: boolean
           max_properties?: number | null
           max_units?: number | null
           name: string
@@ -122,6 +153,7 @@ export type Database = {
         Update: {
           billing_cycle?: string
           billing_model?: string | null
+          contact_link?: string | null
           created_at?: string
           currency?: string | null
           description?: string | null
@@ -129,6 +161,7 @@ export type Database = {
           fixed_amount_per_unit?: number | null
           id?: string
           is_active?: boolean | null
+          is_custom?: boolean
           max_properties?: number | null
           max_units?: number | null
           name?: string
@@ -546,6 +579,13 @@ export type Database = {
             foreignKeyName: "fk_expenses_tenant_id"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "tenant_safe_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_expenses_tenant_id"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -663,7 +703,7 @@ export type Database = {
           due_date: string
           id?: string
           invoice_date: string
-          invoice_number: string
+          invoice_number?: string
           lease_id: string
           status?: string
           tenant_id: string
@@ -694,6 +734,13 @@ export type Database = {
             foreignKeyName: "fk_invoices_tenant_id"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "tenant_safe_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_invoices_tenant_id"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -702,6 +749,13 @@ export type Database = {
             columns: ["lease_id"]
             isOneToOne: false
             referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_safe_view"
             referencedColumns: ["id"]
           },
           {
@@ -975,6 +1029,13 @@ export type Database = {
             foreignKeyName: "fk_leases_tenant_id"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "tenant_safe_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_leases_tenant_id"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -983,6 +1044,13 @@ export type Database = {
             columns: ["unit_id"]
             isOneToOne: false
             referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leases_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_safe_view"
             referencedColumns: ["id"]
           },
           {
@@ -1239,18 +1307,66 @@ export type Database = {
         }
         Relationships: []
       }
+      mpesa_credentials: {
+        Row: {
+          consumer_key: string
+          consumer_key_encrypted: string | null
+          consumer_secret: string
+          consumer_secret_encrypted: string | null
+          created_at: string | null
+          id: string
+          is_sandbox: boolean | null
+          landlord_id: string | null
+          passkey: string
+          passkey_encrypted: string | null
+          shortcode: string
+          updated_at: string | null
+        }
+        Insert: {
+          consumer_key: string
+          consumer_key_encrypted?: string | null
+          consumer_secret: string
+          consumer_secret_encrypted?: string | null
+          created_at?: string | null
+          id?: string
+          is_sandbox?: boolean | null
+          landlord_id?: string | null
+          passkey: string
+          passkey_encrypted?: string | null
+          shortcode: string
+          updated_at?: string | null
+        }
+        Update: {
+          consumer_key?: string
+          consumer_key_encrypted?: string | null
+          consumer_secret?: string
+          consumer_secret_encrypted?: string | null
+          created_at?: string | null
+          id?: string
+          is_sandbox?: boolean | null
+          landlord_id?: string | null
+          passkey?: string
+          passkey_encrypted?: string | null
+          shortcode?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       mpesa_transactions: {
         Row: {
           amount: number
+          authorized_by: string | null
           checkout_request_id: string
           created_at: string
           id: string
+          initiated_by: string | null
           invoice_id: string | null
           merchant_request_id: string | null
           metadata: Json | null
           mpesa_receipt_number: string | null
           payment_type: string | null
           phone_number: string
+          phone_number_encrypted: string | null
           result_code: number | null
           result_desc: string | null
           status: string
@@ -1258,15 +1374,18 @@ export type Database = {
         }
         Insert: {
           amount: number
+          authorized_by?: string | null
           checkout_request_id: string
           created_at?: string
           id?: string
+          initiated_by?: string | null
           invoice_id?: string | null
           merchant_request_id?: string | null
           metadata?: Json | null
           mpesa_receipt_number?: string | null
           payment_type?: string | null
           phone_number: string
+          phone_number_encrypted?: string | null
           result_code?: number | null
           result_desc?: string | null
           status?: string
@@ -1274,15 +1393,18 @@ export type Database = {
         }
         Update: {
           amount?: number
+          authorized_by?: string | null
           checkout_request_id?: string
           created_at?: string
           id?: string
+          initiated_by?: string | null
           invoice_id?: string | null
           merchant_request_id?: string | null
           metadata?: Json | null
           mpesa_receipt_number?: string | null
           payment_type?: string | null
           phone_number?: string
+          phone_number_encrypted?: string | null
           result_code?: number | null
           result_desc?: string | null
           status?: string
@@ -1453,6 +1575,51 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_allocations: {
+        Row: {
+          allocated_at: string
+          amount: number
+          created_at: string
+          id: string
+          invoice_id: string
+          payment_id: string
+          updated_at: string
+        }
+        Insert: {
+          allocated_at?: string
+          amount: number
+          created_at?: string
+          id?: string
+          invoice_id: string
+          payment_id: string
+          updated_at?: string
+        }
+        Update: {
+          allocated_at?: string
+          amount?: number
+          created_at?: string
+          id?: string
+          invoice_id?: string
+          payment_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_allocations_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_allocations_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_transactions: {
         Row: {
           amount: number
@@ -1574,6 +1741,13 @@ export type Database = {
             foreignKeyName: "fk_payments_tenant_id"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "tenant_safe_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_payments_tenant_id"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -1589,6 +1763,13 @@ export type Database = {
             columns: ["lease_id"]
             isOneToOne: false
             referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_safe_view"
             referencedColumns: ["id"]
           },
           {
@@ -1794,6 +1975,42 @@ export type Database = {
         }
         Relationships: []
       }
+      report_runs: {
+        Row: {
+          execution_time_ms: number | null
+          file_size_bytes: number | null
+          filters: Json | null
+          generated_at: string
+          id: string
+          metadata: Json | null
+          report_type: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          execution_time_ms?: number | null
+          file_size_bytes?: number | null
+          filters?: Json | null
+          generated_at?: string
+          id?: string
+          metadata?: Json | null
+          report_type: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          execution_time_ms?: number | null
+          file_size_bytes?: number | null
+          filters?: Json | null
+          generated_at?: string
+          id?: string
+          metadata?: Json | null
+          report_type?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       role_change_logs: {
         Row: {
           changed_by: string
@@ -1870,6 +2087,87 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      security_config_status: {
+        Row: {
+          config_item: string
+          details: Json | null
+          id: string
+          last_checked: string | null
+          status: string
+        }
+        Insert: {
+          config_item: string
+          details?: Json | null
+          id?: string
+          last_checked?: string | null
+          status: string
+        }
+        Update: {
+          config_item?: string
+          details?: Json | null
+          id?: string
+          last_checked?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
+      security_event_rate_limits: {
+        Row: {
+          created_at: string | null
+          event_count: number | null
+          id: string
+          ip_address: unknown
+          window_start: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          event_count?: number | null
+          id?: string
+          ip_address: unknown
+          window_start?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          event_count?: number | null
+          id?: string
+          ip_address?: unknown
+          window_start?: string | null
+        }
+        Relationships: []
+      }
+      security_events: {
+        Row: {
+          created_at: string | null
+          details: Json | null
+          event_type: string
+          id: string
+          ip_address: unknown | null
+          severity: string
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          details?: Json | null
+          event_type: string
+          id?: string
+          ip_address?: unknown | null
+          severity?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          details?: Json | null
+          event_type?: string
+          id?: string
+          ip_address?: unknown | null
+          severity?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
       }
       self_hosted_instances: {
         Row: {
@@ -2105,6 +2403,45 @@ export type Database = {
         }
         Relationships: []
       }
+      sms_templates: {
+        Row: {
+          category: string
+          content: string
+          created_at: string
+          enabled: boolean
+          id: string
+          is_default: boolean | null
+          landlord_id: string | null
+          name: string
+          updated_at: string
+          variables: string[] | null
+        }
+        Insert: {
+          category: string
+          content: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          is_default?: boolean | null
+          landlord_id?: string | null
+          name: string
+          updated_at?: string
+          variables?: string[] | null
+        }
+        Update: {
+          category?: string
+          content?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          is_default?: boolean | null
+          landlord_id?: string | null
+          name?: string
+          updated_at?: string
+          variables?: string[] | null
+        }
+        Relationships: []
+      }
       sms_usage: {
         Row: {
           cost: number
@@ -2112,7 +2449,10 @@ export type Database = {
           id: string
           landlord_id: string
           message_content: string | null
+          message_content_encrypted: string | null
           recipient_phone: string
+          recipient_phone_encrypted: string | null
+          recipient_phone_token: string | null
           sent_at: string | null
           status: string
         }
@@ -2122,7 +2462,10 @@ export type Database = {
           id?: string
           landlord_id: string
           message_content?: string | null
+          message_content_encrypted?: string | null
           recipient_phone: string
+          recipient_phone_encrypted?: string | null
+          recipient_phone_token?: string | null
           sent_at?: string | null
           status: string
         }
@@ -2132,7 +2475,10 @@ export type Database = {
           id?: string
           landlord_id?: string
           message_content?: string | null
+          message_content_encrypted?: string | null
           recipient_phone?: string
+          recipient_phone_encrypted?: string | null
+          recipient_phone_token?: string | null
           sent_at?: string | null
           status?: string
         }
@@ -2177,6 +2523,39 @@ export type Database = {
           recipient_phone?: string
           sent_at?: string | null
           status?: string
+        }
+        Relationships: []
+      }
+      sub_users: {
+        Row: {
+          created_at: string
+          id: string
+          landlord_id: string
+          permissions: Json
+          status: string
+          title: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          landlord_id: string
+          permissions?: Json
+          status?: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          landlord_id?: string
+          permissions?: Json
+          status?: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -2516,8 +2895,11 @@ export type Database = {
         Row: {
           created_at: string
           email: string
+          email_encrypted: string | null
+          email_token: string | null
           emergency_contact_name: string | null
           emergency_contact_phone: string | null
+          emergency_contact_phone_encrypted: string | null
           employer_name: string | null
           employment_status: string | null
           first_name: string
@@ -2525,7 +2907,10 @@ export type Database = {
           last_name: string
           monthly_income: number | null
           national_id: string | null
+          national_id_encrypted: string | null
           phone: string | null
+          phone_encrypted: string | null
+          phone_token: string | null
           previous_address: string | null
           profession: string | null
           updated_at: string
@@ -2534,8 +2919,11 @@ export type Database = {
         Insert: {
           created_at?: string
           email: string
+          email_encrypted?: string | null
+          email_token?: string | null
           emergency_contact_name?: string | null
           emergency_contact_phone?: string | null
+          emergency_contact_phone_encrypted?: string | null
           employer_name?: string | null
           employment_status?: string | null
           first_name: string
@@ -2543,7 +2931,10 @@ export type Database = {
           last_name: string
           monthly_income?: number | null
           national_id?: string | null
+          national_id_encrypted?: string | null
           phone?: string | null
+          phone_encrypted?: string | null
+          phone_token?: string | null
           previous_address?: string | null
           profession?: string | null
           updated_at?: string
@@ -2552,8 +2943,11 @@ export type Database = {
         Update: {
           created_at?: string
           email?: string
+          email_encrypted?: string | null
+          email_token?: string | null
           emergency_contact_name?: string | null
           emergency_contact_phone?: string | null
+          emergency_contact_phone_encrypted?: string | null
           employer_name?: string | null
           employment_status?: string | null
           first_name?: string
@@ -2561,7 +2955,10 @@ export type Database = {
           last_name?: string
           monthly_income?: number | null
           national_id?: string | null
+          national_id_encrypted?: string | null
           phone?: string | null
+          phone_encrypted?: string | null
+          phone_token?: string | null
           previous_address?: string | null
           profession?: string | null
           updated_at?: string
@@ -3112,12 +3509,60 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      tenant_safe_view: {
+        Row: {
+          created_at: string | null
+          email: string | null
+          employer_name: string | null
+          employment_status: string | null
+          first_name: string | null
+          id: string | null
+          last_name: string | null
+          national_id: string | null
+          phone: string | null
+          previous_address: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email?: never
+          employer_name?: string | null
+          employment_status?: string | null
+          first_name?: string | null
+          id?: string | null
+          last_name?: string | null
+          national_id?: never
+          phone?: never
+          previous_address?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: never
+          employer_name?: string | null
+          employment_status?: string | null
+          first_name?: string | null
+          id?: string | null
+          last_name?: string | null
+          national_id?: never
+          phone?: never
+          previous_address?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       activate_user: {
         Args: { _performed_by?: string; _user_id: string }
         Returns: Json
+      }
+      audit_security_exposure: {
+        Args: Record<PropertyKey, never>
+        Returns: string
       }
       backfill_trial_periods: {
         Args: {
@@ -3128,6 +3573,10 @@ export type Database = {
           _pre_cutoff_days: number
         }
         Returns: Json
+      }
+      can_access_tenant_as_landlord: {
+        Args: { _tenant_id: string; _user_id: string }
+        Returns: boolean
       }
       can_assign_role: {
         Args: {
@@ -3148,9 +3597,46 @@ export type Database = {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
       }
+      check_plan_feature_access: {
+        Args: { _current_count?: number; _feature: string; _user_id: string }
+        Returns: Json
+      }
+      check_rate_limit: {
+        Args: {
+          _endpoint: string
+          _identifier: string
+          _max_requests?: number
+          _window_minutes?: number
+        }
+        Returns: Json
+      }
       check_trial_limitation: {
         Args: { _current_count?: number; _feature: string; _user_id: string }
         Returns: boolean
+      }
+      cleanup_old_security_events: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      cleanup_rate_limits: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      create_landlord_mpesa_config: {
+        Args: {
+          p_business_shortcode: string
+          p_callback_url?: string
+          p_consumer_key: string
+          p_consumer_secret: string
+          p_environment?: string
+          p_is_active?: boolean
+          p_passkey: string
+        }
+        Returns: string
+      }
+      create_search_token: {
+        Args: { data: string; salt?: string }
+        Returns: string
       }
       create_service_charge_invoice: {
         Args: {
@@ -3183,9 +3669,43 @@ export type Database = {
         }
         Returns: Json
       }
+      decrypt_pii: {
+        Args: { encrypted_data: string; key: string }
+        Returns: string
+      }
+      decrypt_sensitive_data: {
+        Args: { encrypted_data: string; key_name?: string }
+        Returns: string
+      }
+      encrypt_pii: {
+        Args: { data: string; key: string }
+        Returns: string
+      }
+      encrypt_sensitive_data: {
+        Args: { data: string; key_name?: string }
+        Returns: string
+      }
+      find_user_by_email: {
+        Args: { _email: string }
+        Returns: {
+          first_name: string
+          has_profile: boolean
+          last_name: string
+          phone: string
+          user_id: string
+        }[]
+      }
       generate_invoice_number: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      generate_monthly_invoices_for_landlord: {
+        Args: {
+          p_dry_run?: boolean
+          p_invoice_month?: string
+          p_landlord_id: string
+        }
+        Returns: Json
       }
       generate_monthly_service_invoices: {
         Args: Record<PropertyKey, never>
@@ -3204,7 +3724,13 @@ export type Database = {
         Returns: Json
       }
       get_executive_summary_report: {
-        Args: { p_end_date?: string; p_start_date?: string }
+        Args:
+          | {
+              p_end_date?: string
+              p_include_tenant_scope?: boolean
+              p_start_date?: string
+            }
+          | { p_end_date?: string; p_start_date?: string }
         Returns: Json
       }
       get_expense_summary_report: {
@@ -3215,8 +3741,43 @@ export type Database = {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: Json
       }
+      get_invoice_overview: {
+        Args: {
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_status?: string
+        }
+        Returns: {
+          amount: number
+          amount_paid_allocated: number
+          amount_paid_direct: number
+          amount_paid_total: number
+          computed_status: string
+          created_at: string
+          description: string
+          due_date: string
+          email: string
+          first_name: string
+          id: string
+          invoice_date: string
+          invoice_number: string
+          last_name: string
+          lease_id: string
+          outstanding_amount: number
+          phone: string
+          property_id: string
+          property_manager_id: string
+          property_name: string
+          property_owner_id: string
+          status: string
+          tenant_id: string
+          unit_number: string
+          updated_at: string
+        }[]
+      }
       get_landlord_dashboard_data: {
-        Args: { p_user_id?: string }
+        Args: { _user_id?: string }
         Returns: Json
       }
       get_landlord_tenants_summary: {
@@ -3230,23 +3791,27 @@ export type Database = {
         }
         Returns: Json
       }
-      get_lease_expiry_report: {
-        Args: { p_end_date?: string; p_start_date?: string }
-        Returns: Json
-      }
-      get_maintenance_report: {
-        Args: { p_end_date?: string; p_start_date?: string }
-        Returns: Json
-      }
       get_market_rent_report: {
-        Args: { p_end_date?: string; p_start_date?: string }
+        Args:
+          | Record<PropertyKey, never>
+          | { p_end_date?: string; p_start_date?: string }
         Returns: Json
+      }
+      get_mpesa_credentials_safe: {
+        Args: { _landlord_id?: string }
+        Returns: {
+          created_at: string
+          has_consumer_key: string
+          has_consumer_secret: string
+          has_passkey: string
+          id: string
+          is_sandbox: boolean
+          landlord_id: string
+          shortcode: string
+          updated_at: string
+        }[]
       }
       get_occupancy_report: {
-        Args: { p_end_date?: string; p_start_date?: string }
-        Returns: Json
-      }
-      get_outstanding_balances_report: {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: Json
       }
@@ -3258,6 +3823,10 @@ export type Database = {
         Args: { p_end_date: string; p_start_date: string }
         Returns: Json
       }
+      get_platform_market_rent: {
+        Args: { p_end_date?: string; p_start_date?: string }
+        Returns: Json
+      }
       get_profit_loss_report: {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: Json
@@ -3267,14 +3836,35 @@ export type Database = {
         Returns: Json
       }
       get_rent_collection_report: {
-        Args: { p_end_date?: string; p_start_date?: string }
+        Args: { p_end_date: string; p_start_date: string }
         Returns: Json
       }
       get_revenue_vs_expenses_report: {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: Json
       }
+      get_security_dashboard_stats: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      get_sms_usage_for_admin: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          cost: number
+          created_at: string
+          id: string
+          landlord_id: string
+          message_content: string
+          recipient_phone: string
+          sent_at: string
+          status: string
+        }[]
+      }
       get_tenant_contacts: {
+        Args: { p_user_id?: string }
+        Returns: Json
+      }
+      get_tenant_leases: {
         Args: { p_user_id?: string }
         Returns: Json
       }
@@ -3294,10 +3884,6 @@ export type Database = {
         Args: { _user_id: string }
         Returns: string[]
       }
-      get_tenant_turnover_report: {
-        Args: { p_end_date?: string; p_start_date?: string }
-        Returns: Json
-      }
       get_tenant_unit_ids: {
         Args: { _user_id: string }
         Returns: string[]
@@ -3311,24 +3897,21 @@ export type Database = {
         Returns: string
       }
       get_user_audit_history: {
-        Args: { _limit?: number; _offset?: number; _user_id: string }
+        Args: { p_limit?: number; p_offset?: number; p_user_id: string }
         Returns: {
           action: string
-          created_at: string
           details: Json
           entity_id: string
           entity_type: string
-          id: string
           ip_address: unknown
-          performed_by: string
+          log_id: string
+          performed_at: string
           user_agent: string
         }[]
       }
       get_user_permissions: {
-        Args: { _user_id: string }
+        Args: { _user_id?: string }
         Returns: {
-          category: string
-          description: string
           permission_name: string
         }[]
       }
@@ -3353,14 +3936,33 @@ export type Database = {
         Returns: boolean
       }
       has_role: {
+        Args:
+          | { _role: Database["public"]["Enums"]["app_role"]; _user_id: string }
+          | {
+              _role: Database["public"]["Enums"]["app_role"]
+              _user_id?: string
+            }
+        Returns: boolean
+      }
+      has_role_safe: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
       }
+      insert_sms_usage_secure: {
+        Args: {
+          p_cost: number
+          p_landlord_id: string
+          p_message_content: string
+          p_recipient_phone: string
+          p_status: string
+        }
+        Returns: string
+      }
       is_admin: {
-        Args: { _user_id: string }
+        Args: { _user_id?: string }
         Returns: boolean
       }
       is_user_tenant: {
@@ -3376,6 +3978,34 @@ export type Database = {
           _old_value?: string
           _user_id: string
         }
+        Returns: undefined
+      }
+      log_security_event: {
+        Args:
+          | {
+              _details?: Json
+              _event_type: string
+              _ip_address?: string
+              _severity?: string
+              _user_id?: string
+            }
+          | {
+              _details?: Json
+              _event_type: string
+              _ip_address?: unknown
+              _user_id?: string
+            }
+          | {
+              p_details?: Json
+              p_event_type: string
+              p_ip_address?: unknown
+              p_severity?: string
+              p_user_id?: string
+            }
+        Returns: undefined
+      }
+      log_sensitive_data_access: {
+        Args: { _operation: string; _record_id?: string; _table_name: string }
         Returns: undefined
       }
       log_system_event: {
@@ -3433,6 +4063,18 @@ export type Database = {
         }
         Returns: undefined
       }
+      mask_sensitive_data: {
+        Args: { data: string; visible_chars?: number }
+        Returns: string
+      }
+      reconcile_unallocated_payments_for_tenant: {
+        Args: { p_tenant_id: string }
+        Returns: Json
+      }
+      run_security_audit: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       soft_delete_user: {
         Args: { _performed_by?: string; _reason?: string; _user_id: string }
         Returns: Json
@@ -3441,8 +4083,28 @@ export type Database = {
         Args: { _performed_by?: string; _reason?: string; _user_id: string }
         Returns: Json
       }
+      sync_unit_status: {
+        Args: { p_unit_id: string }
+        Returns: undefined
+      }
+      tenant_has_lease_on_property: {
+        Args: { _property_id: string; _user_id: string }
+        Returns: boolean
+      }
+      user_can_access_lease: {
+        Args: { _lease_id: string; _user_id: string }
+        Returns: boolean
+      }
       user_owns_property: {
         Args: { _property_id: string; _user_id: string }
+        Returns: boolean
+      }
+      validate_strong_password: {
+        Args: { password: string }
+        Returns: boolean
+      }
+      verify_mpesa_signature: {
+        Args: { _body: string; _consumer_secret: string; _signature: string }
         Returns: boolean
       }
     }

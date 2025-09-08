@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { TablePaginator } from "@/components/ui/table-paginator";
 import { AlertTriangle, Info, AlertCircle, Search, Filter } from "lucide-react";
 import { SystemLog } from "@/hooks/useSupportData";
 import { formatDistanceToNow } from "date-fns";
@@ -15,6 +16,13 @@ export function SystemLogsView({ logs }: SystemLogsViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [serviceFilter, setServiceFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, typeFilter, serviceFilter]);
 
   const getLogIcon = (type: string) => {
     switch (type) {
@@ -44,6 +52,13 @@ export function SystemLogsView({ logs }: SystemLogsViewProps) {
     
     return matchesSearch && matchesType && matchesService;
   });
+
+  // Client-side pagination
+  const totalItems = filteredLogs.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedLogs = filteredLogs.slice(startIndex, endIndex);
 
   return (
     <div className="space-y-6">
@@ -87,25 +102,37 @@ export function SystemLogsView({ logs }: SystemLogsViewProps) {
       </div>
 
       <div className="text-sm text-muted-foreground">
-        Showing {filteredLogs.length} of {logs.length} log entries
+        Showing {paginatedLogs.length} of {totalItems} filtered log entries ({logs.length} total)
       </div>
 
       {filteredLogs.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <Info className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold text-foreground mb-2">No logs found</h3>
-            <p className="text-muted-foreground">
-              {searchQuery || (typeFilter !== "all") || (serviceFilter !== "all") 
-                ? "Try adjusting your filters to see more results."
-                : "No system logs are available at this time."
-              }
-            </p>
-          </CardContent>
-        </Card>
+        <>
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <Info className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">No logs found</h3>
+              <p className="text-muted-foreground">
+                {searchQuery || (typeFilter !== "all") || (serviceFilter !== "all") 
+                  ? "Try adjusting your filters to see more results."
+                  : "No system logs are available at this time."
+                }
+              </p>
+            </CardContent>
+          </Card>
+          <TablePaginator
+            currentPage={currentPage}
+            totalPages={Math.ceil(Math.max(totalItems, 1) / pageSize)}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            showPageSizeSelector={true}
+          />
+        </>
       ) : (
-        <div className="space-y-3">
-          {filteredLogs.map((log) => (
+        <>
+          <div className="space-y-3">
+            {paginatedLogs.map((log) => (
             <Card key={log.id} className="transition-colors hover:bg-muted/50">
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
@@ -145,7 +172,17 @@ export function SystemLogsView({ logs }: SystemLogsViewProps) {
               </CardContent>
             </Card>
           ))}
-        </div>
+          </div>
+          <TablePaginator
+            currentPage={currentPage}
+            totalPages={Math.ceil(Math.max(totalItems, 1) / pageSize)}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            showPageSizeSelector={true}
+          />
+        </>
       )}
     </div>
   );

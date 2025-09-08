@@ -7,9 +7,11 @@ import { fmtNumber, fmtPercent } from "@/lib/format";
 
 interface ReportKpiCardsProps {
   onReportClick?: (reportType: string) => void;
+  availableCount?: number;
+  totalCount?: number;
 }
 
-export function ReportKpiCards({ onReportClick }: ReportKpiCardsProps) {
+export function ReportKpiCards({ onReportClick, availableCount, totalCount }: ReportKpiCardsProps) {
   const { data: kpis, isLoading } = useReportKpis();
 
   const kpiCards = [
@@ -30,9 +32,9 @@ export function ReportKpiCards({ onReportClick }: ReportKpiCardsProps) {
       onClick: () => onReportClick?.('rent-collection')
     },
     {
-      title: "Available Reports",
-      value: kpis ? fmtNumber(kpis.scheduledReports) : "0",
-      subtitle: "Ready to generate",
+      title: "Available Reports", 
+      value: availableCount !== undefined ? fmtNumber(availableCount) : (kpis ? fmtNumber(kpis.scheduledReports) : "0"),
+      subtitle: totalCount !== undefined ? `of ${totalCount} total` : "Ready to generate",
       icon: Calendar,
       gradient: "bg-gradient-to-br from-orange-500 to-orange-600",
       onClick: () => onReportClick?.('scheduled')

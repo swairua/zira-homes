@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    // Create Supabase client with service role for admin operations
+    // Create Supabase client
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
@@ -25,13 +25,56 @@ serve(async (req) => {
       }
     );
 
+    // Authenticate the user
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'No authorization header' }),
+        { 
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 401 
+        }
+      );
+    }
+
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(
+      authHeader.replace('Bearer ', '')
+    );
+
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid token' }),
+        { 
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 401 
+        }
+      );
+    }
+
+    // Check if user is Admin
+    const { data: roles, error: roleError } = await supabaseAdmin
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .single();
+
+    if (roleError || roles?.role !== 'Admin') {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Admin access required' }),
+        { 
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 403 
+        }
+      );
+    }
+
     // Parse request body
     const { email, password, firstName, lastName, role } = await req.json();
 
-    console.log(`Creating admin user: ${email}`);
+    console.log(`Admin ${user.email} creating admin user: ${email}`);
 
     // Create the user with admin privileges
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
       email: email,
       password: password,
       user_metadata: {
@@ -44,15 +87,12 @@ serve(async (req) => {
       email_confirm: true // Auto-confirm email
     });
 
-    if (authError) {
-      console.error("Error creating user:", authError);
-      throw authError;
+    if (authCreateError) {
+      console.error("Error creating user:", authCreateError);
+      throw authCreateError;
     }
 
     console.log("User created successfully:", authData.user?.id);
-
-    // The user profile will be created automatically by the trigger
-    // The role will be assigned by the trigger based on user_metadata
 
     // Log the admin user creation activity
     if (authData.user) {
@@ -62,11 +102,24 @@ serve(async (req) => {
         _entity_type: 'user',
         _entity_id: authData.user.id,
         _details: JSON.stringify({
-          created_by: 'system',
+          created_by: user.id,
+          created_by_email: user.email,
           email: email,
           role: role,
           auto_confirmed: true
         })
+      });
+
+      // Log security event
+      await supabaseAdmin.rpc('log_security_event', {
+        _event_type: 'admin_user_created',
+        _details: JSON.stringify({
+          target_user: authData.user.id,
+          target_email: email,
+          target_role: role,
+          created_by: user.id
+        }),
+        _user_id: user.id
       });
     }
 

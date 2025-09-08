@@ -11,9 +11,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ChevronLeft, ChevronRight, CreditCard, Eye } from "lucide-react";
+import { CreditCard, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TablePaginator } from "@/components/ui/table-paginator";
 
 interface Payment {
   id: string;
@@ -261,66 +262,15 @@ export function RecentPayments() {
               </Table>
             </div>
         
-            {/* Enhanced Pagination */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between space-x-2 p-6 bg-gray-50/50 border-t">
-                <div className="text-sm text-muted-foreground">
-                  Showing <span className="font-semibold">{startIndex + 1}</span> to{" "}
-                  <span className="font-semibold">{Math.min(startIndex + itemsPerPage, payments.length)}</span> of{" "}
-                  <span className="font-semibold">{payments.length}</span> payments
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => goToPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className="shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Previous
-                  </Button>
-                  <div className="flex items-center space-x-1">
-                    {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                      let page;
-                      if (totalPages <= 5) {
-                        page = i + 1;
-                      } else if (currentPage <= 3) {
-                        page = i + 1;
-                      } else if (currentPage >= totalPages - 2) {
-                        page = totalPages - 4 + i;
-                      } else {
-                        page = currentPage - 2 + i;
-                      }
-                      return (
-                        <Button
-                          key={page}
-                          variant={currentPage === page ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => goToPage(page)}
-                          className={`w-8 h-8 p-0 shadow-sm hover:shadow-md transition-shadow ${
-                            currentPage === page 
-                              ? 'bg-gradient-to-br from-blue-500 to-blue-600 border-blue-500' 
-                              : ''
-                          }`}
-                        >
-                          {page}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => goToPage(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    className="shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
+              <TablePaginator
+                currentPage={currentPage}
+                totalPages={totalPages}
+                pageSize={itemsPerPage}
+                totalItems={payments.length}
+                onPageChange={goToPage}
+                showPageSizeSelector={false}
+              />
             )}
           </>
         )}

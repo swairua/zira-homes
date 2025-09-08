@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -12,50 +12,42 @@ interface ContactInfo {
 
 export function useTenantContacts() {
   const { user } = useAuth();
-  const [contacts, setContacts] = useState<ContactInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (user) {
-      fetchTenantContacts();
-    }
-  }, [user]);
+  const { data: contacts = [], isLoading: loading, error, refetch } = useQuery({
+    queryKey: ["tenant-contacts", user?.id],
+    queryFn: async (): Promise<ContactInfo[]> => {
+      try {
+        // Use the dedicated RPC for more reliable contact fetching
+        const { data: result, error: rpcError } = await supabase
+          .rpc('get_tenant_contacts')
+          .maybeSingle();
 
-  const fetchTenantContacts = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+        if (rpcError) {
+          throw rpcError;
+        }
 
-      // Use the dedicated RPC for more reliable contact fetching
-      const { data: result, error: rpcError } = await supabase
-        .rpc('get_tenant_contacts')
-        .maybeSingle();
-
-      if (rpcError) {
-        throw rpcError;
+        // Extract contacts from the result
+        return (result as any)?.contacts || [];
+      } catch {
+        // Fallback to platform support on any error
+        return [{
+          name: "Zira Homes Support",
+          phone: "+254 757 878 023",
+          email: "support@ziratech.com", 
+          role: "Platform Support",
+          isPlatformSupport: true
+        }];
       }
+    },
+    enabled: !!user,
+    staleTime: 1000 * 60 * 10, // 10 minutes
+    refetchOnWindowFocus: false,
+  });
 
-      // Extract contacts from the result
-      const contactsList = (result as any)?.contacts || [];
-      setContacts(contactsList);
-
-    } catch (err) {
-      console.error("Error fetching tenant contacts:", err);
-      setError("Failed to load contact information");
-      
-      // Fallback to platform support on any error
-      setContacts([{
-        name: "Zira Homes Support",
-        phone: "+254 757 878 023",
-        email: "support@ziratech.com", 
-        role: "Platform Support",
-        isPlatformSupport: true
-      }]);
-    } finally {
-      setLoading(false);
-    }
+  return { 
+    contacts, 
+    loading, 
+    error: error?.message || null, 
+    refetch 
   };
-
-  return { contacts, loading, error, refetch: fetchTenantContacts };
 }

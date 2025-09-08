@@ -3,7 +3,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Header } from "@/components/Header";
 import { FloatingTrialCountdown } from "@/components/trial/FloatingTrialCountdown";
-import { FloatingActionMenu } from "@/components/dashboard/FloatingActionMenu";
+import { GatedFloatingActionMenu } from "@/components/dashboard/GatedFloatingActionMenu";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -14,7 +14,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     <SidebarProvider>
       <div className="flex min-h-screen w-full">
         <FloatingTrialCountdown />
-        <FloatingActionMenu />
+        <GatedFloatingActionMenu />
         <AppSidebar />
         <SidebarInset className="flex flex-1 flex-col min-w-0 m-0 md:m-0 rounded-none shadow-none">
           <Header />

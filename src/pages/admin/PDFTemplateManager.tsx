@@ -51,31 +51,87 @@ const documentTemplates: DocumentTemplate[] = [
 const PDFTemplateManager = () => {
   const [isCustomizerOpen, setIsCustomizerOpen] = useState(false);
   const [brandingData, setBrandingData] = useState<BrandingData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load branding from database first, fallback to localStorage
+    // Load branding with timeout and robust error handling
     const loadBranding = async () => {
       try {
-        const { BrandingFetcher } = await import('@/utils/brandingFetcher');
-        const branding = await BrandingFetcher.fetchBranding();
-        setBrandingData(branding);
-      } catch (error) {
-        console.warn('Failed to load branding from database, using localStorage:', error);
+        console.log('PDF Template Manager: Starting to load branding...');
+        setIsLoading(true);
+        setError(null);
         
-        // Fallback to localStorage
-        const saved = localStorage.getItem('pdf-branding-data');
-        if (saved) {
-          setBrandingData(JSON.parse(saved));
-        } else {
-          // Migration: check old key and migrate data
-          const oldSaved = localStorage.getItem('brandingPreferences');
-          if (oldSaved) {
-            const data = JSON.parse(oldSaved);
-            localStorage.setItem('pdf-branding-data', oldSaved);
-            localStorage.removeItem('brandingPreferences');
-            setBrandingData(data);
+        // Set a timeout to prevent infinite loading
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Branding load timeout')), 10000)
+        );
+        
+        const loadPromise = (async () => {
+          try {
+            // Try database first with short timeout
+            const { BrandingService } = await import('@/utils/brandingService');
+            return BrandingService.getDefaultBranding();
+          } catch (dbError) {
+            console.warn('Database branding failed, using local storage:', dbError);
+            
+            // Fallback to localStorage
+            const saved = localStorage.getItem('pdf-branding-data');
+            if (saved) {
+              return JSON.parse(saved);
+            }
+            
+            // Check legacy key
+            const oldSaved = localStorage.getItem('brandingPreferences');
+            if (oldSaved) {
+              const data = JSON.parse(oldSaved);
+              localStorage.setItem('pdf-branding-data', oldSaved);
+              localStorage.removeItem('brandingPreferences');
+              return data;
+            }
+            
+            // Use defaults as final fallback
+            const { BrandingService } = await import('@/utils/brandingService');
+            return BrandingService.getDefaultBranding();
           }
-        }
+        })();
+        
+        const branding = await Promise.race([loadPromise, timeoutPromise]);
+        console.log('PDF Template Manager: Branding loaded successfully');
+        setBrandingData(branding);
+        
+      } catch (error) {
+        console.error('PDF Template Manager: All branding load attempts failed:', error);
+        
+        // Final fallback to hardcoded defaults
+        const defaultBranding = {
+          companyName: 'Zira Technologies',
+          companyTagline: 'Professional Property Management Solutions',
+          companyAddress: 'P.O. Box 1234, Nairobi, Kenya',
+          companyPhone: '+254 757 878 023',
+          companyEmail: 'info@ziratechnologies.com',
+          logoUrl: '/src/assets/zira-logo.png',
+          primaryColor: '#1B365D',
+          secondaryColor: '#F36F21',
+          footerText: 'Powered by Zira Technologies - Transforming Property Management',
+          websiteUrl: 'www.ziratechnologies.com',
+          reportLayout: {
+            chartDimensions: 'ultra-compact' as const,
+            kpiStyle: 'cards' as const,
+            sectionSpacing: 'tight' as const,
+            showGridlines: false,
+            accentColor: '#F36F21',
+            layoutDensity: 'compact' as const,
+            contentFlow: 'optimized' as const,
+            maxKpisPerRow: 5,
+            chartSpacing: 'minimal' as const
+          }
+        };
+        
+        setBrandingData(defaultBranding);
+        setError(null); // Clear error since we have working defaults
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -154,7 +210,7 @@ const PDFTemplateManager = () => {
             { label: 'Collection Rate', value: '94.5%', trend: 'up' as const },
             { label: 'Maintenance Requests', value: '12', trend: 'down' as const }
           ],
-          data: [
+          tableData: [
             { Property: 'Sunset Apartments', Revenue: 12500, 'Collection Rate': '98%' },
             { Property: 'Ocean View Complex', Revenue: 15600, 'Collection Rate': '92%' },
             { Property: 'Downtown Lofts', Revenue: 17100, 'Collection Rate': '96%' }
@@ -194,6 +250,32 @@ const PDFTemplateManager = () => {
         return {};
     }
   };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading PDF Template Manager...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <p className="text-red-600 mb-4">Error: {error}</p>
+            <Button onClick={() => window.location.reload()}>Retry</Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

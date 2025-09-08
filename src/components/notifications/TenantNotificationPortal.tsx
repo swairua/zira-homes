@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/useNotifications";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { TablePaginator } from "@/components/ui/table-paginator";
 
 interface NotificationPreferences {
   email_enabled: boolean;
@@ -33,6 +34,8 @@ export function TenantNotificationPortal({ initialFilter = "all" }: TenantNotifi
   });
   const [preferencesLoading, setPreferencesLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialFilter);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
     if (user) {
@@ -133,6 +136,16 @@ export function TenantNotificationPortal({ initialFilter = "all" }: TenantNotifi
     if (activeTab === "unread") return !notification.read;
     return notification.type === activeTab;
   });
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredNotifications.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedNotifications = filteredNotifications.slice(startIndex, startIndex + pageSize);
+
+  // Reset to page 1 when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab]);
 
   const handleNotificationClick = async (notification: any) => {
     if (!notification.read) {
@@ -235,52 +248,64 @@ export function TenantNotificationPortal({ initialFilter = "all" }: TenantNotifi
                   </CardContent>
                 </Card>
               ) : (
-                <div className="space-y-3">
-                  {filteredNotifications.map((notification) => (
-                    <Card 
-                      key={notification.id}
-                      className={`cursor-pointer transition-all hover:shadow-md ${
-                        !notification.read ? 'border-primary/50 bg-primary/5' : ''
-                      }`}
-                      onClick={() => handleNotificationClick(notification)}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-start space-x-3">
-                          <div className="flex-shrink-0 mt-1">
-                            {getNotificationIcon(notification.type)}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <h4 className={`text-sm font-medium ${
-                                  !notification.read ? 'text-primary font-semibold' : 'text-foreground'
-                                }`}>
-                                  {notification.title}
-                                </h4>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                  {notification.message}
-                                </p>
+                <>
+                  <div className="space-y-3">
+                    {paginatedNotifications.map((notification) => (
+                      <Card 
+                        key={notification.id}
+                        className={`cursor-pointer transition-all hover:shadow-md ${
+                          !notification.read ? 'border-primary/50 bg-primary/5' : ''
+                        }`}
+                        onClick={() => handleNotificationClick(notification)}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-start space-x-3">
+                            <div className="flex-shrink-0 mt-1">
+                              {getNotificationIcon(notification.type)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <h4 className={`text-sm font-medium ${
+                                    !notification.read ? 'text-primary font-semibold' : 'text-foreground'
+                                  }`}>
+                                    {notification.title}
+                                  </h4>
+                                  <p className="text-sm text-muted-foreground mt-1">
+                                    {notification.message}
+                                  </p>
+                                </div>
+                                <div className="flex items-center space-x-2 ml-4">
+                                  <Badge className={getNotificationBadgeColor(notification.type)}>
+                                    {notification.type}
+                                  </Badge>
+                                  {!notification.read && (
+                                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                                  )}
+                                </div>
                               </div>
-                              <div className="flex items-center space-x-2 ml-4">
-                                <Badge className={getNotificationBadgeColor(notification.type)}>
-                                  {notification.type}
-                                </Badge>
-                                {!notification.read && (
-                                  <div className="w-2 h-2 bg-primary rounded-full"></div>
-                                )}
+                              <div className="flex items-center justify-between mt-2">
+                                <span className="text-xs text-muted-foreground">
+                                  {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
+                                </span>
                               </div>
                             </div>
-                            <div className="flex items-center justify-between mt-2">
-                              <span className="text-xs text-muted-foreground">
-                                {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
-                              </span>
-                            </div>
                           </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                  
+                  <TablePaginator
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    pageSize={pageSize}
+                    totalItems={filteredNotifications.length}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={setPageSize}
+                    showPageSizeSelector={true}
+                  />
+                </>
               )}
             </TabsContent>
           </div>

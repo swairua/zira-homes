@@ -9,6 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { TablePaginator } from "@/components/ui/table-paginator";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Plus, Edit, Trash2, Phone, Mail, Settings } from "lucide-react";
@@ -51,6 +53,7 @@ const SPECIALTY_OPTIONS = [
 
 export function ServiceProviderManagement() {
   const [providers, setProviders] = useState<ServiceProvider[]>([]);
+  const [totalProviders, setTotalProviders] = useState(0);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<ServiceProvider | null>(null);
@@ -61,13 +64,23 @@ export function ServiceProviderManagement() {
     specialties: [] as string[],
     is_active: true
   });
+  const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ defaultPage: 1, pageSize: 10 });
 
   const fetchProviders = async () => {
     try {
+      // Get total count
+      const { count } = await supabase
+        .from("service_providers")
+        .select('*', { count: 'exact', head: true });
+
+      setTotalProviders(count || 0);
+
+      // Get paginated data
       const { data, error } = await supabase
         .from("service_providers")
         .select("*")
-        .order("name");
+        .order("name")
+        .range(offset, offset + pageSize - 1);
 
       if (error) throw error;
       setProviders(data || []);
@@ -81,7 +94,7 @@ export function ServiceProviderManagement() {
 
   useEffect(() => {
     fetchProviders();
-  }, []);
+  }, [page, pageSize]);
 
   const resetForm = () => {
     setFormData({
@@ -378,6 +391,19 @@ export function ServiceProviderManagement() {
             </TableBody>
           </Table>
         )}
+        
+        {/* Pagination */}
+        <div className="mt-4">
+          <TablePaginator
+            currentPage={page}
+            totalPages={Math.ceil(totalProviders / pageSize)}
+            pageSize={pageSize}
+            totalItems={totalProviders}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            showPageSizeSelector={true}
+          />
+        </div>
       </CardContent>
     </Card>
   );

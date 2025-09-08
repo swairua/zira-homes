@@ -8,7 +8,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { format, differenceInDays } from "date-fns";
 import { TrialStatusBanner } from "@/components/trial/TrialStatusBanner";
-import { navigateTo } from "@/utils/router";
 
 interface TrialInfo {
   daysRemaining: number;
@@ -74,8 +73,8 @@ export function TrialBanner() {
   };
 
   const handleUpgrade = () => {
-    // Navigate to billing page or open upgrade modal
-    navigateTo('/landlord/billing');
+    // Navigate to upgrade page
+    window.location.href = '/upgrade';
   };
 
   if (loading || !trialInfo) return statusBannerComponent;

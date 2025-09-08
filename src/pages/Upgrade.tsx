@@ -1,12 +1,15 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Star, Crown, Zap } from "lucide-react";
+import { Check, Star, Crown, Zap, Shield } from "lucide-react";
+import { DashboardLayout } from "@/components/DashboardLayout";
 import { useTrialManagement } from "@/hooks/useTrialManagement";
-import { usePlatformAnalytics } from "@/hooks/usePlatformAnalytics";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { navigateTo } from "@/utils/router";
+import { UpgradeConfirmationModal } from "@/components/upgrade/UpgradeConfirmationModal";
+import { formatAmount, getGlobalCurrencySync } from "@/utils/currency";
 
 interface BillingPlan {
   id: string;
@@ -19,104 +22,209 @@ interface BillingPlan {
   max_properties: number | null;
   max_units: number | null;
   sms_credits_included: number;
+  billing_model?: string;
+  percentage_rate?: number;
   recommended?: boolean;
   popular?: boolean;
+  is_custom?: boolean;
+  contact_link?: string;
 }
 
+interface CurrentSubscription {
+  billing_plan_id: string;
+  status: string;
+  plan_name: string;
+}
+
+// Feature display mapping for user-friendly names
+const FEATURE_DISPLAY_MAP: Record<string, string> = {
+  'reports.basic': 'Basic Financial Reports',
+  'reports.advanced': 'Advanced Analytics & Reports', 
+  'reports.financial': 'Comprehensive Financial Reports',
+  'maintenance.tracking': 'Maintenance Request Management',
+  'tenant.portal': 'Tenant Self-Service Portal',
+  'notifications.email': 'Email Notifications',
+  'notifications.sms': 'SMS Notifications',
+  'operations.bulk': 'Bulk Operations & Imports',
+  'billing.automated': 'Automated Billing & Invoicing',
+  'documents.templates': 'Custom Document Templates',
+  'integrations.api': 'API Access & Integrations',
+  'integrations.accounting': 'Accounting Software Integration',
+  'team.roles': 'Team & Role Management',
+  'team.sub_users': 'Multiple User Accounts',
+  'branding.white_label': 'White Label Solution',
+  'branding.custom': 'Custom Branding & Logos',
+  'support.priority': 'Priority Support',
+  'support.dedicated': 'Dedicated Account Manager',
+};
+
 export function Upgrade() {
+  const { user } = useAuth();
   const { trialStatus, trialDaysRemaining } = useTrialManagement();
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentSubscription, setCurrentSubscription] = useState<CurrentSubscription | null>(null);
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
 
-  // Mock billing plans data
-  const billingPlans: BillingPlan[] = [
-    {
-      id: "starter",
-      name: "Starter",
-      description: "Perfect for individual landlords",
-      price: 29,
-      currency: "USD",
-      billing_cycle: "monthly",
-      features: [
-        "Up to 5 properties",
-        "Up to 50 units",
-        "Basic reporting",
-        "Email support",
-        "100 SMS credits/month"
-      ],
-      max_properties: 5,
-      max_units: 50,
-      sms_credits_included: 100
-    },
-    {
-      id: "professional",
-      name: "Professional",
-      description: "Best for growing property businesses",
-      price: 79,
-      currency: "USD",
-      billing_cycle: "monthly",
-      features: [
-        "Up to 25 properties",
-        "Up to 500 units",
-        "Advanced analytics",
-        "Priority support",
-        "500 SMS credits/month",
-        "Custom reports",
-        "Maintenance management"
-      ],
-      max_properties: 25,
-      max_units: 500,
-      sms_credits_included: 500,
-      recommended: true,
-      popular: true
-    },
-    {
-      id: "enterprise",
-      name: "Enterprise",
-      description: "For large property management companies",
-      price: 199,
-      currency: "USD",
-      billing_cycle: "monthly",
-      features: [
-        "Unlimited properties",
-        "Unlimited units",
-        "White-label options",
-        "24/7 phone support",
-        "2000 SMS credits/month",
-        "API access",
-        "Custom integrations",
-        "Dedicated account manager"
-      ],
-      max_properties: null,
-      max_units: null,
-      sms_credits_included: 2000
+  useEffect(() => {
+    fetchActiveBillingPlans();
+    fetchCurrentSubscription();
+  }, []);
+
+  const fetchCurrentSubscription = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('landlord_subscriptions')
+        .select(`
+          billing_plan_id,
+          status,
+          billing_plans!inner(name)
+        `)
+        .eq('landlord_id', user.id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+
+      if (data) {
+        setCurrentSubscription({
+          billing_plan_id: data.billing_plan_id,
+          status: data.status,
+          plan_name: (data.billing_plans as any).name
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error fetching current subscription:', error);
     }
-  ];
+  };
+
+  const fetchActiveBillingPlans = async () => {
+    try {
+      setLoading(true);
+      console.log('🔍 Upgrade: Fetching active billing plans...');
+      
+      const { data, error } = await supabase
+        .from('billing_plans')
+        .select('*, is_custom, contact_link')
+        .eq('is_active', true)
+        .neq('name', 'Free Trial') // Exclude trial plans from upgrade options
+        .order('price', { ascending: true });
+
+      console.log('📊 Upgrade: Query result:', { data, error });
+
+      if (error) throw error;
+
+      // Process the plans and add display properties
+      const processedPlans = (data || []).map((plan, index) => ({
+        ...plan,
+        features: Array.isArray(plan.features) ? (plan.features as string[]) : 
+                 typeof plan.features === 'string' ? [plan.features] : [],
+        popular: index === 1, // Mark second plan as popular
+        recommended: plan.name.toLowerCase().includes('professional')
+      }));
+
+      console.log('✅ Upgrade: Processed plans:', processedPlans);
+      setBillingPlans(processedPlans);
+    } catch (error) {
+      console.error('❌ Upgrade: Error fetching billing plans:', error);
+      toast.error('Failed to load billing plans');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handlePlanSelect = (planId: string) => {
     setSelectedPlan(planId);
+    setConfirmModalOpen(true);
   };
 
-  const handleUpgrade = async () => {
-    if (!selectedPlan) {
+  const handleUpgrade = async (otp?: string) => {
+    if (!selectedPlan || !user) {
       toast.error("Please select a plan to continue");
+      return;
+    }
+
+    const selectedPlanData = billingPlans.find(p => p.id === selectedPlan);
+    if (!selectedPlanData) {
+      toast.error("Selected plan not found");
+      return;
+    }
+
+    // Handle custom plans by opening contact link
+    if (selectedPlanData.is_custom && selectedPlanData.contact_link) {
+      window.open(selectedPlanData.contact_link, '_blank');
+      setConfirmModalOpen(false);
       return;
     }
 
     setIsProcessing(true);
     
     try {
-      // Mock payment processing
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log('🚀 Starting upgrade process for plan:', selectedPlanData.name);
+
+      // For commission-based plans, activate directly without payment setup
+      if (selectedPlanData.billing_model === 'percentage') {
+        console.log('✅ Activating commission-based plan directly...');
+        
+        const { error: subscriptionError } = await supabase
+          .from('landlord_subscriptions')
+          .upsert({
+            landlord_id: user.id,
+            billing_plan_id: selectedPlan,
+            status: 'active',
+            subscription_start_date: new Date().toISOString(),
+            trial_end_date: null, // End trial
+            auto_renewal: true,
+            sms_credits_balance: selectedPlanData.sms_credits_included || 0
+          }, {
+            onConflict: 'landlord_id'
+          });
+
+        if (subscriptionError) throw subscriptionError;
+
+        setConfirmModalOpen(false);
+        toast.success("Plan activated successfully!");
+        setTimeout(() => window.location.href = '/', 1000);
+        return;
+      }
+
+      // For regular plans, create Stripe checkout session
+      console.log('💳 Creating Stripe checkout session...');
       
-      toast.success("Upgrade successful! Welcome to your new plan.");
-      // Redirect to dashboard
-      navigateTo('/');
+      const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
+        'create-billing-checkout',
+        {
+          body: { planId: selectedPlan }
+        }
+      );
+
+      if (checkoutError) throw checkoutError;
+
+      if (checkoutData?.url) {
+        setConfirmModalOpen(false);
+        // Open Stripe checkout in a new tab
+        window.open(checkoutData.url, '_blank');
+      } else {
+        throw new Error('No checkout URL returned');
+      }
+      
     } catch (error) {
+      console.error('❌ Upgrade error:', error);
       toast.error("Upgrade failed. Please try again.");
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const isCurrentPlan = (planId: string) => {
+    return currentSubscription?.billing_plan_id === planId;
+  };
+
+  const getDisplayFeatures = (features: string[]) => {
+    return features.map(feature => FEATURE_DISPLAY_MAP[feature] || feature);
   };
 
   const getPlanIcon = (planName: string) => {
@@ -129,16 +237,16 @@ export function Upgrade() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-muted/50 p-6">
-      <div className="max-w-7xl mx-auto">
+    <DashboardLayout>
+      <div className="container mx-auto p-3 sm:p-4 lg:p-6">
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-4">Choose Your Plan</h1>
           <p className="text-xl text-muted-foreground mb-6">
-            Upgrade from your trial to unlock the full power of property management
+            Upgrade to unlock the full power of property management
           </p>
           
-          {trialStatus && (
+          {trialStatus && trialStatus.status === 'trial' && (
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
               <span className="text-blue-700 font-medium">
                 {trialDaysRemaining > 0 
@@ -151,18 +259,34 @@ export function Upgrade() {
         </div>
 
         {/* Pricing Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-          {billingPlans.map((plan) => (
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+            <p className="text-muted-foreground mt-4">Loading plans...</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+            {billingPlans.map((plan) => (
             <Card 
               key={plan.id}
               className={`relative cursor-pointer transition-all duration-200 ${
-                selectedPlan === plan.id 
-                  ? 'ring-2 ring-primary shadow-lg scale-105' 
-                  : 'hover:shadow-lg hover:scale-102'
+                isCurrentPlan(plan.id)
+                  ? 'ring-2 ring-green-500 shadow-lg border-green-200 bg-green-50/50'
+                  : selectedPlan === plan.id 
+                    ? 'ring-2 ring-primary shadow-lg scale-105' 
+                    : 'hover:shadow-lg hover:scale-102'
               } ${plan.popular ? 'border-primary' : ''}`}
-              onClick={() => handlePlanSelect(plan.id)}
+              onClick={() => !isCurrentPlan(plan.id) && handlePlanSelect(plan.id)}
             >
-              {plan.popular && (
+              {isCurrentPlan(plan.id) && (
+                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                  <Badge className="bg-green-500 text-white px-3 py-1">
+                    Current Plan
+                  </Badge>
+                </div>
+              )}
+              
+              {plan.popular && !isCurrentPlan(plan.id) && (
                 <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
                   <Badge className="bg-primary text-primary-foreground px-3 py-1">
                     Most Popular
@@ -170,7 +294,7 @@ export function Upgrade() {
                 </div>
               )}
               
-              {plan.recommended && (
+              {plan.recommended && !isCurrentPlan(plan.id) && (
                 <div className="absolute top-4 right-4">
                   <Badge variant="secondary">Recommended</Badge>
                 </div>
@@ -183,14 +307,37 @@ export function Upgrade() {
                 <CardTitle className="text-2xl">{plan.name}</CardTitle>
                 <CardDescription>{plan.description}</CardDescription>
                 <div className="mt-4">
-                  <span className="text-4xl font-bold">${plan.price}</span>
-                  <span className="text-muted-foreground">/{plan.billing_cycle}</span>
+                  {plan.is_custom ? (
+                    <div className="text-center">
+                      <span className="text-2xl font-bold text-muted-foreground">Custom pricing</span>
+                      <p className="text-sm text-muted-foreground mt-1">Contact us for pricing</p>
+                    </div>
+                  ) : plan.billing_model === 'percentage' ? (
+                    <div className="text-center">
+                      <span className="text-4xl font-bold">{plan.percentage_rate}%</span>
+                      <p className="text-sm text-muted-foreground mt-1">of rent collected</p>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="text-4xl font-bold">
+                        {formatAmount(plan.price, plan.currency || getGlobalCurrencySync())}
+                      </span>
+                      <span className="text-muted-foreground">/{plan.billing_cycle}</span>
+                      {plan.currency && (
+                        <div className="mt-1">
+                          <Badge variant="secondary" className="text-xs">
+                            {plan.currency}
+                          </Badge>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </CardHeader>
 
               <CardContent className="pt-0">
                 <ul className="space-y-3 mb-6">
-                  {plan.features.map((feature, index) => (
+                  {getDisplayFeatures(plan.features).map((feature, index) => (
                     <li key={index} className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-green-500" />
                       <span className="text-sm">{feature}</span>
@@ -200,34 +347,41 @@ export function Upgrade() {
 
                 <Button 
                   className="w-full" 
-                  variant={selectedPlan === plan.id ? "default" : "outline"}
+                  variant={isCurrentPlan(plan.id) ? "secondary" : selectedPlan === plan.id ? "default" : "outline"}
                   size="lg"
+                  disabled={isCurrentPlan(plan.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (plan.is_custom && plan.contact_link) {
+                      window.open(plan.contact_link, '_blank');
+                    } else if (!isCurrentPlan(plan.id)) {
+                      handlePlanSelect(plan.id);
+                    }
+                  }}
                 >
-                  {selectedPlan === plan.id ? "Selected" : "Select Plan"}
+                  {isCurrentPlan(plan.id) ? (
+                    <span className="flex items-center gap-2">
+                      <Shield className="h-4 w-4" />
+                      Current Plan
+                    </span>
+                  ) : plan.is_custom ? "Contact Us" : 
+                    selectedPlan === plan.id ? "Selected" : "Select Plan"}
                 </Button>
               </CardContent>
             </Card>
-          ))}
-        </div>
-
-        {/* Action Section */}
-        {selectedPlan && (
-          <div className="bg-card border rounded-lg p-6 text-center">
-            <h3 className="text-xl font-semibold mb-2">Ready to upgrade?</h3>
-            <p className="text-muted-foreground mb-4">
-              You've selected the {billingPlans.find(p => p.id === selectedPlan)?.name} plan.
-              Click below to complete your upgrade.
-            </p>
-            <Button 
-              size="lg" 
-              onClick={handleUpgrade}
-              disabled={isProcessing}
-              className="min-w-48"
-            >
-              {isProcessing ? "Processing..." : "Upgrade Now"}
-            </Button>
+            ))}
           </div>
         )}
+
+        {/* Upgrade Confirmation Modal */}
+        <UpgradeConfirmationModal
+          open={confirmModalOpen}
+          onOpenChange={setConfirmModalOpen}
+          onConfirm={handleUpgrade}
+          selectedPlan={selectedPlan ? billingPlans.find(p => p.id === selectedPlan) : undefined}
+          isProcessing={isProcessing}
+          requireOtp={false} // Set to true if you want OTP verification
+        />
 
         {/* Benefits Section */}
         <div className="mt-16 text-center">
@@ -263,6 +417,6 @@ export function Upgrade() {
           </div>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

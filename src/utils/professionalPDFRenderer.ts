@@ -124,39 +124,62 @@ export class ProfessionalPDFRenderer {
   }
 
   private addKPICards(kpiData: Array<{ label: string; value: string; color?: string }>): void {
-    this.checkPageBreak(30);
+    this.checkPageBreak(40);
     
     this.pdf.setTextColor(26, 30, 63);
     this.pdf.setFontSize(14);
     this.pdf.setFont('helvetica', 'bold');
     this.pdf.text('Key Performance Indicators', this.margins.left, this.currentY);
-    this.currentY += 10;
+    this.currentY += 12;
     
-    const cardWidth = (this.pageWidth - this.margins.left - this.margins.right - 15) / 4;
-    const cardHeight = 20;
+    const cardSpacing = 6;
+    const cardWidth = (this.pageWidth - this.margins.left - this.margins.right - (3 * cardSpacing)) / 4;
+    const cardHeight = 32; // Increased height for better padding
+    const cardPadding = Math.max(6, cardWidth * 0.06); // Dynamic padding
     
     kpiData.slice(0, 4).forEach((kpi, index) => {
-      const x = this.margins.left + index * (cardWidth + 5);
+      const x = this.margins.left + index * (cardWidth + cardSpacing);
       
-      // Card background
-      this.pdf.setFillColor(245, 245, 245); // Light grey
+      // Card background with subtle gradient effect
+      this.pdf.setFillColor(248, 250, 252); // Very light blue-grey
       this.pdf.rect(x, this.currentY, cardWidth, cardHeight, 'F');
       
-      // Card border
+      // Enhanced card border
       this.pdf.setDrawColor(26, 30, 63);
+      this.pdf.setLineWidth(0.5);
       this.pdf.rect(x, this.currentY, cardWidth, cardHeight);
       
-      // KPI label
-      this.pdf.setTextColor(108, 117, 125);
-      this.pdf.setFontSize(8);
-      this.pdf.setFont('helvetica', 'normal');
-      this.pdf.text(kpi.label, x + 2, this.currentY + 6);
+      // Add subtle inner shadow effect
+      this.pdf.setDrawColor(230, 230, 230);
+      this.pdf.setLineWidth(0.2);
+      this.pdf.line(x + 0.5, this.currentY + 0.5, x + cardWidth - 0.5, this.currentY + 0.5);
+      this.pdf.line(x + 0.5, this.currentY + 0.5, x + 0.5, this.currentY + cardHeight - 0.5);
       
-      // KPI value
+      // KPI Value with enhanced positioning and fitting
       this.pdf.setTextColor(26, 30, 63);
-      this.pdf.setFontSize(12);
       this.pdf.setFont('helvetica', 'bold');
-      this.pdf.text(kpi.value, x + 2, this.currentY + 15);
+      
+      const maxValueWidth = cardWidth - cardPadding * 2;
+      const fittedValue = this.fitCurrencyTextInWidth(kpi.value, maxValueWidth, 14, 9);
+      this.pdf.setFontSize(fittedValue.fontSize);
+      
+      // Center-align value text
+      const valueWidth = this.pdf.getTextWidth(fittedValue.text);
+      const valueCenterX = x + (cardWidth - valueWidth) / 2;
+      this.pdf.text(fittedValue.text, valueCenterX, this.currentY + cardHeight * 0.45);
+      
+      // KPI label with better positioning
+      this.pdf.setTextColor(100, 116, 139); // Slightly darker grey for better contrast
+      this.pdf.setFont('helvetica', 'normal');
+      
+      const maxLabelWidth = cardWidth - cardPadding * 2;
+      const fittedLabel = this.fitTextInWidth(kpi.label, maxLabelWidth, 8, 6);
+      this.pdf.setFontSize(fittedLabel.fontSize);
+      
+      // Center-align label text
+      const labelWidth = this.pdf.getTextWidth(fittedLabel.text);
+      const labelCenterX = x + (cardWidth - labelWidth) / 2;
+      this.pdf.text(fittedLabel.text, labelCenterX, this.currentY + cardHeight - 7);
     });
     
     this.currentY += cardHeight + 15;
@@ -243,6 +266,137 @@ export class ProfessionalPDFRenderer {
     this.pdf.text('Phone: +254-757-878-023', this.margins.left, footerY + 9);
     this.pdf.text('Email: info@ziratech.com', this.margins.left, footerY + 13);
     this.pdf.text('Website: zira-tech.com', this.margins.left, footerY + 17);
+  }
+
+  private getCompactValue(text: string): string {
+    // Extract numeric value for compact formatting
+    const numericMatch = text.match(/([\d,.-]+)/);
+    if (!numericMatch) return text;
+    
+    const numStr = numericMatch[1].replace(/,/g, '');
+    const num = parseFloat(numStr);
+    
+    if (isNaN(num)) return text;
+    
+    // Format large numbers compactly
+    const prefix = text.substring(0, text.indexOf(numericMatch[1]));
+    const suffix = text.substring(text.indexOf(numericMatch[1]) + numericMatch[1].length);
+    
+    if (Math.abs(num) >= 1000000) {
+      return `${prefix}${(num / 1000000).toFixed(1)}M${suffix}`;
+    } else if (Math.abs(num) >= 1000) {
+      return `${prefix}${(num / 1000).toFixed(1)}K${suffix}`;
+    }
+    
+    return text;
+  }
+
+  private fitCurrencyTextInWidth(text: string, maxWidth: number, maxFontSize: number = 12, minFontSize: number = 6): { text: string; fontSize: number } {
+    let fontSize = maxFontSize;
+    
+    // Extract currency symbol and numeric part
+    const currencyMatch = text.match(/([^\d\s,.-]+)?\s*([\d,.-]+)\s*([^\d\s,.-]+)?/);
+    const prefix = currencyMatch?.[1] || '';
+    const number = currencyMatch?.[2] || text;
+    const suffix = currencyMatch?.[3] || '';
+    
+    // Try original text at different font sizes
+    while (fontSize >= minFontSize) {
+      this.pdf.setFontSize(fontSize);
+      const textWidth = this.pdf.getTextWidth(text);
+      
+      if (textWidth <= maxWidth) {
+        return { text, fontSize };
+      }
+      
+      fontSize -= 0.5;
+    }
+    
+    // If still too wide, try compact formatting
+    const compactText = this.getCompactValue(text);
+    fontSize = maxFontSize;
+    
+    while (fontSize >= minFontSize) {
+      this.pdf.setFontSize(fontSize);
+      const textWidth = this.pdf.getTextWidth(compactText);
+      
+      if (textWidth <= maxWidth) {
+        return { text: compactText, fontSize };
+      }
+      
+      fontSize -= 0.5;
+    }
+    
+    // Last resort: truncate with ellipsis
+    fontSize = minFontSize;
+    this.pdf.setFontSize(fontSize);
+    
+    let truncated = text;
+    while (this.pdf.getTextWidth(truncated + '...') > maxWidth && truncated.length > 3) {
+      truncated = truncated.slice(0, -1);
+    }
+    
+    return { text: truncated + '...', fontSize };
+  }
+
+  private fitTextInWidth(text: string, maxWidth: number, maxFontSize: number = 12, minFontSize: number = 6): { text: string; fontSize: number } {
+    let fontSize = maxFontSize;
+    let fittedText = text;
+    
+    // Try original text at different font sizes
+    while (fontSize >= minFontSize) {
+      this.pdf.setFontSize(fontSize);
+      const textWidth = this.pdf.getTextWidth(fittedText);
+      
+      if (textWidth <= maxWidth) {
+        return { text: fittedText, fontSize };
+      }
+      
+      fontSize -= 0.5;
+    }
+    
+    // If still doesn't fit, try compact number formatting
+    const numberMatch = text.match(/[\d,]+\.?\d*/);
+    if (numberMatch) {
+      const numStr = numberMatch[0].replace(/,/g, '');
+      const num = parseFloat(numStr);
+      if (!isNaN(num)) {
+        if (num >= 1000000) {
+          fittedText = `${(num / 1000000).toFixed(1)}M`;
+        } else if (num >= 1000) {
+          fittedText = `${(num / 1000).toFixed(1)}K`;
+        }
+        
+        // Try again with formatted number
+        fontSize = maxFontSize;
+        while (fontSize >= minFontSize) {
+          this.pdf.setFontSize(fontSize);
+          const textWidth = this.pdf.getTextWidth(fittedText);
+          
+          if (textWidth <= maxWidth) {
+            return { text: fittedText, fontSize };
+          }
+          
+          fontSize -= 0.5;
+        }
+      }
+    }
+    
+    // Last resort: truncate with ellipsis
+    fontSize = minFontSize;
+    this.pdf.setFontSize(fontSize);
+    while (fittedText.length > 0) {
+      const testText = fittedText.length <= 3 ? fittedText : fittedText.substring(0, fittedText.length - 3) + '...';
+      const textWidth = this.pdf.getTextWidth(testText);
+      
+      if (textWidth <= maxWidth) {
+        return { text: testText, fontSize };
+      }
+      
+      fittedText = fittedText.substring(0, fittedText.length - 1);
+    }
+    
+    return { text: '...', fontSize: minFontSize };
   }
 
   public async generatePDF(data: PDFReportData): Promise<void> {

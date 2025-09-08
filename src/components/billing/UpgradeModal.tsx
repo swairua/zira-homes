@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Check, Star, Crown, Zap, X, Loader2 } from "lucide-react";
+import { Check, Star, Crown, Zap, X, Loader2, ArrowRight } from "lucide-react";
 import { useTrialManagement } from "@/hooks/useTrialManagement";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -27,6 +27,8 @@ interface BillingPlan {
   max_units: number | null;
   sms_credits_included: number;
   is_active: boolean;
+  is_custom?: boolean;
+  contact_link?: string;
   recommended?: boolean;
   popular?: boolean;
 }
@@ -57,7 +59,7 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
       
       const { data, error } = await supabase
         .from('billing_plans')
-        .select('*')
+        .select('*, is_custom, contact_link')
         .eq('is_active', true)
         .neq('name', 'Free Trial') // Exclude trial plans from upgrade options
         .order('price', { ascending: true });
@@ -95,14 +97,21 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
       return;
     }
 
+    const selectedPlanData = billingPlans.find(p => p.id === selectedPlan);
+    if (!selectedPlanData) {
+      toast.error("Selected plan not found");
+      return;
+    }
+
+    // Handle custom plans by opening contact link
+    if (selectedPlanData.is_custom && selectedPlanData.contact_link) {
+      window.open(selectedPlanData.contact_link, '_blank');
+      return;
+    }
+
     setIsProcessing(true);
     
     try {
-      const selectedPlanData = billingPlans.find(p => p.id === selectedPlan);
-      if (!selectedPlanData) {
-        throw new Error("Selected plan not found");
-      }
-
       console.log('🚀 Starting upgrade process for plan:', selectedPlanData.name);
 
       // For commission-based plans, activate directly without payment setup
@@ -276,7 +285,14 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
                 <CardTitle className="text-xl">{plan.name}</CardTitle>
                 <CardDescription className="text-sm">{plan.description}</CardDescription>
                 <div className="mt-3">
-                  {plan.billing_model === 'percentage' && plan.percentage_rate ? (
+                  {plan.is_custom ? (
+                    <>
+                      <span className="text-3xl font-bold text-primary">
+                        Custom
+                      </span>
+                      <span className="text-muted-foreground text-sm block">pricing available</span>
+                    </>
+                  ) : plan.billing_model === 'percentage' && plan.percentage_rate ? (
                     <>
                       <span className="text-3xl font-bold text-primary">
                         {plan.percentage_rate}%
@@ -320,8 +336,16 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
                   className="w-full" 
                   variant={selectedPlan === plan.id ? "default" : "outline"}
                   size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (plan.is_custom && plan.contact_link) {
+                      window.open(plan.contact_link, '_blank');
+                    } else {
+                      handlePlanSelect(plan.id);
+                    }
+                  }}
                 >
-                  {selectedPlan === plan.id ? "Selected" : "Select Plan"}
+                  {plan.is_custom ? "Contact Us" : (selectedPlan === plan.id ? "Selected" : "Select Plan")}
                 </Button>
               </CardContent>
             </Card>
@@ -330,7 +354,7 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
         </div>
 
         {/* Action Section */}
-        {selectedPlan && (
+        {selectedPlan && !billingPlans.find(p => p.id === selectedPlan)?.is_custom && (
           <div className="bg-muted/50 border rounded-lg p-6 text-center">
             <h3 className="text-lg font-semibold mb-2">
               {billingPlans.find(p => p.id === selectedPlan)?.billing_model === 'percentage' 
@@ -378,6 +402,21 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
 
         {/* Benefits Footer */}
         <div className="border-t pt-4 mt-4">
+          <div className="flex items-center justify-between mb-4">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => {
+                onClose();
+                window.location.href = '/billing';
+              }}
+              className="text-primary hover:text-primary/80"
+            >
+              See all plans & features
+              <ArrowRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+          
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
               <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-2">

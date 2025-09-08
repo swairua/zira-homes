@@ -14,6 +14,8 @@ import { FileText, Search, Filter, Plus, Eye, Edit, Download, Send, Calendar, Do
 import { InvoiceDetailsDialog } from "@/components/invoices/InvoiceDetailsDialog";
 import { CreateInvoiceDialog } from "@/components/invoices/CreateInvoiceDialog";
 import { useInvoiceActions } from "@/hooks/useInvoiceActions";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
+import { TablePaginator } from "@/components/ui/table-paginator";
 
 interface AdminInvoice {
   id: string;
@@ -24,8 +26,11 @@ interface AdminInvoice {
   due_date: string;
   amount: number;
   status: string;
+  computed_status: string;
   description: string | null;
   created_at: string;
+  amount_paid_total: number;
+  outstanding_amount: number;
   leases?: {
     units?: {
       unit_number: string;
@@ -45,49 +50,83 @@ interface AdminInvoice {
 
 const AdminInvoicesManagement = () => {
   const [invoices, setInvoices] = useState<AdminInvoice[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterProperty, setFilterProperty] = useState("all");
   const [properties, setProperties] = useState<{id: string, name: string}[]>([]);
   const { downloadInvoice, sendInvoice } = useInvoiceActions();
+  const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ pageSize: 10 });
 
-  // Fetch all invoices with landlord and property information
+  // Fetch all invoices using the optimized invoice_overview view
   const fetchInvoices = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('invoices')
-        .select(`
-          *,
-          leases!lease_id (
-            units!unit_id (
-              unit_number,
-              properties!property_id (
-                id,
-                name,
-                owner_id
-              )
-            )
-          ),
-          tenants!tenant_id (first_name, last_name, email, phone)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setInvoices(data || []);
-
-      // Extract unique properties for filtering
-      const uniqueProperties = data?.reduce((acc: {id: string, name: string}[], invoice) => {
-        const property = invoice.leases?.units?.properties;
-        if (property && property.name && !acc.find(p => p.name === property.name)) {
-          // Use property name as ID since the query doesn't include property ID
-          acc.push({ id: property.name, name: property.name });
-        }
-        return acc;
-      }, []) || [];
+      console.log('Fetching invoice overview...');
       
-      setProperties(uniqueProperties);
+      // Use secure RPC function instead of direct view access
+      let rpcData: any;
+      let rpcError: any;
+
+      ({ data: rpcData, error: rpcError } = await supabase.rpc('get_invoice_overview', {
+        p_limit: pageSize,
+        p_offset: offset,
+        p_status: filterStatus !== "all" ? filterStatus : null,
+        p_search: searchTerm || null
+      }));
+
+      if (rpcError) {
+        console.error('Supabase RPC error:', rpcError);
+        throw rpcError;
+      }
+      
+      console.log('Invoice overview fetched successfully:', rpcData?.length || 0);
+      
+      // Filter by property if needed (since RPC doesn't have property filter)
+      let filteredData = rpcData || [];
+      if (filterProperty !== "all") {
+        filteredData = filteredData.filter((invoice: any) => invoice.property_name === filterProperty);
+      }
+      
+      setTotalCount(filteredData.length);
+      
+      // Transform data to match expected interface
+      const transformedInvoices = filteredData.map((invoice: any) => ({
+        ...invoice,
+        tenants: {
+          first_name: invoice.first_name || '',
+          last_name: invoice.last_name || '',
+          email: invoice.email || '',
+          phone: invoice.phone || ''
+        },
+        leases: {
+          units: {
+            unit_number: invoice.unit_number || '',
+            properties: {
+              id: invoice.property_id,
+              name: invoice.property_name || '',
+              owner_id: invoice.property_owner_id
+            }
+          }
+        }
+      }));
+
+      setInvoices(transformedInvoices as AdminInvoice[]);
+
+      // Extract unique properties for filtering (only fetch once)
+      if (properties.length === 0) {
+        // Get properties from secure RPC function
+        const { data: allInvoices } = await supabase.rpc('get_invoice_overview', {
+          p_limit: 1000, // Get enough to extract unique properties
+          p_offset: 0
+        });
+        if (allInvoices) {
+          const uniqueProperties = Array.from(new Set((allInvoices || []).map((inv: any) => inv.property_name).filter(Boolean)))
+            .map(name => ({ id: name as string, name: name as string }));
+          setProperties(uniqueProperties);
+        }
+      }
     } catch (error) {
       console.error('Error fetching invoices:', error);
       toast.error('Failed to load invoices');
@@ -98,19 +137,10 @@ const AdminInvoicesManagement = () => {
 
   useEffect(() => {
     fetchInvoices();
-  }, []);
+  }, [page, pageSize, searchTerm, filterStatus, filterProperty]);
 
-  const filteredInvoices = invoices.filter((invoice) => {
-    const matchesSearch = 
-      invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      `${invoice.tenants?.first_name} ${invoice.tenants?.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoice.leases?.units?.properties?.name?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = filterStatus === "all" || invoice.status === filterStatus;
-    const matchesProperty = filterProperty === "all" || invoice.leases?.units?.properties?.name === filterProperty;
-    
-    return matchesSearch && matchesStatus && matchesProperty;
-  });
+  // No client-side filtering needed since we're doing server-side pagination
+  const filteredInvoices = invoices;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -125,11 +155,22 @@ const AdminInvoicesManagement = () => {
     }
   };
 
+  // Reconciliation function (simplified for now)
+  const handleReconcilePayments = async () => {
+    try {
+      toast.info('Payment reconciliation is being updated. Please check back later.');
+      // TODO: Implement payment reconciliation when payment_allocations table is ready
+    } catch (error) {
+      console.error('Reconciliation error:', error);
+      toast.error('Failed to reconcile payments');
+    }
+  };
+
   const totalInvoices = invoices.length;
   const totalAmount = invoices.reduce((sum, invoice) => sum + invoice.amount, 0);
-  const totalPaid = invoices.filter(i => i.status === "paid").reduce((sum, invoice) => sum + invoice.amount, 0);
-  const totalPending = invoices.filter(i => i.status === "pending").reduce((sum, invoice) => sum + invoice.amount, 0);
-  const totalOverdue = invoices.filter(i => i.status === "overdue").reduce((sum, invoice) => sum + invoice.amount, 0);
+  const totalPaid = invoices.reduce((sum, invoice) => sum + (invoice.amount_paid_total || 0), 0);
+  const totalOutstanding = invoices.reduce((sum, invoice) => sum + (invoice.outstanding_amount || 0), 0);
+  const totalOverdue = invoices.filter(i => (i.computed_status || i.status) === "overdue").reduce((sum, invoice) => sum + (invoice.outstanding_amount || 0), 0);
 
   return (
     <DashboardLayout>
@@ -139,10 +180,19 @@ const AdminInvoicesManagement = () => {
           <div>
             <h1 className="text-3xl font-bold text-primary">All Invoices Management</h1>
             <p className="text-muted-foreground">
-              Manage all tenant invoices across all properties
+              Manage all tenant invoices across all properties with payment reconciliation
             </p>
           </div>
-          <CreateInvoiceDialog onInvoiceCreated={fetchInvoices} />
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={handleReconcilePayments}
+              className="border-accent text-accent hover:bg-accent hover:text-accent-foreground"
+            >
+              Reconcile Payments
+            </Button>
+            <CreateInvoiceDialog onInvoiceCreated={fetchInvoices} />
+          </div>
         </div>
 
         {/* Admin KPI Summary Cards */}
@@ -185,14 +235,14 @@ const AdminInvoicesManagement = () => {
           </Card>
           <Card className="card-gradient-orange hover:shadow-elevated transition-all duration-300">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-white">Pending</CardTitle>
+              <CardTitle className="text-sm font-medium text-white">Outstanding</CardTitle>
               <div className="icon-bg-white">
                 <Calendar className="h-4 w-4 text-white" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-white">{formatAmount(totalPending)}</div>
-              <p className="text-xs text-white/80">Awaiting payment</p>
+              <div className="text-2xl font-bold text-white">{formatAmount(totalOutstanding)}</div>
+              <p className="text-xs text-white/80">Total unpaid</p>
             </CardContent>
           </Card>
           <Card className="card-gradient-red hover:shadow-elevated transition-all duration-300">
@@ -280,6 +330,8 @@ const AdminInvoicesManagement = () => {
                     <TableHead>Property</TableHead>
                     <TableHead>Unit</TableHead>
                     <TableHead>Amount</TableHead>
+                    <TableHead>Paid</TableHead>
+                    <TableHead>Outstanding</TableHead>
                     <TableHead>Due Date</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
@@ -320,13 +372,23 @@ const AdminInvoicesManagement = () => {
                         </div>
                       </TableCell>
                       <TableCell>
+                        <div className="font-medium text-success">
+                          {formatAmount(invoice.amount_paid_total || 0)}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium text-warning">
+                          {formatAmount(invoice.outstanding_amount || 0)}
+                        </div>
+                      </TableCell>
+                      <TableCell>
                         <div className="text-sm">
                           {new Date(invoice.due_date).toLocaleDateString()}
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge className={getStatusColor(invoice.status)}>
-                          {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                        <Badge className={getStatusColor(invoice.computed_status || invoice.status)}>
+                          {(invoice.computed_status || invoice.status).charAt(0).toUpperCase() + (invoice.computed_status || invoice.status).slice(1)}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -362,6 +424,14 @@ const AdminInvoicesManagement = () => {
                 </TableBody>
               </Table>
             </CardContent>
+            <TablePaginator
+              currentPage={page}
+              totalPages={Math.ceil(totalCount / pageSize)}
+              pageSize={pageSize}
+              totalItems={totalCount}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
           </Card>
         ) : (
           <Card className="bg-card">

@@ -55,6 +55,14 @@ export function OptimizedTable({
     setCurrentPage(0);
   };
 
+  const getAlignmentClass = (align?: string) => {
+    switch (align) {
+      case 'center': return 'text-center';
+      case 'right': return 'text-right';
+      default: return 'text-left';
+    }
+  };
+
   if (!data || data.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
@@ -65,12 +73,15 @@ export function OptimizedTable({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-md border">
+      <div className="rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
               {columns.map((column) => (
-                <TableHead key={column.key} className={`text-${column.align || 'left'}`}>
+                <TableHead 
+                  key={column.key} 
+                  className={`${getAlignmentClass(column.align)} whitespace-nowrap px-2 py-2 text-xs font-semibold`}
+                >
                   {column.label}
                 </TableHead>
               ))}
@@ -82,12 +93,33 @@ export function OptimizedTable({
                 {columns.map((column) => (
                   <TableCell 
                     key={column.key} 
-                    className={`text-${column.align || 'left'}`}
+                    className={`${getAlignmentClass(column.align)} text-sm px-2 py-2 ${
+                      column.key === 'description' ? 'max-w-[300px]' : 'max-w-[150px]'
+                    }`}
+                    title={row[column.key]?.toString() || '-'}
                   >
                     {column.format ? (
-                      formatValue(row[column.key], column.format, column.decimals)
+                      <span className="font-mono">
+                        {(() => {
+                          try {
+                            return formatValue(row[column.key], column.format, column.decimals);
+                          } catch (error) {
+                            console.warn('Table formatting error:', { 
+                              value: row[column.key], 
+                              format: column.format, 
+                              column: column.key, 
+                              error 
+                            });
+                            return '-';
+                          }
+                        })()}
+                      </span>
                     ) : (
-                      row[column.key]?.toString() || '-'
+                      <span className={`block ${
+                        column.key === 'description' ? 'whitespace-normal break-words' : 'truncate'
+                      }`}>
+                        {row[column.key]?.toString() || '-'}
+                      </span>
                     )}
                   </TableCell>
                 ))}

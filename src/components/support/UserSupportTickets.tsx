@@ -18,6 +18,7 @@ import {
   Calendar
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { TablePaginator } from "@/components/ui/table-paginator";
 
 interface SupportTicket {
   id: string;
@@ -55,6 +56,8 @@ export function UserSupportTickets() {
   const [replyMessage, setReplyMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
     if (user) {
@@ -185,6 +188,11 @@ export function UserSupportTickets() {
     );
   }
 
+  // Pagination logic
+  const totalPages = Math.ceil(tickets.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedTickets = tickets.slice(startIndex, startIndex + pageSize);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
@@ -203,54 +211,66 @@ export function UserSupportTickets() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {tickets.map((ticket) => (
-            <Card 
-              key={ticket.id} 
-              className="cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => handleTicketClick(ticket)}
-            >
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="space-y-2">
-                    <CardTitle className="text-lg line-clamp-1">{ticket.title}</CardTitle>
-                    <CardDescription className="line-clamp-2">
-                      {ticket.description}
-                    </CardDescription>
-                  </div>
-                  <div className="flex flex-col gap-2 items-end">
-                    <div className="flex items-center gap-2">
-                      <Badge className={getStatusColor(ticket.status)}>
-                        {getStatusIcon(ticket.status)}
-                        <span className="ml-1 capitalize">{ticket.status.replace('_', ' ')}</span>
-                      </Badge>
-                      <Badge className={getPriorityColor(ticket.priority)}>
-                        <span className="capitalize">{ticket.priority}</span>
-                      </Badge>
+        <>
+          <div className="space-y-4">
+            {paginatedTickets.map((ticket) => (
+              <Card 
+                key={ticket.id} 
+                className="cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => handleTicketClick(ticket)}
+              >
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-2">
+                      <CardTitle className="text-lg line-clamp-1">{ticket.title}</CardTitle>
+                      <CardDescription className="line-clamp-2">
+                        {ticket.description}
+                      </CardDescription>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })}
+                    <div className="flex flex-col gap-2 items-end">
+                      <div className="flex items-center gap-2">
+                        <Badge className={getStatusColor(ticket.status)}>
+                          {getStatusIcon(ticket.status)}
+                          <span className="ml-1 capitalize">{ticket.status.replace('_', ' ')}</span>
+                        </Badge>
+                        <Badge className={getPriorityColor(ticket.priority)}>
+                          <span className="capitalize">{ticket.priority}</span>
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <span>Category: {ticket.category}</span>
-                    <span className="flex items-center gap-1">
-                      <MessageCircle className="h-3 w-3" />
-                      {ticket.messages?.length || 0} messages
-                    </span>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>Category: {ticket.category}</span>
+                      <span className="flex items-center gap-1">
+                        <MessageCircle className="h-3 w-3" />
+                        {ticket.messages?.length || 0} messages
+                      </span>
+                    </div>
+                    <Button variant="outline" size="sm">
+                      View Details
+                    </Button>
                   </div>
-                  <Button variant="outline" size="sm">
-                    View Details
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          
+          <TablePaginator
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            totalItems={tickets.length}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            showPageSizeSelector={true}
+          />
+        </>
       )}
 
       {/* Ticket Details Dialog */}

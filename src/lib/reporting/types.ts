@@ -52,11 +52,14 @@ export interface ReportData {
   kpis: Record<string, number>;
   charts: Record<string, any[]>;
   table?: any[];
+  comparisonMode?: 'portfolio' | 'market';
 }
 
 export interface ReportFilters {
-  periodPreset: PeriodPreset;
+  periodPreset?: PeriodPreset;
   startDate?: string;
   endDate?: string;
   propertyId?: string;
+  tableOnly?: boolean;
+  comparisonMode?: 'portfolio' | 'market';
 }

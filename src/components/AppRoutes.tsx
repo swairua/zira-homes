@@ -4,20 +4,22 @@ import { ProtectedRoute } from "./ProtectedRoute";
 import { RoleBasedRoute } from "./RoleBasedRoute";
 import { DashboardLayout } from "./DashboardLayout";
 import { TenantLayout } from "./TenantLayout";
+import { PlanAccessProvider } from "@/context/PlanAccessContext";
 
 // Import existing pages
 import Auth from "../pages/Auth";
 import Index from "../pages/Index";
 import NotFound from "../pages/NotFound";
 
-// Existing tenant pages
-import TenantDashboard from "../pages/tenant/TenantDashboard";
-import TenantMaintenance from "../pages/tenant/TenantMaintenance";
-import TenantMessages from "../pages/tenant/TenantMessages";
-import TenantPaymentPreferences from "../pages/tenant/TenantPaymentPreferences";
-import TenantPayments from "../pages/tenant/TenantPayments";
-import TenantProfile from "../pages/tenant/TenantProfile";
-import TenantSupport from "../pages/tenant/TenantSupport";
+// Lazy load tenant pages for better performance
+const TenantDashboard = React.lazy(() => import("../pages/tenant/TenantDashboard"));
+const TenantMaintenance = React.lazy(() => import("../pages/tenant/TenantMaintenance"));
+const TenantMessages = React.lazy(() => import("../pages/tenant/TenantMessages"));
+const TenantPaymentPreferences = React.lazy(() => import("../pages/tenant/TenantPaymentPreferences"));
+const TenantPayments = React.lazy(() => import("../pages/tenant/TenantPayments"));
+const TenantProfile = React.lazy(() => import("../pages/tenant/TenantProfile"));
+const TenantSupport = React.lazy(() => import("../pages/tenant/TenantSupport"));
+const FeatureDemo = React.lazy(() => import("../pages/FeatureDemo"));
 
 // Existing landlord pages
 import Properties from "../pages/Properties";
@@ -44,8 +46,9 @@ import BillingSettings from "../pages/landlord/BillingSettings";
 import EmailTemplates from "../pages/landlord/EmailTemplates";
 import LandlordBillingPage from "../pages/landlord/LandlordBillingPage";
 import MessageTemplates from "../pages/landlord/MessageTemplates";
-import PaymentSettings from "../pages/PaymentSettings";
+import PaymentSettings from "../pages/landlord/PaymentSettings";
 import { Navigate } from "react-router-dom";
+import { LandlordOnlyRoute } from "./LandlordOnlyRoute";
 
 // Existing settings pages
 import UserManagement from "../pages/settings/UserManagement";
@@ -69,6 +72,7 @@ import SystemConfiguration from "../pages/admin/SystemConfiguration";
 import TrialManagement from "../pages/admin/TrialManagement";
 import AdminUserManagement from "../pages/admin/UserManagement";
 import SelfHostedMonitoring from "../pages/admin/SelfHostedMonitoring";
+import BillingPlanManager from "../pages/admin/BillingPlanManager";
 
 export const AppRoutes = () => {
   return (
@@ -76,21 +80,27 @@ export const AppRoutes = () => {
       {/* Public routes */}
       <Route path="/auth" element={<Auth />} />
       
-      {/* Tenant routes */}
+      {/* Tenant routes with lazy loading */}
       <Route
         path="/tenant/*"
         element={
           <ProtectedRoute>
             <RoleBasedRoute>
-              <Routes>
-                <Route path="/" element={<TenantDashboard />} />
-                <Route path="/maintenance" element={<TenantMaintenance />} />
-                <Route path="/messages" element={<TenantMessages />} />
-                <Route path="/payment-preferences" element={<TenantPaymentPreferences />} />
-                <Route path="/payments" element={<TenantPayments />} />
-                <Route path="/profile" element={<TenantProfile />} />
-                <Route path="/support" element={<TenantSupport />} />
-              </Routes>
+              <React.Suspense fallback={
+                <div className="flex items-center justify-center min-h-screen">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                </div>
+              }>
+                <Routes>
+                  <Route path="/" element={<TenantDashboard />} />
+                  <Route path="/maintenance" element={<TenantMaintenance />} />
+                  <Route path="/messages" element={<TenantMessages />} />
+                  <Route path="/payment-preferences" element={<TenantPaymentPreferences />} />
+                  <Route path="/payments" element={<TenantPayments />} />
+                  <Route path="/profile" element={<TenantProfile />} />
+                  <Route path="/support" element={<TenantSupport />} />
+                </Routes>
+              </React.Suspense>
             </RoleBasedRoute>
           </ProtectedRoute>
         }
@@ -102,8 +112,11 @@ export const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <RoleBasedRoute>
-              <Routes>
+              <PlanAccessProvider>
+                <Routes>
                 <Route path="/" element={<Index />} />
+                {/* Redirect from /agent/dashboard to main dashboard */}
+                <Route path="/agent/dashboard" element={<Navigate to="/" replace />} />
                 <Route path="/properties" element={<Properties />} />
                 <Route path="/units" element={<Units />} />
                 <Route path="/tenants" element={<Tenants />} />
@@ -116,10 +129,24 @@ export const AppRoutes = () => {
                 <Route path="/support" element={<Support />} />
                 <Route path="/notifications" element={<Notifications />} />
                 <Route path="/leases" element={<Leases />} />
-                <Route path="/sub-users" element={<SubUsers />} />
+                <Route path="/sub-users" element={
+                  <LandlordOnlyRoute>
+                    <SubUsers />
+                  </LandlordOnlyRoute>
+                } />
                 <Route path="/upgrade" element={<Upgrade />} />
                 <Route path="/upgrade-success" element={<UpgradeSuccess />} />
                 <Route path="/knowledge-base" element={<KnowledgeBase />} />
+                <Route path="/feature-demo" element={
+                  <React.Suspense fallback={
+                    <div className="flex items-center justify-center min-h-screen">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                    </div>
+                  }>
+                    <FeatureDemo />
+                  </React.Suspense>
+                } />
+                
                 
                 {/* Payment Settings Route (primary) */}
                 <Route path="/payment-settings" element={<PaymentSettings />} />
@@ -146,6 +173,7 @@ export const AppRoutes = () => {
                 {/* Settings routes */}
                 <Route path="/settings/users" element={<UserManagement />} />
               </Routes>
+              </PlanAccessProvider>
             </RoleBasedRoute>
           </ProtectedRoute>
         }
@@ -176,6 +204,7 @@ export const AppRoutes = () => {
                 <Route path="/trials" element={<TrialManagement />} />
                 <Route path="/users" element={<AdminUserManagement />} />
                 <Route path="/self-hosted" element={<SelfHostedMonitoring />} />
+                <Route path="/billing-plans" element={<BillingPlanManager />} />
               </Routes>
             </RoleBasedRoute>
           </ProtectedRoute>

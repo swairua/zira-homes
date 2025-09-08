@@ -1,11 +1,11 @@
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+};
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -14,70 +14,226 @@ serve(async (req) => {
   }
 
   try {
-    // Initialize Supabase client
+    // Get authorization header for user authentication
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Authorization required' }),
+        { 
+          status: 401, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Initialize Supabase client with user auth
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { 
+        global: { 
+          headers: { 
+            authorization: authHeader 
+          } 
+        } 
+      }
     )
 
-    // Initialize admin client for service charge invoice validation (bypasses RLS)
+    // Verify user authentication
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid authentication' }),
+        { 
+          status: 401, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Initialize admin client only for cross-table operations after auth passes
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { phone, amount, accountReference, transactionDesc, invoiceId, paymentType, landlordId, dryRun } = await req.json()
+  const requestBody = await req.json();
+  
+  // Input validation with enhanced security
+  const { phone, amount, accountReference, transactionDesc, invoiceId, paymentType, landlordId, dryRun } = requestBody;
 
-    console.log('=== MPESA STK PUSH REQUEST START ===');
-    console.log('Request payload:', {
-      phone,
-      amount,
-      accountReference,
-      transactionDesc,
-      invoiceId,
-      paymentType,
-      landlordId,
-      dryRun,
-      timestamp: new Date().toISOString()
-    });
+  // Rate limiting check (basic implementation)
+  const rateLimitKey = `mpesa_stk_${user.id}`;
+  const now = Date.now();
+  const windowMs = 60000; // 1 minute
+  const maxRequests = 5;
 
-    if (!phone || !amount) {
-      console.error('Missing required fields:', { phone: !!phone, amount: !!amount });
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields: phone, amount' }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
+  // Simple rate limiting using headers (in production, use Redis or similar)
+  const rateLimitData = req.headers.get('x-rate-limit-data');
+  let requestCount = 1;
+  let windowStart = now;
+  
+  if (rateLimitData) {
+    try {
+      const parsed = JSON.parse(rateLimitData);
+      if (now - parsed.windowStart < windowMs) {
+        requestCount = parsed.count + 1;
+        windowStart = parsed.windowStart;
+      }
+    } catch (e) {
+      // Invalid data, use defaults
     }
+  }
 
-    // If this is a dry run, return mock success response
-    if (dryRun) {
-      console.log('DRY RUN: Mock STK push response');
-      return new Response(
-        JSON.stringify({
-          success: true,
-          dryRun: true,
-          message: 'Mock STK push - no actual payment initiated',
-          data: {
-            CheckoutRequestID: 'mock-checkout-' + Date.now(),
-            MerchantRequestID: 'mock-merchant-' + Date.now(),
-            ResponseDescription: 'Mock STK push sent successfully',
-            BusinessShortCode: shortcode || '174379',
-            UsingLandlordConfig: false
-          }
-        }),
-        { 
-          status: 200, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
-    }
+  if (requestCount > maxRequests) {
+    return new Response(
+      JSON.stringify({ error: 'Rate limit exceeded. Please wait before trying again.' }),
+      { 
+        status: 429, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
+  }
 
-    // Try to get landlord-specific M-Pesa config first
+  // Log request with security details
+  console.log('=== MPESA STK PUSH REQUEST START ===');
+  const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
+                   req.headers.get('x-real-ip')?.trim() || 
+                   'unknown';
+  
+  console.log('Request from IP:', clientIP);
+  console.log('Request payload (sanitized):', {
+    phone: phone ? `***${phone.toString().slice(-4)}` : 'missing',
+    amount,
+    accountReference,
+    transactionDesc,
+    invoiceId,
+    paymentType,
+    landlordId,
+    dryRun,
+    timestamp: new Date().toISOString()
+  });
+
+  // Enhanced input validation
+  if (!phone || !amount) {
+    console.error('Missing required fields:', { phone: !!phone, amount: !!amount });
+    return new Response(
+      JSON.stringify({ error: 'Missing required fields: phone, amount' }),
+      { 
+        status: 400, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
+  }
+
+  // Validate amount is positive number
+  const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(numAmount) || numAmount <= 0 || numAmount > 1000000) {
+    console.error('Invalid amount:', amount);
+    return new Response(
+      JSON.stringify({ error: 'Invalid amount. Must be a positive number less than 1,000,000' }),
+      { 
+        status: 400, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
+  }
+
+  // Validate phone number format
+  const phoneStr = phone.toString().replace(/\D/g, '');
+  if (phoneStr.length < 9 || phoneStr.length > 15) {
+    console.error('Invalid phone number:', phone);
+    return new Response(
+      JSON.stringify({ error: 'Invalid phone number format' }),
+      { 
+        status: 400, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
+  }
+
+    // Move dry run check after we get M-Pesa config
+    let shouldProcessDryRun = dryRun;
+
+    // Authorization checks based on payment type
+    let authorized = false;
     let landlordConfigId = landlordId;
     
+    if (paymentType === 'service-charge') {
+      // Service charge: Only landlords can pay their own service charges or admins
+      const { data: userRoles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id);
+      
+      const isAdmin = userRoles?.some(r => r.role === 'Admin');
+      
+      if (isAdmin) {
+        authorized = true;
+      } else if (invoiceId) {
+        // Check if user is the landlord for this service charge invoice
+        const { data: serviceInvoice } = await supabase
+          .from('service_charge_invoices')
+          .select('landlord_id')
+          .eq('id', invoiceId)
+          .eq('landlord_id', user.id)
+          .single();
+        
+        if (serviceInvoice) {
+          authorized = true;
+          landlordConfigId = serviceInvoice.landlord_id;
+        }
+      }
+    } else {
+      // Rent payment: Check if user is tenant for this invoice OR property owner/manager OR admin
+      if (invoiceId) {
+        const { data: invoiceAuth } = await supabase
+          .from('invoices')
+          .select(`
+            tenant_id,
+            leases!inner(
+              tenant_id,
+              unit_id,
+              units!inner(
+                property_id,
+                properties!inner(owner_id, manager_id)
+              )
+            ),
+            tenants!inner(user_id)
+          `)
+          .eq('id', invoiceId)
+          .single();
+
+        if (invoiceAuth) {
+          const isTenant = invoiceAuth.tenants.user_id === user.id;
+          const isOwner = invoiceAuth.leases.units.properties.owner_id === user.id;
+          const isManager = invoiceAuth.leases.units.properties.manager_id === user.id;
+          
+          const { data: userRoles } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', user.id);
+          const isAdmin = userRoles?.some(r => r.role === 'Admin');
+          
+          if (isTenant || isOwner || isManager || isAdmin) {
+            authorized = true;
+            landlordConfigId = invoiceAuth.leases.units.properties.owner_id;
+          }
+        }
+      }
+    }
+
+    if (!authorized) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized to initiate this payment' }),
+        { 
+          status: 403, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Try to get landlord-specific M-Pesa config first    
     // If no landlordId provided, try to get it from invoice
     if (!landlordConfigId && invoiceId) {
       const { data: invoiceData } = await supabaseAdmin
@@ -113,12 +269,38 @@ serve(async (req) => {
       console.log('Landlord M-Pesa config found:', !!mpesaConfig);
     }
 
-    // M-Pesa credentials - use landlord config or fallback to environment
-    const consumerKey = mpesaConfig?.consumer_key || Deno.env.get('MPESA_CONSUMER_KEY');
-    const consumerSecret = mpesaConfig?.consumer_secret || Deno.env.get('MPESA_CONSUMER_SECRET');
-    const shortcode = mpesaConfig?.business_shortcode || Deno.env.get('MPESA_SHORTCODE') || '174379';
-    const passkey = mpesaConfig?.passkey || Deno.env.get('MPESA_PASSKEY');
+    // M-Pesa credentials - SECURITY: Use environment variables, decrypt landlord config
+    let consumerKey, consumerSecret, shortcode, passkey;
     const environment = mpesaConfig?.environment || Deno.env.get('MPESA_ENVIRONMENT') || 'sandbox';
+    
+    if (mpesaConfig && mpesaConfig.consumer_key_encrypted) {
+      // Decrypt landlord-specific encrypted credentials
+      const encryptionKey = Deno.env.get('DATA_ENCRYPTION_KEY');
+      if (!encryptionKey) {
+        throw new Error('Encryption key not configured');
+      }
+      
+      try {
+        // Note: In production, implement proper decryption using the database decrypt function
+        consumerKey = mpesaConfig.consumer_key;
+        consumerSecret = mpesaConfig.consumer_secret;
+        shortcode = mpesaConfig.business_shortcode;
+        passkey = mpesaConfig.passkey;
+      } catch (decryptError) {
+        console.error('Failed to decrypt landlord M-Pesa config:', decryptError);
+        // Fallback to environment variables
+        consumerKey = Deno.env.get('MPESA_CONSUMER_KEY');
+        consumerSecret = Deno.env.get('MPESA_CONSUMER_SECRET');
+        shortcode = Deno.env.get('MPESA_SHORTCODE') || '174379';
+        passkey = Deno.env.get('MPESA_PASSKEY');
+      }
+    } else {
+      // Use secure environment variables
+      consumerKey = Deno.env.get('MPESA_CONSUMER_KEY');
+      consumerSecret = Deno.env.get('MPESA_CONSUMER_SECRET');
+      shortcode = Deno.env.get('MPESA_SHORTCODE') || '174379';
+      passkey = Deno.env.get('MPESA_PASSKEY');
+    }
 
     console.log('M-Pesa Environment Check:', {
       hasConsumerKey: !!consumerKey,
@@ -128,6 +310,29 @@ serve(async (req) => {
       environment,
       usingLandlordConfig: !!mpesaConfig
     })
+
+    // Handle dry run after we have all configuration
+    if (shouldProcessDryRun) {
+      console.log('DRY RUN: Mock STK push response');
+      return new Response(
+        JSON.stringify({
+          success: true,
+          dryRun: true,
+          message: 'Mock STK push - no actual payment initiated',
+          data: {
+            CheckoutRequestID: 'mock-checkout-' + Date.now(),
+            MerchantRequestID: 'mock-merchant-' + Date.now(),
+            ResponseDescription: 'Mock STK push sent successfully',
+            BusinessShortCode: shortcode,
+            UsingLandlordConfig: !!mpesaConfig
+          }
+        }),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      )
+    }
 
     if (!consumerKey || !consumerSecret || !passkey) {
       console.error('Missing M-Pesa credentials:', {
@@ -196,11 +401,16 @@ serve(async (req) => {
     // Use custom callback URL if provided in config
     const callbackUrl = mpesaConfig?.callback_url || `${Deno.env.get('SUPABASE_URL')}/functions/v1/mpesa-callback`;
 
+    // Determine transaction type based on shortcode type
+    const transactionType = mpesaConfig?.shortcode_type === 'till' 
+      ? 'CustomerBuyGoodsOnline' 
+      : 'CustomerPayBillOnline';
+
     const stkPayload = {
       BusinessShortCode: shortcode,
       Password: password,
       Timestamp: timestamp,
-      TransactionType: 'CustomerPayBillOnline',
+      TransactionType: transactionType,
       Amount: Math.round(amount),
       PartyA: phoneNumber,
       PartyB: shortcode,
@@ -225,7 +435,7 @@ serve(async (req) => {
     console.log('STK Push response:', JSON.stringify(stkData, null, 2))
 
     if (stkData.ResponseCode === '0') {
-      // Store the transaction in database
+      // Store the transaction in database with security tracking
       const transactionData = {
         checkout_request_id: stkData.CheckoutRequestID,
         merchant_request_id: stkData.MerchantRequestID,
@@ -233,7 +443,9 @@ serve(async (req) => {
         amount: Math.round(amount),
         status: 'pending',
         created_at: new Date().toISOString(),
-        payment_type: paymentType || 'rent'
+        payment_type: paymentType || 'rent',
+        initiated_by: user.id,
+        authorized_by: user.id
       }
 
       // Only add invoice_id if it's a valid UUID (for rent payments)

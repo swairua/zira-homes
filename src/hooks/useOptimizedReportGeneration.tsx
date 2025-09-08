@@ -15,7 +15,7 @@ interface OptimizedGenerationState {
 
 export const useOptimizedReportGeneration = () => {
   const queryClient = useQueryClient();
-  const { generatePDF } = usePDFGeneration();
+  const { generatePDF, isGenerating: pdfGenerating, progress: pdfProgress, currentStep: pdfStep, isComplete } = usePDFGeneration();
   const { prefetchReportData } = useReportPrefetch();
   
   const [state, setState] = useState<OptimizedGenerationState>({
@@ -26,9 +26,11 @@ export const useOptimizedReportGeneration = () => {
   });
 
   const generateOptimizedReport = useCallback(async (
+    queryId: string,
     reportId: string,
     reportTitle: string,
-    filters: ReportFilters
+    filters: ReportFilters,
+    options: { tableOnly?: boolean } = {}
   ) => {
     try {
       console.time(`Optimized Report Generation: ${reportTitle}`);
@@ -39,8 +41,8 @@ export const useOptimizedReportGeneration = () => {
         currentStep: 'Prefetching report data...' 
       }));
 
-      // Step 1: Prefetch data if not already cached
-      await prefetchReportData(reportId, filters, reportTitle);
+      // Step 1: Prefetch data if not already cached (use queryId for data)
+      await prefetchReportData(queryId, filters, reportTitle);
       
       setState(prev => ({ 
         ...prev, 
@@ -49,8 +51,8 @@ export const useOptimizedReportGeneration = () => {
         currentStep: 'Starting PDF generation...'
       }));
 
-      // Step 2: Generate PDF using cached data
-      await generatePDF(reportTitle, reportId, reportId, filters, false); // No charts for speed
+      // Step 2: Generate PDF using cached data (use reportId for config)
+      await generatePDF(reportTitle, reportId, queryId, filters, false, options); // No charts for speed, pass options
 
       console.timeEnd(`Optimized Report Generation: ${reportTitle}`);
       
@@ -84,9 +86,13 @@ export const useOptimizedReportGeneration = () => {
   }, [prefetchReportData]);
 
   return {
-    ...state,
+    isPrefetching: state.isPrefetching,
+    isGenerating: state.isGenerating || pdfGenerating,
+    progress: pdfGenerating ? pdfProgress : state.progress,
+    currentStep: pdfGenerating ? pdfStep : state.currentStep,
+    isComplete,
     generateOptimizedReport,
     preloadReport,
-    isActive: state.isPrefetching || state.isGenerating
+    isActive: state.isPrefetching || state.isGenerating || pdfGenerating
   };
 };

@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { TablePaginator } from "@/components/ui/table-paginator";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -33,19 +35,29 @@ interface AddUserFormData {
 
 const UserManagement = () => {
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [totalUsers, setTotalUsers] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [addUserOpen, setAddUserOpen] = useState(false);
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
   const { register, handleSubmit, reset, formState: { errors } } = useForm<AddUserFormData>();
+  const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ defaultPage: 1, pageSize: 10 });
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [page, pageSize]);
 
   const fetchUsers = async () => {
     try {
+      // First get total count
+      const { count } = await supabase
+        .from("profiles")
+        .select('*', { count: 'exact', head: true });
+
+      setTotalUsers(count || 0);
+
+      // Then get paginated data
       const { data, error } = await supabase
         .from("profiles")
         .select(`
@@ -56,11 +68,12 @@ const UserManagement = () => {
           phone,
           created_at
         `)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .range(offset, offset + pageSize - 1);
 
       if (error) throw error;
       
-      // Fetch user roles separately
+      // Fetch user roles for the current page only
       const usersWithRoles = await Promise.all(
         (data || []).map(async (user) => {
           const { data: roles } = await supabase
@@ -376,6 +389,17 @@ const UserManagement = () => {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Pagination */}
+      <TablePaginator
+        currentPage={page}
+        totalPages={Math.ceil(totalUsers / pageSize)}
+        pageSize={pageSize}
+        totalItems={totalUsers}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+        showPageSizeSelector={true}
+      />
 
       {/* Add User Dialog */}
       <Dialog open={addUserOpen} onOpenChange={(open) => {

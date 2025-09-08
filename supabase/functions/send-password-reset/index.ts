@@ -7,8 +7,13 @@ const corsHeaders = {
 };
 
 interface PasswordResetRequest {
-  email: string;
+  email?: string;
   redirectTo?: string;
+  // Admin-initiated reset parameters
+  user_id?: string;
+  user_email?: string;
+  user_name?: string;
+  reset_by_admin?: boolean;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -17,15 +22,64 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
+    // Rate limiting checks
+    const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
+                     req.headers.get('x-real-ip')?.trim() || 
+                     'unknown';
+    
+    const now = Date.now();
+    const rateLimitWindow = 60 * 60 * 1000; // 1 hour
+    const maxAttemptsPerIP = 20;
+    const maxAttemptsPerEmail = 5;
+
+    // Basic rate limiting (in production, use Redis)
+    // For now, we'll just log and continue
+    console.log('Password reset attempt from IP:', clientIP.replace(/\d+$/, 'xxx'));
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
       { auth: { persistSession: false } }
     );
 
-    const { email, redirectTo }: PasswordResetRequest = await req.json();
+    const { 
+      email, 
+      redirectTo,
+      user_id,
+      user_email,
+      user_name,
+      reset_by_admin = false 
+    }: PasswordResetRequest = await req.json();
 
-    console.log("Processing password reset for:", email);
+    // Use admin-provided email if available, otherwise use direct email
+    const targetEmail = user_email || email;
+    const targetUserName = user_name || '';
+
+    if (!targetEmail) {
+      return new Response(JSON.stringify({
+        success: true,
+        message: "If an account exists with this email, you will receive password reset instructions."
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(targetEmail)) {
+      return new Response(JSON.stringify({
+        success: true,
+        message: "If an account exists with this email, you will receive password reset instructions."
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Log with masked email for security
+    console.log("Processing password reset for:", 
+      targetEmail.replace(/(.{2})(.*)(@.*)/, '$1***$3'), 
+      reset_by_admin ? "(admin-initiated)" : "");
 
     // Get communication preferences
     let emailEnabled = true;
@@ -49,15 +103,29 @@ const handler = async (req: Request): Promise<Response> => {
     // Get user profile and phone number
     let userProfile = null;
     try {
-      const { data: profile } = await supabaseAdmin
-        .from('profiles')
-        .select('first_name, last_name, phone')
-        .eq('email', email)
-        .single();
+      let profile;
+      
+      if (user_id) {
+        // Admin-initiated: fetch by user_id
+        const { data } = await supabaseAdmin
+          .from('profiles')
+          .select('first_name, last_name, phone, email')
+          .eq('id', user_id)
+          .single();
+        profile = data;
+      } else {
+        // User-initiated: fetch by email
+        const { data } = await supabaseAdmin
+          .from('profiles')
+          .select('first_name, last_name, phone, email')
+          .eq('email', targetEmail)
+          .single();
+        profile = data;
+      }
       
       userProfile = profile;
     } catch (profileError) {
-      console.log("Could not fetch user profile");
+      console.log("Could not fetch user profile:", profileError);
     }
 
     let results = {
@@ -69,7 +137,7 @@ const handler = async (req: Request): Promise<Response> => {
     // Send email reset if enabled
     if (emailEnabled) {
       try {
-        const { error: emailError } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
+        const { error: emailError } = await supabaseAdmin.auth.resetPasswordForEmail(targetEmail, {
           redirectTo: redirectTo || `${req.headers.get("origin")}/auth?type=recovery`
         });
 
@@ -78,7 +146,7 @@ const handler = async (req: Request): Promise<Response> => {
         }
 
         results.email_sent = true;
-        console.log("Password reset email sent to:", email);
+        console.log("Password reset email sent to:", targetEmail);
       } catch (emailError: any) {
         console.error("Error sending password reset email:", emailError);
         results.error = emailError.message;
@@ -88,8 +156,9 @@ const handler = async (req: Request): Promise<Response> => {
     // Send SMS notification if enabled and phone available
     if (smsEnabled && userProfile?.phone) {
       try {
-        const resetUrl = redirectTo || `${req.headers.get("origin")}/auth?type=recovery`;
-        const smsMessage = `Hi ${userProfile.first_name || 'User'}, a password reset was requested for your Zira Homes account. If this wasn't you, please contact support. Reset link sent to your email.`;
+        const displayName = targetUserName || userProfile.first_name || 'User';
+        const initiatorText = reset_by_admin ? ' by an administrator' : '';
+        const smsMessage = `Hi ${displayName}, a password reset was requested${initiatorText} for your Zira Homes account. If this wasn't you, please contact support. Reset link sent to your email.`;
         
         await supabaseAdmin.functions.invoke('send-sms', {
           body: {
@@ -122,22 +191,31 @@ const handler = async (req: Request): Promise<Response> => {
       message = `Password reset failed: ${results.error}`;
     }
 
+    // Always return success message to prevent email enumeration
     return new Response(JSON.stringify({
-      success: results.email_sent || results.sms_sent,
-      message,
-      details: results
+      success: true,
+      message: "If an account exists with this email, you will receive password reset instructions.",
+      // Only include details for admin-initiated resets
+      ...(reset_by_admin && {
+        admin_details: {
+          email_sent: results.email_sent,
+          sms_sent: results.sms_sent,
+          error: results.error
+        }
+      })
     }), {
-      status: results.email_sent || results.sms_sent ? 200 : 400,
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
   } catch (error: any) {
     console.error("Error in password reset function:", error);
-    return new Response(JSON.stringify({ 
-      success: false, 
-      error: error.message 
+    // Always return success message even on errors to prevent information leakage
+    return new Response(JSON.stringify({
+      success: true,
+      message: "If an account exists with this email, you will receive password reset instructions."
     }), {
-      status: 500,
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

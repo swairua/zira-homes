@@ -58,10 +58,41 @@ export const fmtPercent = (value: number, decimals: number = 1): string => {
   }).format(value / 100);
 };
 
-export const fmtDate = (date: string | Date, pattern: string = 'MMM dd, yyyy'): string => {
-  const dateObj = typeof date === 'string' ? parseISO(date) : date;
-  const zonedDate = toZonedTime(dateObj, TIMEZONE);
-  return format(zonedDate, pattern);
+export const fmtDate = (date: string | Date | null | undefined, pattern: string = 'MMM dd, yyyy'): string => {
+  try {
+    // Handle null/undefined/empty values
+    if (!date || date === '') return '-';
+    
+    let dateObj: Date;
+    
+    if (typeof date === 'string') {
+      // Handle partial dates like "2024-01" or "2024"
+      let normalizedDate = date.trim();
+      
+      if (/^\d{4}$/.test(normalizedDate)) {
+        // Year only: "2024" -> "2024-01-01"
+        normalizedDate = `${normalizedDate}-01-01`;
+      } else if (/^\d{4}-\d{2}$/.test(normalizedDate)) {
+        // Year-month: "2024-01" -> "2024-01-01"
+        normalizedDate = `${normalizedDate}-01`;
+      }
+      
+      dateObj = parseISO(normalizedDate);
+    } else {
+      dateObj = date;
+    }
+    
+    // Check if the date is valid
+    if (isNaN(dateObj.getTime())) {
+      return '-';
+    }
+    
+    const zonedDate = toZonedTime(dateObj, TIMEZONE);
+    return format(zonedDate, pattern);
+  } catch (error) {
+    console.warn('Invalid date value:', date, error);
+    return '-';
+  }
 };
 
 export const fmtDuration = (days: number): string => {
@@ -72,23 +103,36 @@ export const fmtDuration = (days: number): string => {
 };
 
 export const formatValue = (
-  value: number, 
+  value: any, 
   format: 'currency' | 'number' | 'percent' | 'duration' | 'date',
   decimals?: number
 ): string => {
-  switch (format) {
-    case 'currency':
-      return fmtCurrency(value);
-    case 'number':
-      return fmtNumber(value, decimals);
-    case 'percent':
-      return fmtPercent(value, decimals);
-    case 'duration':
-      return fmtDuration(value);
-    case 'date':
-      return fmtDate(new Date(value));
-    default:
-      return String(value);
+  try {
+    // Handle null/undefined values
+    if (value === null || value === undefined) return '-';
+    
+    switch (format) {
+      case 'currency':
+        const numValue = typeof value === 'string' ? parseFloat(value) : value;
+        return isNaN(numValue) ? '-' : fmtCurrency(numValue);
+      case 'number':
+        const num = typeof value === 'string' ? parseFloat(value) : value;
+        return isNaN(num) ? '-' : fmtNumber(num, decimals);
+      case 'percent':
+        const pct = typeof value === 'string' ? parseFloat(value) : value;
+        return isNaN(pct) ? '-' : fmtPercent(pct, decimals);
+      case 'duration':
+        const dur = typeof value === 'string' ? parseFloat(value) : value;
+        return isNaN(dur) ? '-' : fmtDuration(dur);
+      case 'date':
+        // Pass the raw value directly to fmtDate for proper handling
+        return fmtDate(value);
+      default:
+        return String(value);
+    }
+  } catch (error) {
+    console.warn('Error formatting value:', value, format, error);
+    return '-';
   }
 };
 

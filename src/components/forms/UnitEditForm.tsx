@@ -21,7 +21,7 @@ const unitSchema = z.object({
   unit_type: z.string().min(1, "Unit type is required"),
   rent_amount: z.number().min(1, "Rent amount is required"),
   security_deposit: z.number().optional(),
-  status: z.string().min(1, "Status is required"),
+  status: z.string().optional(), // Optional since occupancy is auto-calculated
   description: z.string().optional(),
 });
 
@@ -67,7 +67,7 @@ export function UnitEditForm({ unit, onSave, onCancel }: UnitEditFormProps) {
       unit_type: unit.unit_type,
       rent_amount: unit.rent_amount,
       security_deposit: unit.security_deposit || 0,
-      status: unit.status,
+      status: unit.status === 'maintenance' ? 'maintenance' : 'normal',
       description: unit.description || "",
     },
   });
@@ -85,14 +85,26 @@ export function UnitEditForm({ unit, onSave, onCancel }: UnitEditFormProps) {
   const onSubmit = async (data: UnitFormData) => {
     setIsLoading(true);
     try {
+      // Only allow setting maintenance status manually
+      // Occupancy (vacant/occupied) is handled by the database
+      const finalStatus = data.status === 'maintenance' ? 'maintenance' : undefined;
+      
       // Combine form data with unit specifications
       const combinedData = {
         ...data,
+        status: finalStatus, // Only update status if it's maintenance
         ...unitSpecifications,
       };
+      
+      // Remove status from combinedData if it's not maintenance (let DB handle it)
+      if (finalStatus === undefined) {
+        delete combinedData.status;
+      }
+      
       await onSave(combinedData);
       toast.success("Unit updated successfully");
     } catch (error) {
+      console.error("Failed to update unit:", error);
       toast.error("Failed to update unit");
     } finally {
       setIsLoading(false);
@@ -202,28 +214,54 @@ export function UnitEditForm({ unit, onSave, onCancel }: UnitEditFormProps) {
             />
           </div>
 
-          <FormField
-            control={form.control}
-            name="status"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Status</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="vacant">Vacant</SelectItem>
-                    <SelectItem value="occupied">Occupied</SelectItem>
-                    <SelectItem value="maintenance">Under Maintenance</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <div className="space-y-4">
+            <div>
+              <Label className="text-base font-medium">Occupancy Status</Label>
+              <div className="mt-2 p-3 bg-secondary/30 rounded-md border">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    Occupancy is automatically determined from active leases
+                  </span>
+                  <Badge 
+                    className={
+                      unit.status === 'occupied' ? 'bg-success text-success-foreground' : 
+                      unit.status === 'vacant' ? 'bg-accent text-accent-foreground' : 
+                      'bg-warning text-warning-foreground'
+                    }
+                  >
+                    {unit.status === 'occupied' ? 'Occupied' : 
+                     unit.status === 'vacant' ? 'Vacant' : 
+                     'Maintenance'}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+
+            <FormField
+              control={form.control}
+              name="status"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Maintenance Status</FormLabel>
+                  <Select 
+                    onValueChange={field.onChange} 
+                    defaultValue={unit.status === 'maintenance' ? 'maintenance' : 'normal'}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select maintenance status" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="normal">Normal Operation</SelectItem>
+                      <SelectItem value="maintenance">Under Maintenance</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
           <FormField
             control={form.control}

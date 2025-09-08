@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TablePaginator } from "@/components/ui/table-paginator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,7 +35,10 @@ interface UserSessionsDialogProps {
 export function UserSessionsDialog({ userId, userName, open, onOpenChange }: UserSessionsDialogProps) {
   const [sessions, setSessions] = useState<UserSession[]>([]);
   const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
+  
+  const pageSize = 10;
 
   useEffect(() => {
     if (open && userId) {
@@ -157,6 +161,12 @@ export function UserSessionsDialog({ userId, userName, open, onOpenChange }: Use
 
   const activeSessions = sessions.filter(s => s.is_active);
   const inactiveSessions = sessions.filter(s => !s.is_active);
+  
+  // Pagination for inactive sessions
+  const totalInactiveItems = inactiveSessions.length;
+  const totalInactivePages = Math.ceil(totalInactiveItems / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedInactiveSessions = inactiveSessions.slice(startIndex, startIndex + pageSize);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -299,7 +309,7 @@ export function UserSessionsDialog({ userId, userName, open, onOpenChange }: Use
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {inactiveSessions.slice(0, 10).map((session) => (
+                  {paginatedInactiveSessions.map((session) => (
                     <TableRow key={session.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -333,6 +343,19 @@ export function UserSessionsDialog({ userId, userName, open, onOpenChange }: Use
                   ))}
                 </TableBody>
               </Table>
+              
+              {totalInactivePages > 1 && (
+                <div className="mt-4">
+                  <TablePaginator
+                    currentPage={currentPage}
+                    totalPages={totalInactivePages}
+                    pageSize={pageSize}
+                    totalItems={totalInactiveItems}
+                    onPageChange={setCurrentPage}
+                    showPageSizeSelector={false}
+                  />
+                </div>
+              )}
             </div>
           )}
 

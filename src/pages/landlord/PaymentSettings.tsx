@@ -3,7 +3,8 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PaymentSettingsForm } from "@/components/landlord/PaymentSettingsForm";
-import { CreditCard, Check, Shield, Settings } from "lucide-react";
+import { MpesaCredentialsSection } from "@/components/landlord/MpesaCredentialsSection";
+import { CreditCard, Check, Shield, Settings, Smartphone } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -43,6 +44,7 @@ const PaymentSettings = () => {
   const [preferences, setPreferences] = useState<PaymentPreferences | null>(null);
   const [loading, setLoading] = useState(true);
   const [showEditForm, setShowEditForm] = useState(false);
+  const [hasMpesaConfig, setHasMpesaConfig] = useState(false);
 
   // Filter payment methods by user's country when country is detected
   useEffect(() => {
@@ -143,6 +145,13 @@ const PaymentSettings = () => {
     return provider || type;
   };
 
+  // Check if M-Pesa is available as a payment method
+  const hasMpesaMethod = approvedMethods.some(method => method.payment_method_type === 'mpesa');
+
+  const handleMpesaConfigChange = (hasConfig: boolean) => {
+    setHasMpesaConfig(hasConfig);
+  };
+
   if (loading || countryLoading) {
     return (
       <DashboardLayout>
@@ -179,6 +188,32 @@ const PaymentSettings = () => {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
+          {/* M-Pesa Configuration - Show prominently if M-Pesa is available */}
+          {hasMpesaMethod && (
+            <div className="lg:col-span-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Smartphone className="h-5 w-5 text-green-600" />
+                    M-Pesa Integration Setup
+                    {hasMpesaConfig && (
+                      <Badge variant="default" className="gap-1">
+                        <Check className="h-3 w-3" />
+                        Configured
+                      </Badge>
+                    )}
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Configure your M-Pesa credentials so tenant payments go directly to your paybill/till number
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <MpesaCredentialsSection onConfigChange={handleMpesaConfigChange} />
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
           {/* Approved Payment Methods */}
           <Card>
             <CardHeader>
