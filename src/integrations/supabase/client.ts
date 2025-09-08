@@ -35,6 +35,22 @@ function createSafeStubClient() {
       signOut: async () => {
         warn();
         return { error: null };
+      },
+      // Newer supabase-js auth methods
+      signInWithPassword: async ({ email, password }: { email: string, password: string }) => {
+        warn();
+        // emulate failure if empty
+        if (!email || !password) return { error: new Error('Missing credentials'), data: null };
+        return { data: null, error: null };
+      },
+      signUp: async ({ email, password, options }: any) => {
+        warn();
+        if (!email || !password) return { error: new Error('Missing credentials'), data: null };
+        return { data: null, error: null };
+      },
+      resend: async (_opts: any) => {
+        warn();
+        return { error: null };
       }
     },
     from: (_table: string) => ({
