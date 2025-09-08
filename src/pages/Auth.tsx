@@ -156,6 +156,25 @@ const Auth = () => {
 
   // Compatibility helpers for different supabase-js versions
   const signInCompat = async (email: string, password: string) => {
+    // DEV-only quick login using stored env dev creds
+    try {
+      if (import.meta.env.DEV) {
+        const DEV_EMAIL = import.meta.env.VITE_DEV_AUTH_EMAIL || 'dev@example.com';
+        const DEV_PASS = import.meta.env.VITE_DEV_AUTH_PASSWORD || 'dev-password';
+        if (email === DEV_EMAIL && password === DEV_PASS) {
+          // create a dev session in localStorage so stub returns it
+          if (typeof window !== 'undefined') {
+            const user = { id: '00000000-0000-0000-0000-devsession', email };
+            const session = { access_token: 'dev-token', expires_at: Math.floor(Date.now()/1000) + 3600, user };
+            localStorage.setItem('dev_supabase_session', JSON.stringify(session));
+            return { data: { session }, error: null };
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error during dev quick login check', e);
+    }
+
     // Newer API
     if (supabase?.auth && typeof supabase.auth.signInWithPassword === 'function') {
       return await supabase.auth.signInWithPassword({ email, password });
