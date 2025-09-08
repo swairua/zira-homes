@@ -25,15 +25,35 @@ function createSafeStubClient() {
     auth: {
       onAuthStateChange: (cb: any) => {
         warn();
-        // return object similar to real client: { data: { subscription } }
+        // If a dev session exists, call the callback immediately to simulate auth state
+        try {
+          if (typeof window !== 'undefined') {
+            const raw = localStorage.getItem('dev_supabase_session');
+            const session = raw ? JSON.parse(raw) : null;
+            // call callback with v2 signature (event, session)
+            setTimeout(() => cb && cb('SIGNED_IN', session), 0);
+          }
+        } catch (e) {
+          // ignore
+        }
         return { data: { subscription: { unsubscribe: () => {} } } };
       },
       getSession: async () => {
         warn();
+        try {
+          if (typeof window !== 'undefined') {
+            const raw = localStorage.getItem('dev_supabase_session');
+            const session = raw ? JSON.parse(raw) : null;
+            return { data: { session } };
+          }
+        } catch (e) {
+          // ignore
+        }
         return { data: { session: null } };
       },
       signOut: async () => {
         warn();
+        try { if (typeof window !== 'undefined') localStorage.removeItem('dev_supabase_session'); } catch(e){}
         return { error: null };
       },
       // Newer supabase-js auth methods
@@ -41,6 +61,21 @@ function createSafeStubClient() {
         warn();
         // emulate failure if empty
         if (!email || !password) return { error: new Error('Missing credentials'), data: null };
+        // Check for dev-only credentials (only active in dev builds)
+        try {
+          if (typeof window !== 'undefined' && import.meta.env.DEV) {
+            const DEV_EMAIL = import.meta.env.VITE_DEV_AUTH_EMAIL || 'dev@example.com';
+            const DEV_PASS = import.meta.env.VITE_DEV_AUTH_PASSWORD || 'dev-password';
+            if (email === DEV_EMAIL && password === DEV_PASS) {
+              const user = { id: '00000000-0000-0000-0000-devsession', email };
+              const session = { access_token: 'dev-token', expires_at: Math.floor(Date.now()/1000) + 3600, user };
+              localStorage.setItem('dev_supabase_session', JSON.stringify(session));
+              return { data: { session }, error: null };
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
         return { data: null, error: null };
       },
       signUp: async ({ email, password, options }: any) => {
