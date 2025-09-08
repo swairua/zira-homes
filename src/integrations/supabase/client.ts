@@ -16,17 +16,44 @@ const supabaseOptions = typeof window !== 'undefined' ? {
   }
 } : undefined;
 
-function createMissingClientProxy() {
-  const handler: ProxyHandler<any> = {
-    get(_target, prop) {
-      return (..._args: any[]) => {
-        throw new Error(`Supabase client not initialized. Ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set.`);
-      };
-    }
-  };
-  return new Proxy({}, handler) as any;
+function createSafeStubClient() {
+  const warn = () => console.warn("[supabase stub] Supabase client not initialized. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY for full functionality.");
+
+  const asyncNoOp = async () => ({ data: null, error: null });
+
+  return {
+    auth: {
+      onAuthStateChange: (cb: any) => {
+        warn();
+        // return object similar to real client: { data: { subscription } }
+        return { data: { subscription: { unsubscribe: () => {} } } };
+      },
+      getSession: async () => {
+        warn();
+        return { data: { session: null } };
+      },
+      signOut: async () => {
+        warn();
+        return { error: null };
+      }
+    },
+    from: (_table: string) => ({
+      select: async () => ({ data: null, error: null }),
+      insert: async () => ({ data: null, error: null }),
+      update: async () => ({ data: null, error: null }),
+      delete: async () => ({ data: null, error: null }),
+      upsert: async () => ({ data: null, error: null }),
+      eq: () => ({ select: async () => ({ data: null, error: null }) })
+    }),
+    rpc: async () => ({ data: null, error: null }),
+    channel: (_name: string) => ({
+      on: () => ({ subscribe: async () => ({}) }),
+      subscribe: async () => ({}),
+      unsubscribe: async () => ({})
+    })
+  } as any;
 }
 
 export const supabase = (typeof window !== 'undefined' && SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY)
   ? createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, supabaseOptions)
-  : createMissingClientProxy();
+  : createSafeStubClient();
