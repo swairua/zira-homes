@@ -306,6 +306,7 @@ const Auth = () => {
         title: "Account created!",
         description: `Confirmation sent to ${signupData.email}. From noreply@mail.app.supabase.io. Check Inbox, Updates/Promotions, or Spam/Junk.`,
       });
+      try { navigate('/'); } catch (e) { window.location.href = '/'; }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
       console.error("Signup error:", err);
