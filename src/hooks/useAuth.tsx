@@ -41,19 +41,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // THEN check for existing session (safe-guarded)
     (async () => {
       try {
+        let sessionData = null;
         if (supabase && supabase.auth && typeof supabase.auth.getSession === 'function') {
           const result = await supabase.auth.getSession();
-          const sessionData = result?.data?.session ?? null;
+          sessionData = result?.data?.session ?? null;
           console.log("🔍 Initial session check:", sessionData ? "session found" : "no session");
-          setSession(sessionData);
-          setUser(sessionData?.user ?? null);
-          setLoading(false);
-        } else {
-          console.warn('supabase.auth.getSession not available; assuming no session');
-          setSession(null);
-          setUser(null);
-          setLoading(false);
         }
+
+        // DEV fallback: if no real session, check local dev session stub
+        if (!sessionData && typeof window !== 'undefined') {
+          try {
+            const raw = localStorage.getItem('dev_supabase_session');
+            if (raw) {
+              const devSession = JSON.parse(raw);
+              console.log('Using dev_supabase_session fallback', devSession);
+              sessionData = devSession;
+            }
+          } catch (e) {
+            // ignore parse errors
+          }
+        }
+
+        setSession(sessionData);
+        setUser(sessionData?.user ?? null);
+        setLoading(false);
       } catch (error) {
         console.error('Error getting initial session:', error);
         setSession(null);
