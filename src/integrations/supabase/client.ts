@@ -92,7 +92,9 @@ function createSafeStubClient() {
       // chainable query builder stub
       const builder: any = {
         _table: _table,
-        select(cols?: string) { this._select = cols; return this; },
+        _select: '*',
+        _eq: null,
+        select(cols?: string) { this._select = cols ?? '*'; return this; },
         eq(field?: string, value?: any) { this._eq = { field, value }; return this; },
         order: function() { return this; },
         limit: function() { return this; },
@@ -100,6 +102,7 @@ function createSafeStubClient() {
         update: async function(_data: any) { return { data: null, error: null }; },
         delete: async function() { return { data: null, error: null }; },
         upsert: async function(_data: any) { return { data: null, error: null }; },
+        single: async function() { return { data: null, error: null }; },
       };
       // make builder awaitable: await builder.select(...).eq(...)
       builder.then = function(resolve: any) { return resolve({ data: null, error: null }); };
@@ -109,20 +112,35 @@ function createSafeStubClient() {
     channel: (_name: string) => {
       const ch: any = {
         _name: _name,
+        _handlers: [],
         on(event?: any, opts?: any, callback?: any) {
           // allow both (event, opts, cb) and (event, cb)
           if (typeof opts === 'function') { callback = opts; opts = undefined; }
-          // store handlers if needed
-          (ch._handlers = ch._handlers || []).push({ event, opts, callback });
-          return ch;
+          // store handlers
+          this._handlers.push({ event, opts, callback });
+          return this; // allow chaining .on().on()
         },
         subscribe: async function() {
-          // return object resembling real client
-          return { data: { subscription: { unsubscribe: () => {} } } };
+          // return object resembling real client: { data: { subscription } }
+          const subscription = { unsubscribe: () => { /* noop */ } };
+          return { data: { subscription } };
         },
         unsubscribe: async function() { return {}; }
       };
       return ch;
+    },
+    removeChannel: async (ch: any) => {
+      try {
+        if (ch && typeof ch.unsubscribe === 'function') {
+          return await ch.unsubscribe();
+        }
+        if (ch && ch?.data?.subscription && typeof ch.data.subscription.unsubscribe === 'function') {
+          return ch.data.subscription.unsubscribe();
+        }
+      } catch (e) {
+        // ignore
+      }
+      return {};
     }
   } as any;
 }
