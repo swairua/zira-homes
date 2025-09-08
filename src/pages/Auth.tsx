@@ -198,8 +198,9 @@ const Auth = () => {
     return { error: null };
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async (e?: React.FormEvent) => {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    console.log('handleLogin invoked', { email: loginData.email });
     setIsLoading(true);
     setError("");
     setSuccess("");
