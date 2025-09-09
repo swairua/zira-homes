@@ -39,40 +39,6 @@
 
   <body>
     <div id="root"></div>
-    <script>
-      // Early console suppression to filter React / Recharts defaultProps deprecation warnings
-      (function(){
-        try {
-          var _origWarn = console.warn.bind(console);
-          var _origError = console.error.bind(console);
-          function sanitize(msg){
-            try{ return String(msg).replace(/\x1b\[[0-9;]*m/g,'').replace(/<[^>]*>/g,'').trim().toLowerCase(); }catch(e){ return String(msg).toLowerCase(); }
-          }
-          function shouldSuppress(message){
-            if(!message) return false;
-            var patterns = [
-              /support for defaultprops will be removed/i,
-              /defaultprops/i,
-              /support for `defaultprops`/i,
-              /use javascript default parameters instead/i,
-            ];
-            return patterns.some(function(r){ return r.test(message); });
-          }
-          console.warn = function(){
-            var args = Array.prototype.slice.call(arguments);
-            var combined = args.map(function(a){ try{ return typeof a === 'string' ? a : (typeof a === 'object' ? JSON.stringify(a) : String(a)); }catch(e){ return String(a); } }).join(' ');
-            if(shouldSuppress(sanitize(combined))){ return; }
-            _origWarn.apply(console, args);
-          };
-          console.error = function(){
-            var args = Array.prototype.slice.call(arguments);
-            var combined = args.map(function(a){ try{ return typeof a === 'string' ? a : (typeof a === 'object' ? JSON.stringify(a) : String(a)); }catch(e){ return String(a); } }).join(' ');
-            if(shouldSuppress(sanitize(combined))){ return; }
-            _origError.apply(console, args);
-          };
-        } catch (e) { /* fail silently */ }
-      })();
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
