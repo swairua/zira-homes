@@ -66,7 +66,13 @@ export function AddUnitDialog({ onUnitAdded }: AddUnitDialogProps) {
     try {
       const res = await restSelect('properties', 'id,name,property_type');
       if (res.error) throw res.error;
-      setProperties(res.data || []);
+      let data: any = res.data;
+      if (!Array.isArray(data)) {
+        if (data && typeof data === 'object' && Array.isArray((data as any).data)) data = (data as any).data;
+        else if (data == null || data === '') data = [];
+        else data = [data];
+      }
+      setProperties(data || []);
     } catch (error) {
       console.error('Error fetching properties:', error);
       toast({
