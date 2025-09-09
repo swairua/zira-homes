@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useState, useEffect } from 'react';
 import { rpcProxy } from '@/integrations/supabase/restProxy';
-import { supabase } from '@/integrations/supabase/client';
 
 interface PropertyStats {
   total_properties: number;
@@ -66,9 +64,8 @@ export function useLandlordDashboard() {
         throw rpcError;
       }
 
-      // Validate and normalize result data
       const validatedData: LandlordDashboardData = {
-        property_stats: (result as any)?.property_stats && typeof (result as any).property_stats === 'object' 
+        property_stats: (result as any)?.property_stats && typeof (result as any).property_stats === 'object'
           ? {
               total_properties: Number((result as any).property_stats.total_properties) || 0,
               total_units: Number((result as any).property_stats.total_units) || 0,
@@ -79,7 +76,7 @@ export function useLandlordDashboard() {
         recent_payments: Array.isArray((result as any)?.recent_payments) ? (result as any).recent_payments : [],
         pending_maintenance: Array.isArray((result as any)?.pending_maintenance) ? (result as any).pending_maintenance : []
       };
-      
+
       setData(validatedData);
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
