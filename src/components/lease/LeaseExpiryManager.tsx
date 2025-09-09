@@ -18,6 +18,7 @@ import {
   CheckCircle2
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { rpcProxy } from '@/integrations/supabase/restProxy';
 import { useAuth } from "@/hooks/useAuth";
 import { formatAmount } from "@/utils/currency";
 import { format, differenceInDays } from "date-fns";
