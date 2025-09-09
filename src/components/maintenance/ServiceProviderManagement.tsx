@@ -157,17 +157,13 @@ export function ServiceProviderManagement() {
     }
 
     try {
-      const { error } = await supabase
-        .from("service_providers")
-        .delete()
-        .eq("id", id);
-
+      const { error } = await restDelete('service_providers', { id: `eq.${id}` });
       if (error) throw error;
-      toast.success("Service provider deleted successfully");
+      toast.success('Service provider deleted successfully');
       fetchProviders();
     } catch (error) {
-      console.error("Error deleting service provider:", error);
-      toast.error("Failed to delete service provider");
+      console.error('Error deleting service provider:', error);
+      toast.error('Failed to delete service provider');
     }
   };
 
