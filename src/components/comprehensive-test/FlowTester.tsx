@@ -265,7 +265,7 @@ export function FlowTester() {
     // Clean up test data
     const propertyId = (window as any).__testPropertyId;
     if (propertyId) {
-      await supabase.from('properties').delete().eq('id', propertyId);
+      await restDelete('properties', { id: `eq.${propertyId}` });
       delete (window as any).__testPropertyId;
       delete (window as any).__testUnitId;
       delete (window as any).__testTenantId;
