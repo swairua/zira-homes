@@ -41,18 +41,18 @@ export const SecurityDashboard = () => {
     try {
       setLoading(true);
       
-      // Fetch recent security events
-      const { data: activityLogs, error: logsError } = await supabase
-        .from('user_activity_logs')
-        .select('*')
-        .or('entity_type.eq.security,action.ilike.%security%,action.ilike.%failed%,action.ilike.%suspicious%')
-        .order('performed_at', { ascending: false })
-        .limit(100);
+      // Fetch recent security events via REST proxy
+      const orFilter = `(entity_type.eq.security,action.ilike.%25security%25,action.ilike.%25failed%25,action.ilike.%25suspicious%25)`;
+      const res = await restSelect('user_activity_logs', '*', { or: orFilter });
+      if (res.error) throw res.error;
+      const activityLogs = res.data || [];
 
-      if (logsError) throw logsError;
+      // Sort by performed_at desc and limit
+      activityLogs.sort((a: any, b: any) => new Date(b.performed_at).getTime() - new Date(a.performed_at).getTime());
+      const sliced = activityLogs.slice(0, 100);
 
       // Transform the data to match our interface
-      const transformedEvents: SecurityEvent[] = (activityLogs || []).map(log => ({
+      const transformedEvents: SecurityEvent[] = (sliced || []).map(log => ({
         id: log.id,
         action: log.action,
         entity_type: log.entity_type || 'unknown',
