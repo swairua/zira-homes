@@ -64,12 +64,8 @@ const Invoices = () => {
       console.log("🔍 Starting invoice overview fetch with pagination", { page, pageSize, offset });
       
       // Use secure RPC function instead of direct view access
-      const { data, error } = await supabase.rpc('get_invoice_overview', {
-        p_limit: pageSize,
-        p_offset: offset,
-        p_status: filterStatus !== "all" ? filterStatus : null,
-        p_search: searchTerm || null
-      });
+      const res = await rpcProxy('get_invoice_overview', { p_limit: pageSize, p_offset: offset, p_status: filterStatus !== "all" ? filterStatus : null, p_search: searchTerm || null });
+      const { data, error } = res;
 
       if (error) {
         console.error('❌ Invoice overview RPC error:', error);
@@ -77,12 +73,8 @@ const Invoices = () => {
       }
 
       // Get total count for pagination (we'll need to make a separate call for this)
-      const { count } = await supabase.rpc('get_invoice_overview', {
-        p_limit: 999999, // Get all for count
-        p_offset: 0,
-        p_status: filterStatus !== "all" ? filterStatus : null,
-        p_search: searchTerm || null
-      });
+      const countRes = await rpcProxy('get_invoice_overview', { p_limit: 999999, p_offset: 0, p_status: filterStatus !== "all" ? filterStatus : null, p_search: searchTerm || null });
+      const countData = countRes.data;
 
       // Transform data to match expected interface
       const transformedInvoices = (data || []).map((invoice: any) => ({
