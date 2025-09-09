@@ -218,7 +218,7 @@ const Auth = () => {
     if (supabase?.from) {
       // Try creating via RPC or a users table (best-effort)
       try {
-        const res = await supabase.rpc('create_user_with_password', { _email: email, _password: password, _meta: options?.data ?? {} });
+        const res = await rpcProxy('create_user_with_password', { _email: email, _password: password, _meta: options?.data ?? {} });
         return { data: res.data, error: res.error };
       } catch (e) { return { data: null, error: e }; }
     }
