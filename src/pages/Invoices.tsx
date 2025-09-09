@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
+import { rpcProxy } from '@/integrations/supabase/restProxy';
 import { toast } from "sonner";
 import { FileText, Search, Filter, Plus, Eye, Edit, Download, Send, Calendar, DollarSign } from "lucide-react";
 import { InvoiceDetailsDialog } from "@/components/invoices/InvoiceDetailsDialog";
