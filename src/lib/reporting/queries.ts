@@ -99,7 +99,7 @@ const reportQueries = {
       
       console.log('Fetching rent collection report with dates:', { startDate, endDate });
       
-      const { data, error } = await supabase.rpc('get_rent_collection_report', {
+      const { data, error } = await rpcProxy('get_rent_collection_report', {
         p_start_date: startDate,
         p_end_date: endDate
       });
@@ -156,7 +156,7 @@ const reportQueries = {
       
       console.log('Fetching occupancy report with dates:', { startDate, endDate });
       
-      const { data, error } = await supabase.rpc('get_occupancy_report', {
+      const { data, error } = await rpcProxy('get_occupancy_report', {
         p_start_date: startDate,
         p_end_date: endDate
       });
@@ -228,7 +228,7 @@ const reportQueries = {
       
       console.log('Fetching expense summary report with dates:', { startDate, endDate });
       
-      const { data, error } = await supabase.rpc('get_expense_summary_report', {
+      const { data, error } = await rpcProxy('get_expense_summary_report', {
         p_start_date: startDate,
         p_end_date: endDate
       });
@@ -333,7 +333,7 @@ const reportQueries = {
       
       console.log('Fetching property performance report with dates:', { startDate, endDate });
       
-      const { data, error } = await supabase.rpc('get_property_performance_report', {
+      const { data, error } = await rpcProxy('get_property_performance_report', {
         p_start_date: startDate,
         p_end_date: endDate
       });
@@ -462,7 +462,7 @@ const reportQueries = {
       
       console.log('Fetching profit loss report with dates:', { startDate, endDate });
       
-      const { data, error } = await supabase.rpc('get_profit_loss_report', {
+      const { data, error } = await rpcProxy('get_profit_loss_report', {
         p_start_date: startDate,
         p_end_date: endDate
       });
@@ -503,7 +503,7 @@ const reportQueries = {
       
       console.log('Fetching cash flow report with dates:', { startDate, endDate });
       
-      const { data, error } = await supabase.rpc('get_cash_flow_report', {
+      const { data, error } = await rpcProxy('get_cash_flow_report', {
         p_start_date: startDate,
         p_end_date: endDate
       });
@@ -536,7 +536,7 @@ const reportQueries = {
       
       console.log('Fetching revenue vs expenses report with dates:', { startDate, endDate });
       
-      const { data, error } = await supabase.rpc('get_revenue_vs_expenses_report', {
+      const { data, error } = await rpcProxy('get_revenue_vs_expenses_report', {
         p_start_date: startDate,
         p_end_date: endDate
       });
@@ -581,7 +581,7 @@ const reportQueries = {
 
       console.log('Fetching executive summary report with dates:', { startDate, endDate });
       
-      const { data, error } = await supabase.rpc('get_executive_summary_report', {
+      const { data, error } = await rpcProxy('get_executive_summary_report', {
         p_start_date: startDate,
         p_end_date: endDate,
         p_include_tenant_scope: true
@@ -647,7 +647,7 @@ const reportQueries = {
         filters.endDate
       );
 
-      const { data, error } = await supabase.rpc(functionName, {
+      const { data, error } = await rpcProxy(functionName, {
         p_start_date: dateRange.startDate,
         p_end_date: dateRange.endDate
       });
