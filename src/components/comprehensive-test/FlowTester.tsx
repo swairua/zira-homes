@@ -134,24 +134,19 @@ export function FlowTester() {
     const tenantId = (window as any).__testTenantId;
     if (!leaseId || !tenantId) throw new Error('Missing lease or tenant for invoice test');
 
-    const { data, error } = await supabase
-      .from('invoices')
-      .insert([{
-        lease_id: leaseId,
-        tenant_id: tenantId,
-        amount: 25000,
-        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        invoice_date: new Date().toISOString().split('T')[0],
-        description: 'Test monthly rent',
-        status: 'pending'
-      }])
-      .select()
-      .single();
+    const invoiceRes = await restPost('invoices', {
+      lease_id: leaseId,
+      tenant_id: tenantId,
+      amount: 25000,
+      due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      invoice_date: new Date().toISOString().split('T')[0],
+      description: 'Test monthly rent',
+      status: 'pending'
+    });
 
-    if (error) throw new Error(`Invoice generation failed: ${error.message}`);
-    if (!data) throw new Error('Invoice generation returned no data');
-    
-    (window as any).__testInvoiceId = data.id;
+    if (invoiceRes.error) throw new Error(`Invoice generation failed: ${JSON.stringify(invoiceRes.error)}`);
+    if (!invoiceRes.data) throw new Error('Invoice generation returned no data');
+    (window as any).__testInvoiceId = invoiceRes.data.id;
   };
 
   const testMpesaConfiguration = async () => {
