@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
+import { rpcProxy } from '@/integrations/supabase/restProxy';
 import { formatAmount } from "@/utils/currency";
 import { toast } from "sonner";
 import { FileText, Search, Filter, Plus, Eye, Edit, Download, Send, Calendar, DollarSign, Users, Building } from "lucide-react";
