@@ -10,6 +10,7 @@ import { DynamicUnitSpecifications } from "@/components/forms/DynamicUnitSpecifi
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { restSelect, restPost } from '@/integrations/supabase/restProxy';
 import { Plus } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { isCommercialUnit } from "@/utils/unitSpecifications";
