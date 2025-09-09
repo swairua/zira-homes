@@ -24,7 +24,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       if (supabase && supabase.auth && typeof supabase.auth.onAuthStateChange === 'function') {
         const res = supabase.auth.onAuthStateChange((event: any, session: any) => {
-          console.log("🔄 Auth state change:", event, session ? "session exists" : "no session");
+          console.log("���� Auth state change:", event, session ? "session exists" : "no session");
           setSession(session);
           setUser(session?.user ?? null);
           setLoading(false);
@@ -48,8 +48,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           console.log("🔍 Initial session check:", sessionData ? "session found" : "no session");
         }
 
+        // If no session via client SDK, try server-side user endpoint (for cookie-based auth)
+        if (!sessionData && typeof window !== 'undefined') {
+          try {
+            const resp = await fetch('/api/auth/user');
+            if (resp.ok) {
+              const payload = await resp.json();
+              sessionData = null;
+              if (payload && payload.user) {
+                setUser(payload.user);
+              }
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+
         setSession(sessionData);
-        setUser(sessionData?.user ?? null);
+        setUser(prev => prev ?? sessionData?.user ?? null);
         setLoading(false);
       } catch (error) {
         console.error('Error getting initial session:', error);
