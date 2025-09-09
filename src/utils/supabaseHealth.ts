@@ -12,10 +12,19 @@ export async function checkSupabaseConnectivity(supabaseUrl: string, anonKey?: s
     const headers: Record<string, string> = {};
     if (anonKey) headers['apikey'] = anonKey;
 
-    const resp = await fetch(supabaseUrl, { method: 'GET', mode: 'cors', headers, signal: controller.signal });
+    // Probe a Supabase API endpoint to better detect CORS/network issues
+    const probeUrl = supabaseUrl.replace(/\/$/, '') + '/rest/v1';
+    const resp = await fetch(probeUrl, { method: 'GET', mode: 'cors', headers, signal: controller.signal });
     clearTimeout(id);
 
+    // If we get an opaque response or network-level failure, treat accordingly
+    if (resp.type === 'opaque') {
+      console.error('Supabase health check received an opaque response (likely blocked by CORS or a proxy).');
+      return { ok: false, reason: 'opaque' };
+    }
+
     if (!resp.ok) {
+      // 401/403 likely indicate missing/invalid anon key or CORS; still the endpoint is reachable
       console.error('Supabase health check failed: received non-OK response', resp.status, resp.statusText);
       return { ok: false, reason: 'http_error', status: resp.status };
     }
