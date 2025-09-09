@@ -9,6 +9,7 @@ import { Check, Star, Crown, Zap, X, Loader2, ArrowRight } from "lucide-react";
 import { useTrialManagement } from "@/hooks/useTrialManagement";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { rpcProxy } from '@/integrations/supabase/restProxy';
 import { toast } from "sonner";
 
 interface BillingPlan {
