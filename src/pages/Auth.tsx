@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Eye, EyeOff, Building2, AlertCircle, CheckCircle, CreditCard, Users, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { rpcProxy } from '@/integrations/supabase/restProxy';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import apartmentBuilding from "@/assets/apartment-building.jpg";
