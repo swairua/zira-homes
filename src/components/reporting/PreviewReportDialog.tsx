@@ -158,14 +158,8 @@ export const PreviewReportDialog = ({
       
       try {
         const [expensesResult, revenueResult] = await Promise.all([
-          supabase.rpc('get_pl_underlying_expenses', {
-            p_start_date: dates.startDate,
-            p_end_date: dates.endDate,
-          }),
-          supabase.rpc('get_pl_underlying_revenue', {
-            p_start_date: dates.startDate,
-            p_end_date: dates.endDate,
-          }),
+          rpcProxy('get_pl_underlying_expenses', { p_start_date: dates.startDate, p_end_date: dates.endDate }),
+          rpcProxy('get_pl_underlying_revenue', { p_start_date: dates.startDate, p_end_date: dates.endDate }),
         ]);
 
         // Only set data if request wasn't aborted
