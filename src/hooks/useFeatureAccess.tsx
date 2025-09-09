@@ -64,7 +64,11 @@ export function useFeatureAccess(featureName: string, currentCount: number = 1) 
           });
         }
       } catch (error) {
-        console.error('Error checking feature access:', error);
+        try {
+          console.error('Error checking feature access:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+        } catch (e) {
+          console.error('Error checking feature access (non-serializable):', error);
+        }
         setAccess({
           canAccess: false,
           isLimited: true,
