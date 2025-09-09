@@ -20,15 +20,9 @@ export function useTenantContacts() {
     queryFn: async (): Promise<ContactInfo[]> => {
       try {
         // Use the dedicated RPC for more reliable contact fetching
-        const { data: result, error: rpcError } = await supabase
-          .rpc('get_tenant_contacts')
-          .maybeSingle();
-
-        if (rpcError) {
-          throw rpcError;
-        }
-
-        // Extract contacts from the result
+        const res = await rpcProxy('get_tenant_contacts', {});
+        if (res.error) throw res.error;
+        const result = res.data;
         return (result as any)?.contacts || [];
       } catch {
         // Fallback to platform support on any error
