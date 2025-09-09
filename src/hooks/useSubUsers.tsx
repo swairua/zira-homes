@@ -53,30 +53,22 @@ export const useSubUsers = () => {
     setLoading(true);
     try {
       // Fetch sub-users first
-      const { data: subUsersData, error: subUsersError } = await supabase
-        .from('sub_users')
-        .select('*')
-        .eq('landlord_id', user.id)
-        .eq('status', 'active');
-
-      if (subUsersError) throw subUsersError;
+      const subsRes = await restSelect('sub_users', '*', { landlord_id: `eq.${user.id}`, status: 'eq.active' });
+      if (subsRes.error) throw subsRes.error;
+      const subUsersData = subsRes.data || [];
 
       // Then fetch profiles for those who have user_id
-      const userIds = subUsersData?.filter(su => su.user_id).map(su => su.user_id) || [];
+      const userIds = subUsersData?.filter((su:any) => su.user_id).map((su:any) => su.user_id) || [];
       let profilesData: any[] = [];
-      
-      if (userIds.length > 0) {
-        const { data: profiles, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name, email, phone')
-          .in('id', userIds);
 
-        if (profilesError) throw profilesError;
-        profilesData = profiles || [];
+      if (userIds.length > 0) {
+        const profilesRes = await restSelect('profiles', 'id,first_name,last_name,email,phone', { id: `in.(${userIds.join(',')})` });
+        if (profilesRes.error) throw profilesRes.error;
+        profilesData = profilesRes.data || [];
       }
 
       // Transform and merge the data
-      const transformedData: SubUser[] = (subUsersData || []).map(item => {
+      const transformedData: SubUser[] = (subUsersData || []).map((item:any) => {
         const profile = profilesData.find(p => p.id === item.user_id);
         return {
           ...item,
