@@ -71,11 +71,7 @@ export function useNotifications() {
       );
       setUnreadCount(prev => Math.max(0, prev - 1));
 
-      const { error } = await supabase
-        .from("notifications")
-        .update({ read: true })
-        .eq("id", notificationId);
-
+      const { error } = await restUpdate('notifications', { read: true }, { id: `eq.${notificationId}` });
       if (error) throw error;
     } catch (error) {
       try {
