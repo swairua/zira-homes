@@ -135,9 +135,8 @@ const Units = () => {
       // Sync unit statuses to ensure they're up to date with current leases
       for (const unit of joinedUnits) {
         try {
-          const { error: syncError } = await supabase.rpc('sync_unit_status', {
-            p_unit_id: unit.id
-          });
+          const res = await rpcProxy('sync_unit_status', { p_unit_id: unit.id });
+          const syncError = res.error;
           if (syncError) {
             console.warn(`Failed to sync status for unit ${unit.unit_number}:`, syncError);
           }
