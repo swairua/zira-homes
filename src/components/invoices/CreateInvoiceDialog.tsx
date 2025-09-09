@@ -52,71 +52,44 @@ export const CreateInvoiceDialog = ({ onInvoiceCreated }: CreateInvoiceDialogPro
     try {
       console.log("Fetching leases...");
       
-      // Fetch leases separately 
-      const { data: leasesData, error: leasesError } = await supabase
-        .from("leases")
-        .select("id, monthly_rent, tenant_id, unit_id, status")
-        .in("status", ["active", "current"])
-        .order('created_at', { ascending: false });
-
-      if (leasesError) {
-        console.error("Error fetching leases:", leasesError);
-        throw leasesError;
-      }
+      // Fetch leases via REST proxy
+      const leasesRes = await restSelect('leases', 'id,monthly_rent,tenant_id,unit_id,status', { status: 'in.(active,current)' });
+      if (leasesRes.error) { console.error('Error fetching leases:', leasesRes.error); throw leasesRes.error; }
+      const leasesData = leasesRes.data || [];
 
       if (!leasesData || leasesData.length === 0) {
-        console.log("No leases found");
+        console.log('No leases found');
         setLeases([]);
         return;
       }
 
-      console.log("Found leases:", leasesData.length);
-
       // Extract unique IDs
-      const tenantIds = [...new Set(leasesData.map(l => l.tenant_id).filter(Boolean))];
-      const unitIds = [...new Set(leasesData.map(l => l.unit_id).filter(Boolean))];
+      const tenantIds = [...new Set(leasesData.map((l:any) => l.tenant_id).filter(Boolean))];
+      const unitIds = [...new Set(leasesData.map((l:any) => l.unit_id).filter(Boolean))];
 
       // Fetch tenants
-      const { data: tenantsData, error: tenantsError } = await supabase
-        .from("tenants")
-        .select("id, first_name, last_name")
-        .in("id", tenantIds);
-
-      if (tenantsError) {
-        console.error("Error fetching tenants:", tenantsError);
-        throw tenantsError;
-      }
+      const tenantsRes = await restSelect('tenants', 'id,first_name,last_name', { id: `in.(${tenantIds.join(',')})` });
+      if (tenantsRes.error) { console.error('Error fetching tenants:', tenantsRes.error); throw tenantsRes.error; }
+      const tenantsData = tenantsRes.data || [];
 
       // Fetch units
-      const { data: unitsData, error: unitsError } = await supabase
-        .from("units")
-        .select("id, unit_number, property_id")
-        .in("id", unitIds);
-
-      if (unitsError) {
-        console.error("Error fetching units:", unitsError);
-        throw unitsError;
-      }
+      const unitsRes = await restSelect('units', 'id,unit_number,property_id', { id: `in.(${unitIds.join(',')})` });
+      if (unitsRes.error) { console.error('Error fetching units:', unitsRes.error); throw unitsRes.error; }
+      const unitsData = unitsRes.data || [];
 
       // Extract property IDs and fetch properties
-      const propertyIds = [...new Set(unitsData?.map(u => u.property_id).filter(Boolean) || [])];
-      const { data: propertiesData, error: propertiesError } = await supabase
-        .from("properties")
-        .select("id, name")
-        .in("id", propertyIds);
-
-      if (propertiesError) {
-        console.error("Error fetching properties:", propertiesError);
-        throw propertiesError;
-      }
+      const propertyIds = [...new Set(unitsData?.map((u:any) => u.property_id).filter(Boolean) || [])];
+      const propertiesRes = await restSelect('properties', 'id,name', { id: `in.(${propertyIds.join(',')})` });
+      if (propertiesRes.error) { console.error('Error fetching properties:', propertiesRes.error); throw propertiesRes.error; }
+      const propertiesData = propertiesRes.data || [];
 
       // Create lookup maps
-      const tenantsMap = new Map(tenantsData?.map(t => [t.id, t]) || []);
-      const unitsMap = new Map(unitsData?.map(u => [u.id, u]) || []);
-      const propertiesMap = new Map(propertiesData?.map(p => [p.id, p]) || []);
+      const tenantsMap = new Map(tenantsData?.map((t:any) => [t.id, t]) || []);
+      const unitsMap = new Map(unitsData?.map((u:any) => [u.id, u]) || []);
+      const propertiesMap = new Map(propertiesData?.map((p:any) => [p.id, p]) || []);
 
       // Compose the data
-      const composedLeases = leasesData.map(lease => {
+      const composedLeases = leasesData.map((lease:any) => {
         const tenant = tenantsMap.get(lease.tenant_id);
         const unit = unitsMap.get(lease.unit_id);
         const property = unit ? propertiesMap.get(unit.property_id) : null;
@@ -131,7 +104,6 @@ export const CreateInvoiceDialog = ({ onInvoiceCreated }: CreateInvoiceDialogPro
         };
       });
 
-      console.log("Composed leases:", composedLeases.length);
       setLeases(composedLeases);
     } catch (error) {
       console.error("Error fetching leases:", error);
