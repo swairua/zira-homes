@@ -4,7 +4,10 @@ function buildQueryString(params: Record<string, string | number | boolean> = {}
   const parts: string[] = [];
   for (const key of Object.keys(params)) {
     const value = params[key];
-    parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(String(value)));
+    // Allow passing keys containing operators like 'payment_date' => 'gte.iso' or 'payment_date2' => 'lte.iso'
+    // For keys that end with '2' we strip the suffix to allow multiple constraints on same column
+    const normalizedKey = key.endsWith('2') ? key.slice(0, -1) : key;
+    parts.push(encodeURIComponent(normalizedKey) + '=' + encodeURIComponent(String(value)));
   }
   return parts.length ? '&' + parts.join('&') : '';
 }
