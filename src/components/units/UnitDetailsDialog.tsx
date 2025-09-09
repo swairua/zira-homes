@@ -89,11 +89,7 @@ export function UnitDetailsDialog({ unit, mode, trigger }: UnitDetailsDialogProp
       }
       // If status is not maintenance, don't include it (let database handle occupancy)
 
-      const { error } = await supabase
-        .from('units')
-        .update(updateData)
-        .eq('id', unit.id);
-
+      const { error } = await restUpdate('units', updateData, { id: `eq.${unit.id}` });
       if (error) throw error;
       
       toast.success('Unit updated successfully');
