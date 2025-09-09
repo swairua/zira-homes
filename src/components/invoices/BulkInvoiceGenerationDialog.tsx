@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Calendar, FileText, Users, Building, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { rpcProxy } from '@/integrations/supabase/restProxy';
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { formatAmount } from "@/utils/currency";
