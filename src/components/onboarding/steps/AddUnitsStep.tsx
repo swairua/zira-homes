@@ -45,15 +45,10 @@ export function AddUnitsStep({ step, onNext }: AddUnitsStepProps) {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from('properties')
-        .select('*')
-        .eq('owner_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      setProperties(data || []);
+      const res = await restSelect('properties', '*', { owner_id: `eq.${user.id}` });
+      if (res.error) throw res.error;
+      const data = res.data || [];
+      setProperties(data);
       if (data && data.length > 0) {
         setSelectedPropertyId(data[0].id);
       }
