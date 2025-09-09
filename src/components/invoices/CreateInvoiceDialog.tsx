@@ -130,17 +130,15 @@ export const CreateInvoiceDialog = ({ onInvoiceCreated }: CreateInvoiceDialogPro
       }
 
       // Use database function to generate invoice number
-      const { error } = await supabase
-        .from("invoices")
-        .insert({
-          lease_id: values.lease_id,
-          tenant_id: selectedLease.tenant_id,
-          amount: Number(values.amount),
-          due_date: format(values.due_date, "yyyy-MM-dd"),
-          invoice_date: format(new Date(), "yyyy-MM-dd"),
-          description: values.description || `Monthly rent - ${format(new Date(), "MMMM yyyy")}`,
-          status: "pending"
-        });
+      const { error } = await restPost('invoices', {
+        lease_id: values.lease_id,
+        tenant_id: selectedLease.tenant_id,
+        amount: Number(values.amount),
+        due_date: format(values.due_date, "yyyy-MM-dd"),
+        invoice_date: format(new Date(), "yyyy-MM-dd"),
+        description: values.description || `Monthly rent - ${format(new Date(), "MMMM yyyy")}`,
+        status: "pending"
+      });
 
       if (error) throw error;
 
