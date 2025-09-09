@@ -110,15 +110,13 @@ export function OnboardingWizard({ open, onOpenChange, forceShow = false }: Onbo
 
   const updateStepStatus = async (stepId: string, status: 'completed' | 'skipped' | 'in_progress') => {
     try {
-      const { error } = await supabase
-        .from('user_onboarding_progress')
-        .upsert({
-          user_id: user?.id,
-          step_id: stepId,
-          status,
-          ...(status === 'completed' ? { completed_at: new Date().toISOString() } : {}),
-          ...(status === 'in_progress' ? { started_at: new Date().toISOString() } : {}),
-        });
+      const { error } = await restUpsert('user_onboarding_progress', {
+        user_id: user?.id,
+        step_id: stepId,
+        status,
+        ...(status === 'completed' ? { completed_at: new Date().toISOString() } : {}),
+        ...(status === 'in_progress' ? { started_at: new Date().toISOString() } : {}),
+      });
 
       if (error) throw error;
 
