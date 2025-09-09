@@ -39,21 +39,27 @@ if (SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY) {
     // If running in browser, override rpc to use server-side proxy to avoid CORS issues
     if (typeof window !== 'undefined') {
       const originalRpc = (_supabase as any).rpc?.bind(_supabase);
-      (_supabase as any).rpc = async (fnName: string, params?: any) => {
-        try {
-          const resp = await fetch(`/api/supabase/rpc/${encodeURIComponent(fnName)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(params || {}),
-          });
-          const text = await resp.text();
-          // Try parse JSON
-          try { return { data: JSON.parse(text), error: resp.ok ? null : { status: resp.status, text } }; } catch(e) { return { data: text, error: resp.ok ? null : { status: resp.status, text } }; }
-        } catch (e) {
-          // fallback to original rpc if proxy fails
-          if (originalRpc) return originalRpc(fnName, params);
-          throw e;
-        }
+      (_supabase as any).rpc = (fnName: string, params?: any) => {
+        const call = async () => {
+          try {
+            const resp = await fetch(`/api/supabase/rpc/${encodeURIComponent(fnName)}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(params || {}),
+            });
+            const text = await resp.text();
+            try { return { data: JSON.parse(text), error: resp.ok ? null : { status: resp.status, text } }; } catch(e) { return { data: text, error: resp.ok ? null : { status: resp.status, text } }; }
+          } catch (e) {
+            if (originalRpc) return originalRpc(fnName, params);
+            throw e;
+          }
+        };
+
+        const p = call();
+        // Attach compatibility methods used by supabase client
+        (p as any).maybeSingle = async () => await p;
+        (p as any).single = async () => await p;
+        return p as any;
       };
     }
   } catch (e) {
