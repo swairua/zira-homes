@@ -63,8 +63,16 @@ export function useTrialManagement() {
 
       console.log('🎯 useTrialManagement: Getting trial status via RPC...');
       // Get actual trial status using the database function
-      const { data: statusResult } = await supabase
+      const { data: statusResult, error: statusError } = await supabase
         .rpc('get_trial_status', { _user_id: user.id });
+
+      if (statusError) {
+        try {
+          console.error('useTrialManagement: get_trial_status RPC error:', JSON.stringify(statusError, Object.getOwnPropertyNames(statusError), 2));
+        } catch (e) {
+          console.error('useTrialManagement: get_trial_status RPC error (non-serializable):', statusError);
+        }
+      }
 
       console.log('📊 useTrialManagement: RPC status result:', statusResult);
 
@@ -79,19 +87,34 @@ export function useTrialManagement() {
         .eq('landlord_id', user.id)
         .maybeSingle(); // Use maybeSingle instead of single to handle zero results
 
+      if (subscriptionError) {
+        try {
+          console.error('useTrialManagement: landlord_subscriptions query error:', JSON.stringify(subscriptionError, Object.getOwnPropertyNames(subscriptionError), 2));
+        } catch (e) {
+          console.error('useTrialManagement: landlord_subscriptions query error (non-serializable):', subscriptionError);
+        }
+      }
+
       console.log('💳 useTrialManagement: Subscription data:', subscription);
-      console.log('❗ useTrialManagement: Subscription error:', subscriptionError);
 
       // Fallback: If subscription query fails but we have RPC status, create synthetic trial status
       if (!subscription && statusResult) {
         console.log('🔄 useTrialManagement: No subscription found, using RPC fallback...');
         
         // Try to get basic subscription data without billing plan join
-        const { data: basicSubscription } = await supabase
+        const { data: basicSubscription, error: basicSubError } = await supabase
           .from('landlord_subscriptions')
           .select('*')
           .eq('landlord_id', user.id)
           .maybeSingle();
+
+        if (basicSubError) {
+          try {
+            console.error('useTrialManagement: basic subscription query error:', JSON.stringify(basicSubError, Object.getOwnPropertyNames(basicSubError), 2));
+          } catch (e) {
+            console.error('useTrialManagement: basic subscription query error (non-serializable):', basicSubError);
+          }
+        }
 
         console.log('🔧 useTrialManagement: Basic subscription fallback:', basicSubscription);
 
