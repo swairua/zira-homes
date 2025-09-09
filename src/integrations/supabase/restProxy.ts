@@ -47,6 +47,30 @@ export async function restPost(table: string, body: any) {
   try { return { data: JSON.parse(text), error: resp.ok ? null : { status: resp.status, text } } } catch (e) { return { data: text as any, error: resp.ok ? null : { status: resp.status, text } } }
 }
 
+export async function restUpdate(table: string, body: any, filters: Record<string, string | number | boolean> = {}) {
+  const qs = buildQueryString(filters).replace(/^&/, '?');
+  const url = `/api/supabase/rest/${encodeURIComponent(table)}${qs}`;
+  const resp = await fetch(url, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const text = await resp.text();
+  try { return { data: JSON.parse(text), error: resp.ok ? null : { status: resp.status, text } } } catch (e) { return { data: text as any, error: resp.ok ? null : { status: resp.status, text } } }
+}
+
+export async function restDelete(table: string, filters: Record<string, string | number | boolean> = {}) {
+  const qs = buildQueryString(filters).replace(/^&/, '?');
+  const url = `/api/supabase/rest/${encodeURIComponent(table)}${qs}`;
+  const resp = await fetch(url, {
+    method: 'DELETE',
+    credentials: 'same-origin'
+  });
+  const text = await resp.text();
+  try { return { data: JSON.parse(text), error: resp.ok ? null : { status: resp.status, text } } } catch (e) { return { data: text as any, error: resp.ok ? null : { status: resp.status, text } } }
+}
+
 export async function rpcProxy(fnName: string, params: any) {
   const url = `/api/supabase/rpc/${encodeURIComponent(fnName)}`;
   const resp = await fetch(url, {
