@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Eye, Edit, Home, DollarSign, Info, Calendar } from "lucide-react";
 import { UnitEditForm } from "@/components/forms/UnitEditForm";
+import { restUpdate } from '@/integrations/supabase/restProxy';
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
