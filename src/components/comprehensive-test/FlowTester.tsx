@@ -79,22 +79,18 @@ export function FlowTester() {
     const propertyId = (window as any).__testPropertyId;
     if (!propertyId) throw new Error('No test property available');
 
-    const { data, error } = await supabase
-      .from("units")
-      .insert([{
-        property_id: propertyId,
-        unit_number: 'A1',
-        bedrooms: 2,
-        bathrooms: 1,
-        rent_amount: 25000,
-        unit_type: 'apartment'
-      }])
-      .select()
-      .single();
+    const res = await restPost('units', {
+      property_id: propertyId,
+      unit_number: 'A1',
+      bedrooms: 2,
+      bathrooms: 1,
+      rent_amount: 25000,
+      unit_type: 'apartment'
+    });
 
-    if (error) throw new Error(`Unit creation failed: ${error.message}`);
+    if (res.error) throw new Error(`Unit creation failed: ${JSON.stringify(res.error)}`);
+    const data = res.data;
     if (!data) throw new Error('Unit creation returned no data');
-    
     (window as any).__testUnitId = data.id;
   };
 
