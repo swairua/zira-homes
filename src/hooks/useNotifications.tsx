@@ -67,7 +67,7 @@ export function useNotifications() {
       }
       setNotifications([]);
       setUnreadCount(0);
-      toast.error?.('Failed to load notifications');
+      toast.error('Failed to load notifications');
     } finally {
       setLoading(false);
     }
