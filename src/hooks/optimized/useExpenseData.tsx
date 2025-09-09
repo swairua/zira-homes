@@ -55,44 +55,26 @@ export interface ExpenseFilters {
 }
 
 const fetchExpenses = async (filters?: ExpenseFilters): Promise<ExpenseWithDetails[]> => {
-  let query = supabase
-    .from("expenses")
-    .select(`
-      *,
-      properties(name),
-      units(unit_number),
-      tenants(first_name, last_name),
-      meter_readings(meter_type, units_consumed, rate_per_unit)
-    `);
-
-  // Apply filters
-  if (filters?.propertyId) {
-    query = query.eq("property_id", filters.propertyId);
-  }
-  
-  if (filters?.category) {
-    query = query.eq("category", filters.category);
-  }
-  
-  if (filters?.expenseType) {
-    query = query.eq("expense_type", filters.expenseType);
-  }
-  
+  const select = `*,properties(name),units(unit_number),tenants(first_name,last_name),meter_readings(meter_type,units_consumed,rate_per_unit)`;
+  const queryFilters: Record<string, string> = {};
+  if (filters?.propertyId) queryFilters['property_id'] = `eq.${filters.propertyId}`;
+  if (filters?.category) queryFilters['category'] = `eq.${filters.category}`;
+  if (filters?.expenseType) queryFilters['expense_type'] = `eq.${filters.expenseType}`;
   if (filters?.dateRange) {
-    query = query
-      .gte("expense_date", filters.dateRange.from.toISOString().split('T')[0])
-      .lte("expense_date", filters.dateRange.to.toISOString().split('T')[0]);
+    queryFilters['expense_date'] = `gte.${filters.dateRange.from.toISOString().split('T')[0]}`;
+    queryFilters['expense_date2'] = `lte.${filters.dateRange.to.toISOString().split('T')[0]}`;
   }
 
-  const { data, error } = await query.order("expense_date", { ascending: false });
+  const result = await restSelect('expenses', select, queryFilters);
+  if (result.error) throw result.error;
+  const data = result.data || [];
 
-  if (error) throw error;
-
-  // Fallback to dummy data if no data
   if (!data || data.length === 0) {
     return getDummyExpenses();
   }
 
+  // Sort by expense_date desc
+  data.sort((a: any, b: any) => new Date(b.expense_date).getTime() - new Date(a.expense_date).getTime());
   return data as unknown as ExpenseWithDetails[];
 };
 
