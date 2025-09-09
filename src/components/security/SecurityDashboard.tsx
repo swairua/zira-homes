@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AlertTriangle, Shield, Activity, Users, Lock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { restSelect } from '@/integrations/supabase/restProxy';
 import { useAuth } from '@/hooks/useAuth';
 
 interface SecurityEvent {
