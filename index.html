@@ -38,6 +38,25 @@
 
   <body>
     <div id="root"></div>
+    <script>
+      // Load runtime config from /runtime-config.json synchronously so values are available
+      (function(){
+        try {
+          var xhr = new XMLHttpRequest();
+          xhr.open('GET', '/runtime-config.json', false); // synchronous
+          xhr.send(null);
+          if (xhr.status === 200) {
+            try {
+              window.__RUNTIME_CONFIG = JSON.parse(xhr.responseText || '{}');
+            } catch (e) { window.__RUNTIME_CONFIG = {}; }
+          } else {
+            window.__RUNTIME_CONFIG = window.__RUNTIME_CONFIG || {};
+          }
+        } catch (e) {
+          window.__RUNTIME_CONFIG = window.__RUNTIME_CONFIG || {};
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
