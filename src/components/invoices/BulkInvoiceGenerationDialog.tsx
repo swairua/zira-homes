@@ -51,12 +51,8 @@ export function BulkInvoiceGenerationDialog({ onInvoicesGenerated }: BulkInvoice
       const currentMonth = new Date();
       currentMonth.setDate(1); // First day of month
       
-      const { data, error } = await supabase.rpc('generate_monthly_invoices_for_landlord', {
-        p_landlord_id: user.id,
-        p_invoice_month: currentMonth.toISOString().split('T')[0],
-        p_dry_run: true
-      }) as { data: any, error: any };
-
+      const res = await rpcProxy('generate_monthly_invoices_for_landlord', { p_landlord_id: user.id, p_invoice_month: currentMonth.toISOString().split('T')[0], p_dry_run: true });
+      const { data, error } = res;
       if (error) throw error;
       
       if (data?.success) {
