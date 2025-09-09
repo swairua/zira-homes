@@ -48,11 +48,11 @@ export function DataIntegrityMonitor() {
       setLoading(true);
       setError(null);
 
-      const { data, error } = await supabase.rpc('get_data_integrity_report');
+      const res = await rpcProxy('get_data_integrity_report', {});
 
-      if (error) throw error;
+      if (res.error) throw res.error;
 
-      setReport(data as unknown as IntegrityReport);
+      setReport(res.data as unknown as IntegrityReport);
     } catch (err) {
       console.error('Error fetching integrity report:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch integrity report');
