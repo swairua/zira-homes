@@ -36,15 +36,12 @@ export const useUserProfile = () => {
         setError(null);
 
         // First try to get from profiles table
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-
-        if (profileError && profileError.code !== 'PGRST116') {
-          throw profileError;
+        const res = await restSelect('profiles', '*', { id: `eq.${user.id}` }, true);
+        if (res.error) {
+          // If specific PostgREST error code for missing relation, handle gracefully
+          console.warn('Could not fetch profiles via rest proxy:', res.error);
         }
+        const profileData = res.data || null;
 
         // Combine user data with profile data, prioritizing profile data
         const combinedProfile: UserProfile = {
