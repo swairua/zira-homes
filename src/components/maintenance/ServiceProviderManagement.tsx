@@ -69,25 +69,17 @@ export function ServiceProviderManagement() {
 
   const fetchProviders = async () => {
     try {
-      // Get total count
-      const { count } = await supabase
-        .from("service_providers")
-        .select('*', { count: 'exact', head: true });
-
-      setTotalProviders(count || 0);
-
-      // Get paginated data
-      const { data, error } = await supabase
-        .from("service_providers")
-        .select("*")
-        .order("name")
-        .range(offset, offset + pageSize - 1);
-
-      if (error) throw error;
-      setProviders(data || []);
+      setLoading(true);
+      // Fetch all providers then paginate client-side (server-side count via headers not available here)
+      const res = await restSelect('service_providers', '*');
+      if (res.error) throw res.error;
+      const all = res.data || [];
+      setTotalProviders(all.length);
+      const paged = all.sort((a:any,b:any)=> (a.name||'').localeCompare(b.name||'')).slice(offset, offset + pageSize);
+      setProviders(paged);
     } catch (error) {
-      console.error("Error fetching service providers:", error);
-      toast.error("Failed to fetch service providers");
+      console.error('Error fetching service providers:', error);
+      toast.error('Failed to fetch service providers');
     } finally {
       setLoading(false);
     }
