@@ -57,12 +57,8 @@ export function CreateSupportTicketDialog({
       if (error) throw error;
 
       // Log system event
-      await supabase.rpc('log_system_event', {
-        _type: 'info',
-        _message: `New support ticket created: ${formData.title}`,
-        _service: 'Support System',
-        _user_id: user.id
-      });
+      const logRes = await rpcProxy('log_system_event', { _type: 'info', _message: `New support ticket created: ${formData.title}`, _service: 'Support System', _user_id: user.id });
+      if (logRes.error) console.warn('log_system_event error', logRes.error);
 
       toast({
         title: "Ticket Created",
