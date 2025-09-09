@@ -151,17 +151,13 @@ export function useExpenseSummary(dateRange?: { from: Date; to: Date }) {
   const query = useQuery({
     queryKey: queryKeys.expenses.summary(dateRange),
     queryFn: async () => {
-      let query = supabase
-        .from("expenses")
-        .select("amount, expense_date, category, expense_type, properties(name)");
-
+      const select = "amount,expense_date,category,expense_type,properties(name)";
+      const filters: Record<string, string> = {};
       if (dateRange) {
-        query = query
-          .gte("expense_date", dateRange.from.toISOString().split('T')[0])
-          .lte("expense_date", dateRange.to.toISOString().split('T')[0]);
+        filters['expense_date'] = `gte.${dateRange.from.toISOString().split('T')[0]}`;
+        filters['expense_date2'] = `lte.${dateRange.toISOString().split('T')[0]}`;
       }
-
-      const { data, error } = await query;
+      const { data, error } = await restSelect('expenses', select, filters);
       if (error) throw error;
       return data || [];
     },
