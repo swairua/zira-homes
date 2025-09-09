@@ -15,6 +15,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { supabase } from "@/integrations/supabase/client";
+import { restSelect, restPost } from '@/integrations/supabase/restProxy';
 import { toast } from "sonner";
 
 const formSchema = z.object({
