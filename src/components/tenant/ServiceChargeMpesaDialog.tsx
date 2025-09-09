@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, CheckCircle, AlertTriangle, Phone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { restSelect, restUpdate } from '@/integrations/supabase/restProxy';
 
 interface ServiceChargeMpesaDialogProps {
   open: boolean;
