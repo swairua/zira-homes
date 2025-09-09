@@ -86,17 +86,13 @@ export function LeaseExpiryManager({
       const endDate = new Date(Date.now() + selectedTimeframe * 24 * 60 * 60 * 1000)
         .toISOString().split('T')[0];
 
-      const { data, error } = await (supabase as any)
-        .rpc('get_lease_expiry_report', {
-          p_start_date: startDate,
-          p_end_date: endDate
-        });
+      const { data, error } = await rpcProxy('get_lease_expiry_report', { p_start_date: startDate, p_end_date: endDate });
 
       if (error) throw error;
 
       const reportData = data as any;
       const leasesData = reportData?.table || [];
-      
+
       setLeases(leasesData);
     } catch (error) {
       console.error('Error fetching lease data:', error);
