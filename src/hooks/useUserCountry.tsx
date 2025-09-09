@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { useAuth } from './useAuth';
 import { useUserProfile } from './useUserProfile';
 import { supabase } from '@/integrations/supabase/client';
-import { 
-  getCountryFromPhone, 
-  getCountryFromName, 
+import { restSelect } from '@/integrations/supabase/restProxy';
+import {
+  getCountryFromPhone,
+  getCountryFromName,
   getDefaultCountry,
-  CountryCode 
+  CountryCode
 } from '@/utils/countryService';
 
 interface UserCountryData {
