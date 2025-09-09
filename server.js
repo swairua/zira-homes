@@ -26,6 +26,89 @@ app.use(express.static(path.join(__dirname, 'dist'), {
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 
+// Simple helper to parse cookies
+function parseCookies(req) {
+  const cookie = req.headers && req.headers.cookie;
+  if (!cookie) return {};
+  return cookie.split(';').map(c => c.trim()).reduce((acc, pair) => {
+    const parts = pair.split('=');
+    acc[parts[0]] = decodeURIComponent(parts.slice(1).join('='));
+    return acc;
+  }, {});
+}
+
+// Auth endpoints (server-side) - sign in / sign out / get user
+app.post('/api/auth/signin', express.json(), async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return res.status(500).json({ error: 'Auth not configured on server.' });
+  const { email, password } = req.body || {};
+  if (!email || !password) return res.status(400).json({ error: 'Missing email or password' });
+  try {
+    const target = SUPABASE_URL.replace(/\/$/, '') + '/auth/v1/token?grant_type=password';
+    const resp = await fetch(target, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      return res.status(resp.status).json({ error: data });
+    }
+    // Set HttpOnly cookies for tokens
+    const isSecure = process.env.NODE_ENV === 'production';
+    const cookieOpts = `HttpOnly; Path=/; SameSite=Lax${isSecure ? '; Secure' : ''}`;
+    if (data.access_token) res.setHeader('Set-Cookie', `sb-access-token=${data.access_token}; ${cookieOpts}`);
+    if (data.refresh_token) res.setHeader('Set-Cookie', `sb-refresh-token=${data.refresh_token}; ${cookieOpts}`);
+    return res.status(200).json({ user: data.user, access_token: data.access_token });
+  } catch (e) {
+    return res.status(502).json({ error: String(e) });
+  }
+});
+
+app.post('/api/auth/signout', express.json(), async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return res.status(500).json({ error: 'Auth not configured on server.' });
+  try {
+    const cookies = parseCookies(req);
+    const token = cookies['sb-access-token'];
+    const target = SUPABASE_URL.replace(/\/$/, '') + '/auth/v1/logout';
+    await fetch(target, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: token ? `Bearer ${token}` : ''
+      }
+    });
+    // Clear cookies
+    const cookieOpts = `Path=/; Max-Age=0; HttpOnly; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`;
+    res.setHeader('Set-Cookie', [`sb-access-token=; ${cookieOpts}`, `sb-refresh-token=; ${cookieOpts}`]);
+    return res.status(200).json({ ok: true });
+  } catch (e) {
+    return res.status(502).json({ error: String(e) });
+  }
+});
+
+app.get('/api/auth/user', async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return res.status(500).json({ error: 'Auth not configured on server.' });
+  try {
+    const cookies = parseCookies(req);
+    const token = cookies['sb-access-token'];
+    if (!token) return res.status(200).json({ user: null });
+    const target = SUPABASE_URL.replace(/\/$/, '') + '/auth/v1/user';
+    const resp = await fetch(target, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token}`
+      }
+    });
+    const data = await resp.json();
+    return res.status(resp.status).json(data);
+  } catch (e) {
+    return res.status(502).json({ error: String(e) });
+  }
+});
+
 // Simple proxy for Supabase RPC calls to avoid CORS issues in the browser.
 app.post('/api/supabase/rpc/:fn', express.json(), async (req, res) => {
   const fn = req.params.fn;
