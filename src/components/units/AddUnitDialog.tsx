@@ -64,13 +64,9 @@ export function AddUnitDialog({ onUnitAdded }: AddUnitDialogProps) {
 
   const fetchProperties = async () => {
     try {
-      const { data, error } = await supabase
-        .from('properties')
-        .select('id, name, property_type')
-        .order('name');
-
-      if (error) throw error;
-      setProperties(data || []);
+      const res = await restSelect('properties', 'id,name,property_type');
+      if (res.error) throw res.error;
+      setProperties(res.data || []);
     } catch (error) {
       console.error('Error fetching properties:', error);
       toast({
