@@ -43,12 +43,9 @@ export function TenantHeader() {
 
   const fetchUserProfile = async () => {
     try {
-      const { data } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user?.id)
-        .single();
-      setUserProfile(data);
+      const res = await restSelect('profiles', '*', { id: `eq.${user?.id}` }, true);
+      if (res.error) throw res.error;
+      setUserProfile(res.data || null);
     } catch (error) {
       console.error("Error fetching profile:", error);
     }
