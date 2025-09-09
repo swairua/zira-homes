@@ -22,19 +22,15 @@ export function useLeaseExpiryCount() {
 
         // Avoid complex `.or` on nested relations which may fail parsing on the server.
         // Step 1: find properties owned or managed by user
-        const { data: properties, error: propError } = await supabase
-          .from('properties')
-          .select('id')
-          .or(`owner_id.eq.${user.id},manager_id.eq.${user.id}`);
-
-        if (propError) {
-          try { console.error('Error fetching properties for lease expiry:', JSON.stringify(propError, Object.getOwnPropertyNames(propError), 2)); } catch (e) { console.error('Error fetching properties for lease expiry (non-serializable):', propError); }
+        const propRes = await restSelect('properties', 'id', { or: `(owner_id.eq.${user.id},manager_id.eq.${user.id})` });
+        if (propRes.error) {
+          console.error('Error fetching properties for lease expiry:', propRes.error);
           setExpiringCount(0);
           setLoading(false);
           return;
         }
 
-        const propertyIds = (properties || []).map((p: any) => p.id).filter(Boolean);
+        const propertyIds = (propRes.data || []).map((p: any) => p.id).filter(Boolean);
         if (propertyIds.length === 0) {
           setExpiringCount(0);
           setLoading(false);
@@ -42,19 +38,15 @@ export function useLeaseExpiryCount() {
         }
 
         // Step 2: find units in those properties
-        const { data: units, error: unitsError } = await supabase
-          .from('units')
-          .select('id')
-          .in('property_id', propertyIds);
-
-        if (unitsError) {
-          try { console.error('Error fetching units for lease expiry:', JSON.stringify(unitsError, Object.getOwnPropertyNames(unitsError), 2)); } catch (e) { console.error('Error fetching units for lease expiry (non-serializable):', unitsError); }
+        const unitsRes = await restSelect('units', 'id', { property_id: `in.(${propertyIds.join(',')})` });
+        if (unitsRes.error) {
+          console.error('Error fetching units for lease expiry:', unitsRes.error);
           setExpiringCount(0);
           setLoading(false);
           return;
         }
 
-        const unitIds = (units || []).map((u: any) => u.id).filter(Boolean);
+        const unitIds = (unitsRes.data || []).map((u: any) => u.id).filter(Boolean);
         if (unitIds.length === 0) {
           setExpiringCount(0);
           setLoading(false);
@@ -62,19 +54,13 @@ export function useLeaseExpiryCount() {
         }
 
         // Step 3: count active leases on those units expiring within the next 90 days
-        const { data: leasesData, error: leasesError, count } = await supabase
-          .from('leases')
-          .select('id', { count: 'exact' })
-          .in('unit_id', unitIds)
-          .eq('status', 'active')
-          .gte('lease_end_date', new Date().toISOString())
-          .lte('lease_end_date', ninetyDaysFromNow.toISOString());
-
-        if (leasesError) {
-          try { console.error('Error fetching expiring leases:', JSON.stringify(leasesError, Object.getOwnPropertyNames(leasesError), 2)); } catch (e) { console.error('Error fetching expiring leases (non-serializable):', leasesError); }
+        const leasesRes = await restSelect('leases', 'id', { unit_id: `in.(${unitIds.join(',')})`, status: 'eq.active', lease_end_date: `gte.${new Date().toISOString()}`, lease_end_date2: `lte.${ninetyDaysFromNow.toISOString()}` });
+        if (leasesRes.error) {
+          console.error('Error fetching expiring leases:', leasesRes.error);
           setExpiringCount(0);
         } else {
-          setExpiringCount(typeof count === 'number' ? count : (Array.isArray(leasesData) ? leasesData.length : 0));
+          const leasesData = leasesRes.data || [];
+          setExpiringCount(Array.isArray(leasesData) ? leasesData.length : 0);
         }
       } catch (error) {
         try {
