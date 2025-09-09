@@ -113,24 +113,20 @@ export function FlowTester() {
     const tenantId = (window as any).__testTenantId;
     if (!unitId || !tenantId) throw new Error('Missing unit or tenant for lease test');
 
-    const { data, error } = await supabase
-      .from('leases')
-      .insert([{
-        tenant_id: tenantId,
-        unit_id: unitId,
-        lease_start_date: new Date().toISOString().split('T')[0],
-        lease_end_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        monthly_rent: 25000,
-        security_deposit: 50000,
-        status: 'active'
-      }])
-      .select()
-      .single();
+    const leaseRes = await restPost('leases', {
+      tenant_id: tenantId,
+      unit_id: unitId,
+      lease_start_date: new Date().toISOString().split('T')[0],
+      lease_end_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      monthly_rent: 25000,
+      security_deposit: 50000,
+      status: 'active'
+    });
 
-    if (error) throw new Error(`Lease creation failed: ${error.message}`);
-    if (!data) throw new Error('Lease creation returned no data');
-    
-    (window as any).__testLeaseId = data.id;
+    if (leaseRes.error) throw new Error(`Lease creation failed: ${JSON.stringify(leaseRes.error)}`);
+    const leaseData = leaseRes.data;
+    if (!leaseData) throw new Error('Lease creation returned no data');
+    (window as any).__testLeaseId = leaseData.id;
   };
 
   const testInvoiceGeneration = async () => {
