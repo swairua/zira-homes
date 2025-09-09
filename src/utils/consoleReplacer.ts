@@ -47,10 +47,22 @@ class ConsoleReplacer {
 
   private createReplacementMethod(level: string) {
     return (...args: any[]) => {
+      // Combine args into a single message for filtering and logging
+      const message = args.map(arg => typeof arg === 'object' ? (() => {
+        try { return JSON.stringify(arg, null, 2); } catch (e) { return String(arg); }
+      })() : String(arg)).join(' ');
+
+      // Filter out React defaultProps deprecation warnings and similar noisy messages
+      if (message.includes('defaultProps') || message.includes('Support for defaultProps') || message.includes('will be removed from function components')) {
+        return; // swallow
+      }
+
       // Buffer the call for debugging purposes
       this.buffer.push({
         level,
-        args: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)),
+        args: args.map(arg => {
+          try { return typeof arg === 'object' ? JSON.stringify(arg) : String(arg); } catch (e) { return String(arg); }
+        }),
         timestamp: new Date().toISOString(),
       });
 
@@ -60,10 +72,6 @@ class ConsoleReplacer {
       }
 
       // Convert to proper logging
-      const message = args.map(arg => 
-        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-      ).join(' ');
-
       switch (level) {
         case 'error':
           logger.error(message);
