@@ -58,9 +58,9 @@ export function useLandlordDashboard() {
       setLoading(true);
       setError(null);
 
-      const { data: result, error: rpcError } = await supabase
-        .rpc('get_landlord_dashboard_data')
-        .maybeSingle();
+      const res = await rpcProxy('get_landlord_dashboard_data', {});
+      const result = res.data;
+      const rpcError = res.error;
 
       if (rpcError) {
         throw rpcError;
