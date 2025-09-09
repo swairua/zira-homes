@@ -70,12 +70,9 @@ const AdminInvoicesManagement = () => {
       let rpcData: any;
       let rpcError: any;
 
-      ({ data: rpcData, error: rpcError } = await supabase.rpc('get_invoice_overview', {
-        p_limit: pageSize,
-        p_offset: offset,
-        p_status: filterStatus !== "all" ? filterStatus : null,
-        p_search: searchTerm || null
-      }));
+      const res = await rpcProxy('get_invoice_overview', { p_limit: pageSize, p_offset: offset, p_status: filterStatus !== "all" ? filterStatus : null, p_search: searchTerm || null });
+      const rpcData = res.data;
+      const rpcError = res.error;
 
       if (rpcError) {
         console.error('Supabase RPC error:', rpcError);
