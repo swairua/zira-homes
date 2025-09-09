@@ -174,13 +174,10 @@ export function OnboardingWizard({ open, onOpenChange, forceShow = false }: Onbo
       setCompleting(true);
       
       // Mark onboarding as completed in subscription
-      const { error } = await supabase
-        .from('landlord_subscriptions')
-        .update({
-          onboarding_completed: true,
-          onboarding_completed_at: new Date().toISOString()
-        })
-        .eq('landlord_id', user?.id);
+      const { error } = await restUpdate('landlord_subscriptions', {
+        onboarding_completed: true,
+        onboarding_completed_at: new Date().toISOString()
+      }, { landlord_id: `eq.${user?.id}` });
 
       if (error) throw error;
 
