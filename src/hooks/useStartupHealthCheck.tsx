@@ -36,12 +36,8 @@ export function useStartupHealthCheck() {
     try {
       // Check 1: Basic database connectivity
       try {
-        const { error: dbError } = await supabase
-          .from('profiles')
-          .select('id')
-          .limit(1);
-        
-        if (!dbError) {
+        const res = await restSelect('profiles', 'id', {}, true);
+        if (!res.error) {
           checks.database = true;
         } else {
           issues.push('Database connection failed');
@@ -52,25 +48,28 @@ export function useStartupHealthCheck() {
 
       // Check 2: Critical RPC availability
       try {
-        const { error: rpcError } = await supabase
-          .rpc('get_landlord_dashboard_data')
-          .maybeSingle();
-        
-        // Even if no data, the RPC should be callable
-        if (!rpcError || rpcError.code !== '42883') { // 42883 = function does not exist
+        const rpcRes = await rpcProxy('get_landlord_dashboard_data', {});
+        if (!rpcRes.error) {
           checks.rpcAvailability = true;
         } else {
-          issues.push('Critical database functions are not available');
+          // If rpcRes.error contains function-not-found, treat as missing
+          issues.push('Critical database functions may be unavailable');
         }
       } catch (err) {
         issues.push('RPC functions may be unavailable');
       }
 
-      // Check 3: Auth service connection
+      // Check 3: Auth service connection (server-side check)
       try {
-        const { data: { session }, error: authError } = await supabase.auth.getSession();
-        if (!authError) {
-          checks.authConnection = true;
+        const resp = await fetch('/api/auth/user');
+        if (resp.ok) {
+          const payload = await resp.json();
+          if (payload && payload.user) {
+            checks.authConnection = true;
+          } else {
+            // no session but service reachable
+            checks.authConnection = true;
+          }
         } else {
           issues.push('Authentication service connection issue');
         }
