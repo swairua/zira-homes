@@ -48,20 +48,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           console.log("🔍 Initial session check:", sessionData ? "session found" : "no session");
         }
 
-        // DEV fallback: if no real session, check local dev session stub
-        if (!sessionData && typeof window !== 'undefined') {
-          try {
-            const raw = localStorage.getItem('dev_supabase_session');
-            if (raw) {
-              const devSession = JSON.parse(raw);
-              console.log('Using dev_supabase_session fallback', devSession);
-              sessionData = devSession;
-            }
-          } catch (e) {
-            // ignore parse errors
-          }
-        }
-
         setSession(sessionData);
         setUser(sessionData?.user ?? null);
         setLoading(false);
@@ -90,8 +76,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.log("🗑️ Clearing browser storage");
       localStorage.removeItem('sb-kdpqimetajnhcqseajok-auth-token');
       sessionStorage.removeItem('sb-kdpqimetajnhcqseajok-auth-token');
-      // Clear dev session if present
-      try { localStorage.removeItem('dev_supabase_session'); } catch(e) {}
 
       // Attempt to sign out from Supabase with global scope
       console.log("☁️ Calling Supabase signOut with global scope");
