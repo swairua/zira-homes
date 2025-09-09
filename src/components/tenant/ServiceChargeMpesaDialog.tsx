@@ -105,26 +105,20 @@ export const ServiceChargeMpesaDialog: React.FC<ServiceChargeMpesaDialogProps> =
   const startStatusPolling = (requestId: string) => {
     const checkStatus = async () => {
       try {
-        const { data: transaction } = await supabase
-          .from('mpesa_transactions')
-          .select('status, result_desc, mpesa_receipt_number')
-          .eq('checkout_request_id', requestId)
-          .single();
+        const txRes = await restSelect('mpesa_transactions', 'status,result_desc,mpesa_receipt_number', { checkout_request_id: `eq.${requestId}` }, true);
+        const transaction = txRes.data;
 
         if (transaction) {
           if (transaction.status === 'completed') {
             setStatus('success');
-            
+
             // Update service charge invoice status
-            await supabase
-              .from('service_charge_invoices')
-              .update({
-                status: 'paid',
-                payment_date: new Date().toISOString(),
-                payment_method: 'mpesa',
-                payment_reference: transaction.mpesa_receipt_number,
-              })
-              .eq('id', invoice.id);
+            await restUpdate('service_charge_invoices', {
+              status: 'paid',
+              payment_date: new Date().toISOString(),
+              payment_method: 'mpesa',
+              payment_reference: transaction.mpesa_receipt_number,
+            }, { id: `eq.${invoice.id}` });
 
             toast({
               title: "Payment Successful",
