@@ -35,6 +35,30 @@ let _supabase: ReturnType<typeof createClient<Database>> | null = null;
 
 if (SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY) {
   _supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, supabaseOptions);
+  try {
+    // If running in browser, override rpc to use server-side proxy to avoid CORS issues
+    if (typeof window !== 'undefined') {
+      const originalRpc = (_supabase as any).rpc?.bind(_supabase);
+      (_supabase as any).rpc = async (fnName: string, params?: any) => {
+        try {
+          const resp = await fetch(`/api/supabase/rpc/${encodeURIComponent(fnName)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(params || {}),
+          });
+          const text = await resp.text();
+          // Try parse JSON
+          try { return { data: JSON.parse(text), error: resp.ok ? null : { status: resp.status, text } }; } catch(e) { return { data: text, error: resp.ok ? null : { status: resp.status, text } }; }
+        } catch (e) {
+          // fallback to original rpc if proxy fails
+          if (originalRpc) return originalRpc(fnName, params);
+          throw e;
+        }
+      };
+    }
+  } catch (e) {
+    // ignore
+  }
 } else {
   // Create a safe proxy that throws with a helpful message only when used
   const handler: ProxyHandler<any> = {
