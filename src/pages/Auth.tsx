@@ -156,25 +156,6 @@ const Auth = () => {
 
   // Compatibility helpers for different supabase-js versions
   const signInCompat = async (email: string, password: string) => {
-    // DEV-only quick login using stored env dev creds
-    try {
-      if (import.meta.env.DEV) {
-        const DEV_EMAIL = import.meta.env.VITE_DEV_AUTH_EMAIL || 'dev@example.com';
-        const DEV_PASS = import.meta.env.VITE_DEV_AUTH_PASSWORD || 'dev-password';
-        if (email === DEV_EMAIL && password === DEV_PASS) {
-          // create a dev session in localStorage so stub returns it
-          if (typeof window !== 'undefined') {
-            const user = { id: '00000000-0000-0000-0000-devsession', email };
-            const session = { access_token: 'dev-token', expires_at: Math.floor(Date.now()/1000) + 3600, user };
-            localStorage.setItem('dev_supabase_session', JSON.stringify(session));
-            return { data: { session }, error: null };
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('Error during dev quick login check', e);
-    }
-
     // Newer API
     if (supabase?.auth && typeof supabase.auth.signInWithPassword === 'function') {
       return await supabase.auth.signInWithPassword({ email, password });
@@ -183,7 +164,7 @@ const Auth = () => {
     if (supabase?.auth && typeof supabase.auth.signIn === 'function') {
       return await supabase.auth.signIn({ email, password });
     }
-    // Fallback to rpc or stub
+    // Fallback to rpc
     if (supabase?.rpc) {
       try {
         const res = await supabase.rpc('sign_in_with_password', { _email: email, _password: password });
@@ -595,37 +576,6 @@ const Auth = () => {
                 <div>
                   <CardTitle className="text-2xl text-gray-800">Welcome Back</CardTitle>
                   <p className="text-gray-600">Choose your preferred sign-in method</p>
-                </div>
-                <div className="text-right">
-                  <button
-                    type="button"
-                    className="text-xs text-primary underline"
-                    onClick={async () => {
-                      try {
-                        console.log('VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL);
-                        const anon = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON;
-                        console.log('VITE_SUPABASE_ANON_KEY length:', anon ? anon.length : 'not set');
-                        // detect stub
-                        if ((supabase as any).__isStubClient) {
-                          alert('Supabase client is using local stub. Real connection unavailable in this environment.');
-                          return;
-                        }
-                        // try a real request
-                        if (supabase && supabase.auth && typeof supabase.auth.getSession === 'function') {
-                          const res = await supabase.auth.getSession();
-                          console.log('supabase.auth.getSession()', res);
-                          alert('Supabase reachable. Check console for details.');
-                        } else {
-                          alert('Supabase client appears incomplete. Check environment variables.');
-                        }
-                      } catch (err) {
-                        console.error('Connection check error:', err);
-                        alert('Connection check failed. See console for details.');
-                      }
-                    }}
-                  >
-                    Check Supabase
-                  </button>
                 </div>
               </div>
             </CardHeader>
