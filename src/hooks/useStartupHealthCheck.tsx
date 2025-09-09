@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { restSelect, rpcProxy } from '@/integrations/supabase/restProxy';
 
 interface HealthCheckResult {
   status: 'checking' | 'healthy' | 'degraded' | 'failed';
