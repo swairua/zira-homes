@@ -176,11 +176,15 @@ const Payments = () => {
       setPayments(joinedPayments);
       setTotalCount(count || 0);
     } catch (error) {
-      console.error("💥 Error in fetchPayments:", error);
+      try {
+        console.error('💥 Error in fetchPayments:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+      } catch (e) {
+        console.error('💥 Error in fetchPayments (non-serializable):', error);
+      }
       toast({
-        title: "Error", 
-        description: "Failed to load payments. Please check your permissions.",
-        variant: "destructive",
+        title: 'Error',
+        description: error?.message || 'Failed to load payments. Please check your permissions.',
+        variant: 'destructive'
       });
       setPayments([]);
     } finally {
