@@ -52,7 +52,11 @@ export function usePlanFeatureAccess(
       });
 
       if (error) {
-        console.error('❌ Feature access check error:', error);
+        try {
+          console.error('❌ Feature access check error:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+        } catch (e) {
+          console.error('❌ Feature access check error (non-serializable):', error);
+        }
         throw error;
       }
 
