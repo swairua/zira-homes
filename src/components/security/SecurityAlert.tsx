@@ -26,8 +26,13 @@ export const SecurityAlert = () => {
         const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
         const res = await restSelect('security_events', '*', { created_at: `gte.${since}` });
         if (res.error) throw res.error;
-        const data = res.data || [];
-        setSecurityEvents(data.slice(0,5).map(event => ({
+        let data: any = res.data;
+        if (!Array.isArray(data)) {
+          if (data && typeof data === 'object' && Array.isArray((data as any).data)) data = (data as any).data;
+          else if (data == null || data === '') data = [];
+          else data = [data];
+        }
+        setSecurityEvents((data || []).slice(0,5).map(event => ({
           id: event.id,
           event_type: event.event_type,
           severity: event.severity,
