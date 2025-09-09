@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { rpcProxy } from '@/integrations/supabase/restProxy';
 import { supabase } from '@/integrations/supabase/client';
 
