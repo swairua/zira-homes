@@ -156,6 +156,22 @@ const Auth = () => {
 
   // Compatibility helpers for different supabase-js versions
   const signInCompat = async (email: string, password: string) => {
+    // Prefer server-side auth endpoint to avoid exposing keys
+    if (typeof window !== 'undefined') {
+      try {
+        const resp = await fetch('/api/auth/signin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const payload = await resp.json();
+        if (!resp.ok) return { data: null, error: payload };
+        return { data: { user: payload.user, session: null }, error: null };
+      } catch (e) {
+        console.warn('Server signin failed, falling back to client SDK:', e);
+      }
+    }
+
     // Newer API
     if (supabase?.auth && typeof supabase.auth.signInWithPassword === 'function') {
       return await supabase.auth.signInWithPassword({ email, password });
@@ -175,6 +191,23 @@ const Auth = () => {
   };
 
   const signUpCompat = async (email: string, password: string, options: any) => {
+    // Prefer server-side signup endpoint
+    if (typeof window !== 'undefined') {
+      try {
+        const body = { email, password, options };
+        const resp = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const payload = await resp.json();
+        if (!resp.ok) return { data: null, error: payload };
+        return { data: payload, error: null };
+      } catch (e) {
+        console.warn('Server signup failed, falling back to client SDK:', e);
+      }
+    }
+
     if (supabase?.auth && typeof supabase.auth.signUp === 'function') {
       return await supabase.auth.signUp({ email, password, options });
     }
