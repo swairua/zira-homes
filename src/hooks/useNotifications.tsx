@@ -60,9 +60,14 @@ export function useNotifications() {
       setNotifications(typedData);
       updateUnreadCount(typedData);
     } catch (error) {
-      console.error("Error fetching notifications:", error);
+      try {
+        console.error("Error fetching notifications:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+      } catch (e) {
+        console.error('Error fetching notifications (non-serializable):', error);
+      }
       setNotifications([]);
       setUnreadCount(0);
+      toast.error?.('Failed to load notifications');
     } finally {
       setLoading(false);
     }
