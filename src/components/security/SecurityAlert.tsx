@@ -23,25 +23,20 @@ export const SecurityAlert = () => {
   useEffect(() => {
     const fetchSecurityEvents = async () => {
       try {
-        const { data, error } = await supabase
-          .from('security_events')
-          .select('*')
-          .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Last 24 hours
-          .order('created_at', { ascending: false })
-          .limit(5);
-
-        if (!error && data) {
-          setSecurityEvents(data.map(event => ({
-            id: event.id,
-            event_type: event.event_type,
-            severity: event.severity,
-            details: typeof event.details === 'object' && event.details !== null ? event.details as Record<string, any> : {},
-            created_at: event.created_at,
-            ip_address: typeof event.ip_address === 'string' ? event.ip_address : undefined,
-            user_agent: typeof event.user_agent === 'string' ? event.user_agent : undefined,
-            user_id: typeof event.user_id === 'string' ? event.user_id : undefined
-          })));
-        }
+        const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const res = await restSelect('security_events', '*', { created_at: `gte.${since}` });
+        if (res.error) throw res.error;
+        const data = res.data || [];
+        setSecurityEvents(data.slice(0,5).map(event => ({
+          id: event.id,
+          event_type: event.event_type,
+          severity: event.severity,
+          details: typeof event.details === 'object' && event.details !== null ? event.details as Record<string, any> : {},
+          created_at: event.created_at,
+          ip_address: typeof event.ip_address === 'string' ? event.ip_address : undefined,
+          user_agent: typeof event.user_agent === 'string' ? event.user_agent : undefined,
+          user_id: typeof event.user_id === 'string' ? event.user_id : undefined
+        })));
       } catch (error) {
         console.error('Error fetching security events:', error);
       } finally {
