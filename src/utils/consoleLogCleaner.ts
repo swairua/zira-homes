@@ -67,8 +67,12 @@ if (isProduction) {
     }
   };
 
-  // Keep console.error for debugging production issues
-  console.error = originalError;
+  // Wrap console.error to suppress defaultProps messages but preserve other errors
+  console.error = (...args: any[]) => {
+    const message = sanitizeMessageFromArgs(args);
+    if (shouldSuppressMessage(message)) return;
+    originalError(...args);
+  };
 }
 
 // Additionally, suppress the same React defaultProps warning in development to reduce noise
@@ -86,6 +90,21 @@ if (!isProduction) {
       origWarn(...args);
     };
   })(console.warn.bind(console));
+
+  // Also wrap console.error in development to catch React warnings that are logged via error
+  console.error = ((origError) => {
+    return (...args: any[]) => {
+      try {
+        const message = sanitizeMessageFromArgs(args);
+        if (shouldSuppressMessage(message)) {
+          return; // swallow
+        }
+      } catch (e) {
+        // ignore
+      }
+      origError(...args);
+    };
+  })(console.error.bind(console));
 }
 
 // Performance monitoring for development
