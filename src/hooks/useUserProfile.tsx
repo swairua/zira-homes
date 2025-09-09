@@ -98,12 +98,7 @@ export const useUserProfile = () => {
         ...updates,
       };
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .upsert(profileUpdate)
-        .select()
-        .single();
-
+      const { data, error } = await restUpsert('profiles', profileUpdate);
       if (error) throw error;
 
       setProfile(prev => prev ? { ...prev, ...updates } : null);
