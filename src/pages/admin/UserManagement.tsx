@@ -178,13 +178,8 @@ const UserManagement = () => {
   const onAddUser = async (data: AddUserFormData) => {
     try {
       // Use the new create_user_safe function for better duplicate handling
-      const { data: result, error } = await supabase.rpc('create_user_safe', {
-        p_email: data.email,
-        p_first_name: data.first_name,
-        p_last_name: data.last_name,
-        p_phone: data.phone,
-        p_role: data.role as "Admin" | "Landlord" | "Manager" | "Agent" | "Tenant"
-      });
+      const res = await rpcProxy('create_user_safe', { p_email: data.email, p_first_name: data.first_name, p_last_name: data.last_name, p_phone: data.phone, p_role: data.role as "Admin" | "Landlord" | "Manager" | "Agent" | "Tenant" });
+      const { data: result, error } = res;
 
       if (error) throw error;
 
