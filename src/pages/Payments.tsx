@@ -82,21 +82,8 @@ const Payments = () => {
         .order("payment_date", { ascending: false });
 
       if (paymentsError) {
-        try {
-          console.error("❌ Payments query error:", JSON.stringify(paymentsError, Object.getOwnPropertyNames(paymentsError), 2));
-        } catch (e) {
-          console.error('❌ Payments query error (non-serializable):', paymentsError);
-        }
-        // Surface a friendly message to the user but continue gracefully
-        toast({
-          title: 'Error',
-          description: paymentsError?.message || 'Failed to query payments',
-          variant: 'destructive'
-        });
-        setPayments([]);
-        setTotalCount(0);
-        setLoading(false);
-        return;
+        console.error("❌ Payments query error:", paymentsError);
+        throw paymentsError;
       }
 
       // Get related data separately
@@ -107,34 +94,10 @@ const Payments = () => {
         supabase.from("properties").select("id, name")
       ]);
 
-      if (tenantsResult.error) {
-        try { console.error('❌ Tenants query error:', JSON.stringify(tenantsResult.error, Object.getOwnPropertyNames(tenantsResult.error), 2)); } catch (e) { console.error('❌ Tenants query error (non-serializable):', tenantsResult.error); }
-        toast({ title: 'Error', description: tenantsResult.error?.message || 'Failed to load tenants', variant: 'destructive' });
-        setPayments([]);
-        setLoading(false);
-        return;
-      }
-      if (leasesResult.error) {
-        try { console.error('❌ Leases query error:', JSON.stringify(leasesResult.error, Object.getOwnPropertyNames(leasesResult.error), 2)); } catch (e) { console.error('❌ Leases query error (non-serializable):', leasesResult.error); }
-        toast({ title: 'Error', description: leasesResult.error?.message || 'Failed to load leases', variant: 'destructive' });
-        setPayments([]);
-        setLoading(false);
-        return;
-      }
-      if (unitsResult.error) {
-        try { console.error('❌ Units query error:', JSON.stringify(unitsResult.error, Object.getOwnPropertyNames(unitsResult.error), 2)); } catch (e) { console.error('❌ Units query error (non-serializable):', unitsResult.error); }
-        toast({ title: 'Error', description: unitsResult.error?.message || 'Failed to load units', variant: 'destructive' });
-        setPayments([]);
-        setLoading(false);
-        return;
-      }
-      if (propertiesResult.error) {
-        try { console.error('❌ Properties query error:', JSON.stringify(propertiesResult.error, Object.getOwnPropertyNames(propertiesResult.error), 2)); } catch (e) { console.error('❌ Properties query error (non-serializable):', propertiesResult.error); }
-        toast({ title: 'Error', description: propertiesResult.error?.message || 'Failed to load properties', variant: 'destructive' });
-        setPayments([]);
-        setLoading(false);
-        return;
-      }
+      if (tenantsResult.error) throw tenantsResult.error;
+      if (leasesResult.error) throw leasesResult.error;
+      if (unitsResult.error) throw unitsResult.error;
+      if (propertiesResult.error) throw propertiesResult.error;
 
       // Create lookup maps
       const tenantMap = new Map(tenantsResult.data?.map(t => [t.id, t]) || []);
@@ -176,15 +139,11 @@ const Payments = () => {
       setPayments(joinedPayments);
       setTotalCount(count || 0);
     } catch (error) {
-      try {
-        console.error('💥 Error in fetchPayments:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
-      } catch (e) {
-        console.error('💥 Error in fetchPayments (non-serializable):', error);
-      }
+      console.error("💥 Error in fetchPayments:", error);
       toast({
-        title: 'Error',
-        description: error?.message || 'Failed to load payments. Please check your permissions.',
-        variant: 'destructive'
+        title: "Error", 
+        description: "Failed to load payments. Please check your permissions.",
+        variant: "destructive",
       });
       setPayments([]);
     } finally {
@@ -202,22 +161,10 @@ const Payments = () => {
         supabase.from("properties").select("id, name")
       ]);
 
-      if (tenantsResult.error) {
-        try { console.error('❌ Tenants query error:', JSON.stringify(tenantsResult.error, Object.getOwnPropertyNames(tenantsResult.error), 2)); } catch (e) { console.error('❌ Tenants query error (non-serializable):', tenantsResult.error); }
-        return;
-      }
-      if (leasesResult.error) {
-        try { console.error('❌ Leases query error:', JSON.stringify(leasesResult.error, Object.getOwnPropertyNames(leasesResult.error), 2)); } catch (e) { console.error('❌ Leases query error (non-serializable):', leasesResult.error); }
-        return;
-      }
-      if (unitsResult.error) {
-        try { console.error('❌ Units query error:', JSON.stringify(unitsResult.error, Object.getOwnPropertyNames(unitsResult.error), 2)); } catch (e) { console.error('❌ Units query error (non-serializable):', unitsResult.error); }
-        return;
-      }
-      if (propertiesResult.error) {
-        try { console.error('❌ Properties query error:', JSON.stringify(propertiesResult.error, Object.getOwnPropertyNames(propertiesResult.error), 2)); } catch (e) { console.error('❌ Properties query error (non-serializable):', propertiesResult.error); }
-        return;
-      }
+      if (tenantsResult.error) throw tenantsResult.error;
+      if (leasesResult.error) throw leasesResult.error;
+      if (unitsResult.error) throw unitsResult.error;
+      if (propertiesResult.error) throw propertiesResult.error;
 
       // Create lookup maps
       const unitMap = new Map(unitsResult.data?.map(u => [u.id, u]) || []);

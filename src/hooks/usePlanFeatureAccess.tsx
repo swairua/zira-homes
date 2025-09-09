@@ -52,17 +52,8 @@ export function usePlanFeatureAccess(
       });
 
       if (error) {
-        try {
-          console.error('❌ Feature access check error:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
-        } catch (e) {
-          console.error('❌ Feature access check error (non-serializable):', error);
-        }
-        // Return a safe fallback instead of throwing to avoid breaking UI
-        return {
-          allowed: false,
-          is_limited: true,
-          reason: error?.message || 'rpc_error'
-        } as FeatureAccessResult;
+        console.error('❌ Feature access check error:', error);
+        throw error;
       }
 
       console.log('✅ Feature access result:', data);

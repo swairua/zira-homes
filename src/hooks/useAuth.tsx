@@ -18,50 +18,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let unsubscribe = () => {};
-
-    // Prefer realtime listener if available
-    try {
-      if (supabase && supabase.auth && typeof supabase.auth.onAuthStateChange === 'function') {
-        const res = supabase.auth.onAuthStateChange((event: any, session: any) => {
-          console.log("🔄 Auth state change:", event, session ? "session exists" : "no session");
-          setSession(session);
-          setUser(session?.user ?? null);
-          setLoading(false);
-        });
-        // v2 returns { data: { subscription } }
-        unsubscribe = res?.data?.subscription?.unsubscribe ?? (() => {});
-      } else {
-        console.warn('supabase.auth.onAuthStateChange not available; falling back to session polling');
-      }
-    } catch (err) {
-      console.warn('Error setting up auth listener, falling back to session check', err);
-    }
-
-    // THEN check for existing session (safe-guarded)
-    (async () => {
-      try {
-        let sessionData = null;
-        if (supabase && supabase.auth && typeof supabase.auth.getSession === 'function') {
-          const result = await supabase.auth.getSession();
-          sessionData = result?.data?.session ?? null;
-          console.log("🔍 Initial session check:", sessionData ? "session found" : "no session");
-        }
-
-        setSession(sessionData);
-        setUser(sessionData?.user ?? null);
-        setLoading(false);
-      } catch (error) {
-        console.error('Error getting initial session:', error);
-        setSession(null);
-        setUser(null);
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        console.log("🔄 Auth state change:", event, session ? "session exists" : "no session");
+        setSession(session);
+        setUser(session?.user ?? null);
         setLoading(false);
       }
-    })();
+    );
 
-    return () => {
-      try { unsubscribe(); } catch (e) {}
-    };
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log("🔍 Initial session check:", session ? "session found" : "no session");
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const signOut = async () => {
@@ -76,18 +51,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.log("🗑️ Clearing browser storage");
       localStorage.removeItem('sb-kdpqimetajnhcqseajok-auth-token');
       sessionStorage.removeItem('sb-kdpqimetajnhcqseajok-auth-token');
-
+      
       // Attempt to sign out from Supabase with global scope
       console.log("☁️ Calling Supabase signOut with global scope");
-      try {
-        const { error } = await supabase.auth.signOut({ scope: 'global' });
-        if (error) {
-          console.warn("Supabase signOut error (continuing with local logout):", error);
-        } else {
-          console.log("✅ Supabase signOut successful");
-        }
-      } catch (e) {
-        console.warn('Error calling supabase.auth.signOut:', e);
+      const { error } = await supabase.auth.signOut({ scope: 'global' });
+      if (error) {
+        console.warn("Supabase signOut error (continuing with local logout):", error);
+      } else {
+        console.log("✅ Supabase signOut successful");
       }
       
       // Small delay to ensure auth state processes

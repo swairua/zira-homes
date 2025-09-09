@@ -60,14 +60,9 @@ export function useNotifications() {
       setNotifications(typedData);
       updateUnreadCount(typedData);
     } catch (error) {
-      try {
-        console.error("Error fetching notifications:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
-      } catch (e) {
-        console.error('Error fetching notifications (non-serializable):', error);
-      }
+      console.error("Error fetching notifications:", error);
       setNotifications([]);
       setUnreadCount(0);
-      toast.error('Failed to load notifications');
     } finally {
       setLoading(false);
     }
@@ -95,11 +90,7 @@ export function useNotifications() {
 
       if (error) throw error;
     } catch (error) {
-      try {
-        console.error("Error marking notification as read:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
-      } catch (e) {
-        console.error('Error marking notification as read (non-serializable):', error);
-      }
+      console.error("Error marking notification as read:", error);
       // Revert optimistic update
       fetchNotifications();
     }
@@ -121,11 +112,7 @@ export function useNotifications() {
 
       if (error) throw error;
     } catch (error) {
-      try {
-        console.error("Error marking all notifications as read:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
-      } catch (e) {
-        console.error('Error marking all notifications as read (non-serializable):', error);
-      }
+      console.error("Error marking all notifications as read:", error);
       // Revert optimistic update
       fetchNotifications();
     }

@@ -24,7 +24,7 @@ class ConsoleReplacer {
 
   constructor(config: ConsoleReplacerConfig = defaultConfig) {
     this.config = config;
-    this.originalConsole = { ...console } as any;
+    this.originalConsole = { ...console };
   }
 
   initialize() {
@@ -45,50 +45,12 @@ class ConsoleReplacer {
     logger.info('Console methods replaced for production');
   }
 
-  private sanitizeMessageFromArgs(args: any[]) {
-    try {
-      const raw = args
-        .map(a => typeof a === 'string' ? a : (typeof a === 'object' ? JSON.stringify(a) : String(a)))
-        .join(' ');
-      const noAnsi = raw.replace(/\x1b\[[0-9;]*m/g, '');
-      const noHtml = noAnsi.replace(/<[^>]*>/g, '');
-      return noHtml.trim().toLowerCase();
-    } catch (e) {
-      try { return String(args).toLowerCase(); } catch { return ''; }
-    }
-  }
-
-  private shouldSuppressMessage(message: string) {
-    if (!message) return false;
-    const patterns: RegExp[] = [
-      /defaultprops/,
-      /support for defaultprops/,
-      /will be removed.*defaultprops/,
-      /deprecated.*defaultprops/,
-      /default props.*will be removed/,
-      /support for `defaultprops`/,
-      /support for `defaultprops`/,
-      /react.*defaultprops/,
-    ];
-    return patterns.some(p => p.test(message));
-  }
-
   private createReplacementMethod(level: string) {
     return (...args: any[]) => {
-      // Combine args into a single message for filtering and logging
-      const message = this.sanitizeMessageFromArgs(args);
-
-      // Filter out React defaultProps deprecation warnings and similar noisy messages
-      if (this.shouldSuppressMessage(message)) {
-        return; // swallow
-      }
-
       // Buffer the call for debugging purposes
       this.buffer.push({
         level,
-        args: args.map(arg => {
-          try { return typeof arg === 'object' ? JSON.stringify(arg) : String(arg); } catch (e) { return String(arg); }
-        }),
+        args: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)),
         timestamp: new Date().toISOString(),
       });
 
@@ -98,6 +60,10 @@ class ConsoleReplacer {
       }
 
       // Convert to proper logging
+      const message = args.map(arg => 
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+
       switch (level) {
         case 'error':
           logger.error(message);

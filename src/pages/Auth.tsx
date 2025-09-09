@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +23,6 @@ const Auth = () => {
   const [isPasswordReset, setIsPasswordReset] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
-  const navigate = useNavigate();
 
   // Persist last signup email to enable resending confirmation even after clearing the form
   const [lastSignupEmail, setLastSignupEmail] = useState<string>("");
@@ -154,123 +153,35 @@ const Auth = () => {
     return <Navigate to="/" replace />;
   }
 
-  // Compatibility helpers for different supabase-js versions
-  const signInCompat = async (email: string, password: string) => {
-    // Newer API
-    if (supabase?.auth && typeof supabase.auth.signInWithPassword === 'function') {
-      return await supabase.auth.signInWithPassword({ email, password });
-    }
-    // Older API
-    if (supabase?.auth && typeof supabase.auth.signIn === 'function') {
-      return await supabase.auth.signIn({ email, password });
-    }
-    // Fallback to rpc
-    if (supabase?.rpc) {
-      try {
-        const res = await supabase.rpc('sign_in_with_password', { _email: email, _password: password });
-        return { data: res.data, error: res.error };
-      } catch (e) { return { data: null, error: e }; }
-    }
-    throw new Error('Sign-in method not available');
-  };
-
-  const signUpCompat = async (email: string, password: string, options: any) => {
-    if (supabase?.auth && typeof supabase.auth.signUp === 'function') {
-      return await supabase.auth.signUp({ email, password, options });
-    }
-    if (supabase?.auth && typeof supabase.auth.signUpWithPassword === 'function') {
-      return await supabase.auth.signUpWithPassword({ email, password });
-    }
-    if (supabase?.from) {
-      // Try creating via RPC or a users table (best-effort)
-      try {
-        const res = await supabase.rpc('create_user_with_password', { _email: email, _password: password, _meta: options?.data ?? {} });
-        return { data: res.data, error: res.error };
-      } catch (e) { return { data: null, error: e }; }
-    }
-    throw new Error('Sign-up method not available');
-  };
-
-  const resendCompat = async (opts: any) => {
-    if (supabase?.auth && typeof supabase.auth.resend === 'function') {
-      return await supabase.auth.resend(opts);
-    }
-    // No-op fallback
-    return { error: null };
-  };
-
-  const handleLogin = async (e?: React.FormEvent) => {
-    if (e && typeof e.preventDefault === 'function') e.preventDefault();
-    console.log('handleLogin invoked', { email: loginData.email });
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     setIsLoading(true);
     setError("");
     setSuccess("");
 
     try {
-      const result: any = await signInCompat(loginData.email, loginData.password);
-      console.log('signInCompat result:', result);
-      const error = result?.error ?? null;
+      const { error } = await supabase.auth.signInWithPassword({
+        email: loginData.email,
+        password: loginData.password,
+      });
 
       if (error) {
-        const msg = (error && error.message) || String(error);
-        if (msg.includes("Invalid login credentials")) {
+        if (error.message.includes("Invalid login credentials")) {
           setError("Invalid email or password. Please check your credentials and try again.");
-        } else if (msg.includes("Email not confirmed")) {
+        } else if (error.message.includes("Email not confirmed")) {
           setError("Please check your email and click the confirmation link before signing in.");
         } else {
-          setError(msg);
+          setError(error.message);
         }
         return;
       }
-
-      // If backend returned a session or user, consider login successful
-      const sessionFromResult = result?.data?.session ?? result?.data?.session ?? null;
-      const userFromResult = result?.data?.user ?? result?.user ?? null;
 
       toast({
         title: "Welcome back!",
         description: "You have been successfully logged in.",
       });
-
-      if (sessionFromResult || userFromResult) {
-        console.log('session/user returned directly, navigating to /');
-        // prefer navigate
-        try { navigate('/'); return; } catch (e) { window.location.href = '/'; return; }
-      }
-      // Wait for session to be available before navigating
-      try {
-        const waitForSession = async (timeout = 3000) => {
-          const start = Date.now();
-          while (Date.now() - start < timeout) {
-            try {
-              if (supabase?.auth && typeof supabase.auth.getSession === 'function') {
-                const res = await supabase.auth.getSession();
-                const sessionNow = res?.data?.session ?? null;
-                console.log('post-login session check:', sessionNow);
-                if (sessionNow) return sessionNow;
-              }
-            } catch (e) {
-              console.warn('Error checking session after login:', e);
-            }
-            await new Promise(r => setTimeout(r, 300));
-          }
-          return null;
-        };
-
-        const session = await waitForSession(5000);
-        if (session) {
-          navigate('/');
-        } else {
-          // As a fallback, reload to let auth state propagate
-          console.warn('No session after login; reloading to sync auth state');
-          window.location.reload();
-        }
-      } catch (e) {
-        console.error('Error during post-login navigation:', e);
-        try { navigate('/'); } catch (err) { window.location.href = '/'; }
-      }
-    } catch (err: any) {
-      setError(err?.message || "An unexpected error occurred. Please try again.");
+    } catch (err) {
+      setError("An unexpected error occurred. Please try again.");
       console.error("Login error:", err);
     } finally {
       setIsLoading(false);
@@ -299,8 +210,10 @@ const Auth = () => {
     try {
       const redirectUrl = `${window.location.origin}/`;
       console.log("Signup: creating user", signupData.email, "redirect:", redirectUrl);
-
-      const result: any = await signUpCompat(signupData.email, signupData.password, {
+      
+      const { error } = await supabase.auth.signUp({
+        email: signupData.email,
+        password: signupData.password,
         options: {
           emailRedirectTo: redirectUrl,
           data: {
@@ -309,20 +222,17 @@ const Auth = () => {
             phone: signupData.phone,
             role: signupData.role,
           },
-        }
+        },
       });
 
-      const error = result?.error ?? null;
-
       if (error) {
-        const msg = (error && error.message) || String(error);
-        if (msg.includes("User already registered")) {
+        if (error.message.includes("User already registered")) {
           setExistingAccountEmail(signupData.email);
           setActiveTab('login');
           setLoginData((prev) => ({ ...prev, email: signupData.email }));
           setError("An account with this email already exists. You can sign in, reset your password, or resend confirmation below.");
         } else {
-          setError(msg);
+          setError(error.message);
         }
         return;
       }
@@ -331,7 +241,7 @@ const Auth = () => {
       setLastSignupEmail(signupData.email);
 
       setSuccess(`Account created for ${signupData.email}. Please check your inbox at ${signupData.email} for a confirmation email from noreply@mail.app.supabase.io. If you can't find it, check Updates/Promotions or Spam/Junk and mark it as 'Not spam'.`);
-
+      
       // Clear form fields but keep lastSignupEmail for resend
       setSignupData({
         email: "",
@@ -347,19 +257,6 @@ const Auth = () => {
         title: "Account created!",
         description: `Confirmation sent to ${signupData.email}. From noreply@mail.app.supabase.io. Check Inbox, Updates/Promotions, or Spam/Junk.`,
       });
-      try {
-        // Wait a moment to allow auth session to initialize when using redirect flows
-        const res = (supabase?.auth && typeof supabase.auth.getSession === 'function') ? await supabase.auth.getSession() : null;
-        const sessionNow = res?.data?.session ?? null;
-        if (sessionNow) {
-          navigate('/');
-        } else {
-          // small delay then redirect
-          setTimeout(() => { try { navigate('/'); } catch (e) { window.location.href = '/'; } }, 500);
-        }
-      } catch (e) {
-        try { navigate('/'); } catch (err) { window.location.href = '/'; }
-      }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
       console.error("Signup error:", err);
@@ -572,12 +469,8 @@ const Auth = () => {
 
           <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
             <CardHeader className="space-y-2 pb-6 text-center">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-2xl text-gray-800">Welcome Back</CardTitle>
-                  <p className="text-gray-600">Choose your preferred sign-in method</p>
-                </div>
-              </div>
+              <CardTitle className="text-2xl text-gray-800">Welcome Back</CardTitle>
+              <p className="text-gray-600">Choose your preferred sign-in method</p>
             </CardHeader>
             <CardContent>
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'login' | 'signup')} className="space-y-6">
@@ -688,9 +581,8 @@ const Auth = () => {
                     </div>
                   </div>
 
-                  <Button
-                    type="submit"
-                    onClick={(e) => handleLogin(e as any)}
+                  <Button 
+                    type="submit" 
                     className="w-full h-12 bg-gradient-to-r from-accent to-accent/80 hover:from-accent/90 hover:to-accent text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200"
                     disabled={isLoading}
                   >
