@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { restSelect } from '@/integrations/supabase/restProxy';
 import { useAuth } from "@/hooks/useAuth";
 import { useUserCountry } from "@/hooks/useUserCountry";
 import { filterPaymentMethodsByCountry, getCountryInfo } from "@/utils/countryService";
