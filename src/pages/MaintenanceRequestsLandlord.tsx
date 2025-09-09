@@ -414,12 +414,8 @@ const MaintenanceRequestsLandlord = () => {
       if (error) throw error;
 
       // Log the action
-      await supabase.rpc("log_maintenance_action", {
-        _maintenance_request_id: requestId,
-        _user_id: user?.id,
-        _action_type: "note_added",
-        _new_value: isInternal ? "Internal note" : "Public note"
-      });
+      const logRes = await rpcProxy('log_maintenance_action', { _maintenance_request_id: requestId, _user_id: user?.id, _action_type: 'note_added', _new_value: isInternal ? 'Internal note' : 'Public note' });
+      if (logRes.error) console.warn('log_maintenance_action error', logRes.error);
 
       toast.success("Note added successfully");
       setNewNote("");
