@@ -45,15 +45,11 @@ export function TenantNotificationPortal({ initialFilter = "all" }: TenantNotifi
 
   const fetchPreferences = async () => {
     if (!user) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from("notification_preferences")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
+    try {
+      const { data, error } = await restSelect("notification_preferences", "*", { user_id: `eq.${user.id}` }, true);
+
+      if (error) {
         throw error;
       }
 
@@ -79,12 +75,10 @@ export function TenantNotificationPortal({ initialFilter = "all" }: TenantNotifi
       const updatedPreferences = { ...preferences, ...newPreferences };
       setPreferences(updatedPreferences);
 
-      const { error } = await supabase
-        .from("notification_preferences")
-        .upsert({
-          user_id: user.id,
-          ...updatedPreferences,
-        });
+      const { error } = await restUpsert("notification_preferences", {
+        user_id: user.id,
+        ...updatedPreferences,
+      });
 
       if (error) throw error;
 
