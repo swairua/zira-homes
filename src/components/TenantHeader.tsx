@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useRole } from "@/context/RoleContext";
@@ -8,7 +9,6 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { Bell, User, Sun, Moon, Monitor, Settings, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
-import { supabase } from "@/integrations/supabase/client";
 import { restSelect } from '@/integrations/supabase/restProxy';
 import { NotificationsPopover } from "@/components/notifications/NotificationsPopover";
 import {
