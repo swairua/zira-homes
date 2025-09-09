@@ -67,9 +67,6 @@ const AdminInvoicesManagement = () => {
       console.log('Fetching invoice overview...');
       
       // Use secure RPC function instead of direct view access
-      let rpcData: any;
-      let rpcError: any;
-
       const res = await rpcProxy('get_invoice_overview', { p_limit: pageSize, p_offset: offset, p_status: filterStatus !== "all" ? filterStatus : null, p_search: searchTerm || null });
       const rpcData = res.data;
       const rpcError = res.error;
