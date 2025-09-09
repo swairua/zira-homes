@@ -95,22 +95,17 @@ export function FlowTester() {
   };
 
   const testTenantCreation = async () => {
-    const { data, error } = await supabase
-      .from('tenants')
-      .insert([{
-        first_name: 'Test',
-        last_name: 'Tenant',
-        email: `test.tenant.${Date.now()}@example.com`,
-        phone: '+254712345678',
-        employment_status: 'employed'
-      }])
-      .select()
-      .single();
-
-    if (error) throw new Error(`Tenant creation failed: ${error.message}`);
-    if (!data) throw new Error('Tenant creation returned no data');
-    
-    (window as any).__testTenantId = data.id;
+    const tenantRes = await restPost('tenants', {
+      first_name: 'Test',
+      last_name: 'Tenant',
+      email: `test.tenant.${Date.now()}@example.com`,
+      phone: '+254712345678',
+      employment_status: 'employed'
+    });
+    if (tenantRes.error) throw new Error(`Tenant creation failed: ${JSON.stringify(tenantRes.error)}`);
+    const tenantData = tenantRes.data;
+    if (!tenantData) throw new Error('Tenant creation returned no data');
+    (window as any).__testTenantId = tenantData.id;
   };
 
   const testLeaseCreation = async () => {
