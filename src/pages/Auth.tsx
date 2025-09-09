@@ -184,7 +184,7 @@ const Auth = () => {
     // Fallback to rpc
     if (supabase?.rpc) {
       try {
-        const res = await supabase.rpc('sign_in_with_password', { _email: email, _password: password });
+        const res = await rpcProxy('sign_in_with_password', { _email: email, _password: password });
         return { data: res.data, error: res.error };
       } catch (e) { return { data: null, error: e }; }
     }
