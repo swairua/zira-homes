@@ -133,20 +133,13 @@ export function ServiceProviderManagement() {
       };
 
       if (editingProvider) {
-        const { error } = await supabase
-          .from("service_providers")
-          .update(saveData)
-          .eq("id", editingProvider.id);
-
+        const { error } = await restUpdate('service_providers', saveData, { id: `eq.${editingProvider.id}` });
         if (error) throw error;
-        toast.success("Service provider updated successfully");
+        toast.success('Service provider updated successfully');
       } else {
-        const { error } = await supabase
-          .from("service_providers")
-          .insert([saveData]);
-
+        const { error } = await restPost('service_providers', saveData);
         if (error) throw error;
-        toast.success("Service provider added successfully");
+        toast.success('Service provider added successfully');
       }
 
       setDialogOpen(false);
