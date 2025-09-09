@@ -5,6 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Circle, ArrowRight, ArrowLeft, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { restSelect, restUpsert, restUpdate } from '@/integrations/supabase/restProxy';
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
