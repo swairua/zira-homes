@@ -137,17 +137,8 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
         if (subscriptionError) throw subscriptionError;
 
         // Log the upgrade action
-        await supabase.rpc('log_user_activity', {
-          _user_id: user.id,
-          _action: 'subscription_upgrade',
-          _entity_type: 'billing_plan',
-          _entity_id: selectedPlan,
-          _details: {
-            plan_name: selectedPlanData.name,
-            billing_model: selectedPlanData.billing_model,
-            percentage_rate: selectedPlanData.percentage_rate
-          }
-        });
+        const logRes = await rpcProxy('log_user_activity', { _user_id: user.id, _action: 'subscription_upgrade', _entity_type: 'billing_plan', _entity_id: selectedPlan, _details: { plan_name: selectedPlanData.name, billing_model: selectedPlanData.billing_model, percentage_rate: selectedPlanData.percentage_rate } });
+        if (logRes.error) console.warn('log_user_activity error', logRes.error);
         
         toast.success(`${selectedPlanData.name} plan activated! You'll be billed ${selectedPlanData.percentage_rate}% commission on rent collected monthly.`);
         onClose();
