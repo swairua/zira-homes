@@ -332,13 +332,8 @@ const MaintenanceRequestsLandlord = () => {
       );
 
       // Log the action
-      await supabase.rpc("log_maintenance_action", {
-        _maintenance_request_id: requestId,
-        _user_id: user?.id,
-        _action_type: "status_change",
-        _old_value: oldStatus,
-        _new_value: newStatus
-      });
+      const logRes = await rpcProxy('log_maintenance_action', { _maintenance_request_id: requestId, _user_id: user?.id, _action_type: 'status_change', _old_value: oldStatus, _new_value: newStatus });
+      if (logRes.error) console.warn('log_maintenance_action error', logRes.error);
 
       toast.success(`Status updated to ${newStatus.replace('_', ' ')}`);
       
