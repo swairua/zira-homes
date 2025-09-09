@@ -5,6 +5,7 @@ import { ImpersonationProvider } from "@/hooks/useImpersonation";
 
 // Initialize production services and console cleaners before loading app code
 import './utils/productionConfig';
+import './utils/patchRecharts';
 import './utils/consoleLogCleaner';
 import './utils/consoleReplacer';
 
