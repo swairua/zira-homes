@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Home, Plus, Trash2, DoorOpen } from "lucide-react";
 import { UnitTypeSelect } from "@/components/ui/unit-type-select";
 import { supabase } from "@/integrations/supabase/client";
+import { restSelect, restPost } from '@/integrations/supabase/restProxy';
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
