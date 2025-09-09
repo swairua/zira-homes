@@ -10,10 +10,16 @@ const originalError = console.error;
 if (isProduction) {
   console.log = () => {}; // Disable console.log in production
   console.warn = (...args: any[]) => {
+    // Filter out known non-actionable warnings (e.g., React deprecation notes about defaultProps)
+    const message = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+    if (message.includes('defaultProps') || message.includes('Support for defaultProps') || message.includes('will be removed from function components')) {
+      return; // swallow this specific warning
+    }
+
     // Only show warnings for critical issues
     if (args.some(arg => typeof arg === 'string' && (
-      arg.includes('PDF') || 
-      arg.includes('database') || 
+      arg.includes('PDF') ||
+      arg.includes('database') ||
       arg.includes('auth') ||
       arg.includes('payment')
     ))) {
@@ -22,6 +28,23 @@ if (isProduction) {
   };
   // Keep console.error for debugging production issues
   console.error = originalError;
+}
+
+// Additionally, suppress the same React defaultProps warning in development to reduce noise
+if (!isProduction) {
+  console.warn = ((origWarn) => {
+    return (...args: any[]) => {
+      try {
+        const message = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+        if (message.includes('defaultProps') || message.includes('Support for defaultProps') || message.includes('will be removed from function components')) {
+          return; // swallow
+        }
+      } catch (e) {
+        // ignore serialization error
+      }
+      origWarn(...args);
+    };
+  })(console.warn.bind(console));
 }
 
 // Performance monitoring for development
