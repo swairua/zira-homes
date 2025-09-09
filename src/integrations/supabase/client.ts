@@ -1,12 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-// Prefer VITE_* vars but fall back to NEXT_PUBLIC_* ones if present
+// Prefer runtime config injected at host (window.__RUNTIME_CONFIG), then VITE_ / NEXT_PUBLIC_ envs
+function readMeta(name: string) {
+  try {
+    var el = document.querySelector('meta[name="' + name + '"]');
+    return el ? el.getAttribute('content') || '' : '';
+  } catch (e) { return ''; }
+}
+
+const runtime = (typeof window !== 'undefined' && (window as any).__RUNTIME_CONFIG) ? (window as any).__RUNTIME_CONFIG : {};
+
 const SUPABASE_URL = (
-  import.meta.env.VITE_SUPABASE_URL || import.meta.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  runtime.VITE_SUPABASE_URL || runtime.NEXT_PUBLIC_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || import.meta.env.NEXT_PUBLIC_SUPABASE_URL || readMeta('NEXT_PUBLIC_SUPABASE_URL') || ''
 ).toString();
 const SUPABASE_PUBLISHABLE_KEY = (
-  import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  runtime.VITE_SUPABASE_ANON_KEY || runtime.NEXT_PUBLIC_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || readMeta('NEXT_PUBLIC_SUPABASE_ANON_KEY') || ''
 ).toString();
 
 // Import the supabase client like this:
