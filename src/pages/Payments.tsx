@@ -82,8 +82,21 @@ const Payments = () => {
         .order("payment_date", { ascending: false });
 
       if (paymentsError) {
-        console.error("❌ Payments query error:", paymentsError);
-        throw paymentsError;
+        try {
+          console.error("❌ Payments query error:", JSON.stringify(paymentsError, Object.getOwnPropertyNames(paymentsError), 2));
+        } catch (e) {
+          console.error('❌ Payments query error (non-serializable):', paymentsError);
+        }
+        // Surface a friendly message to the user but continue gracefully
+        toast({
+          title: 'Error',
+          description: paymentsError?.message || 'Failed to query payments',
+          variant: 'destructive'
+        });
+        setPayments([]);
+        setTotalCount(0);
+        setLoading(false);
+        return;
       }
 
       // Get related data separately
