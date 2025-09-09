@@ -92,12 +92,7 @@ export function useNotifications() {
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
       setUnreadCount(0);
 
-      const { error } = await supabase
-        .from("notifications")
-        .update({ read: true })
-        .eq("user_id", user.id)
-        .eq("read", false);
-
+      const { error } = await restUpdate('notifications', { read: true }, { user_id: `eq.${user.id}`, read: `eq.false` });
       if (error) throw error;
     } catch (error) {
       try {
