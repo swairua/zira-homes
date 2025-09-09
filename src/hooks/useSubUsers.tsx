@@ -173,13 +173,8 @@ export const useSubUsers = () => {
 
   const deactivateSubUser = async (subUserId: string) => {
     try {
-      const { error } = await supabase
-        .from('sub_users')
-        .update({ status: 'inactive' })
-        .eq('id', subUserId);
-
+      const { error } = await restUpdate('sub_users', { status: 'inactive' }, { id: `eq.${subUserId}` });
       if (error) throw error;
-
       toast.success('Sub-user access revoked');
       fetchSubUsers();
     } catch (error) {
