@@ -64,20 +64,14 @@ export function OnboardingWizard({ open, onOpenChange, forceShow = false }: Onbo
       setLoading(true);
       
       // Get onboarding steps
-      const { data: onboardingSteps, error: stepsError } = await supabase
-        .from('onboarding_steps')
-        .select('*')
-        .order('step_order');
-
-      if (stepsError) throw stepsError;
+      const stepsRes = await restSelect('onboarding_steps', '*', {}, false);
+      if (stepsRes.error) throw stepsRes.error;
+      const onboardingSteps = (stepsRes.data || []).sort((a:any,b:any)=> (a.step_order||0)-(b.step_order||0));
 
       // Get user's progress
-      const { data: userProgress, error: progressError } = await supabase
-        .from('user_onboarding_progress')
-        .select('step_id, status, completed_at')
-        .eq('user_id', user?.id);
-
-      if (progressError) throw progressError;
+      const progressRes = await restSelect('user_onboarding_progress', 'step_id,status,completed_at', { user_id: `eq.${user?.id}` });
+      if (progressRes.error) throw progressRes.error;
+      const userProgress = progressRes.data || [];
 
       // Merge steps with user progress
       const progressMap = new Map(userProgress?.map(p => [p.step_id, p]) || []);
