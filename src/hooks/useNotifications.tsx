@@ -31,33 +31,15 @@ export function useNotifications() {
     if (!user) return;
 
     try {
-      let query = supabase
-        .from("notifications")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
+      const params: Record<string, string> = { user_id: `eq.${user.id}` };
+      if (filters.types && filters.types.length > 0) params['type'] = `in.(${filters.types.join(',')})`;
+      if (filters.unreadOnly) params['read'] = `eq.false`;
+      if (typeof filters.limit === 'number') params['limit'] = String(filters.limit);
 
-      if (filters.types && filters.types.length > 0) {
-        query = query.in("type", filters.types);
-      }
-
-      if (filters.unreadOnly) {
-        query = query.eq("read", false);
-      }
-
-      if (filters.limit) {
-        query = query.limit(filters.limit);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      const typedData = (data || []).map(item => ({
-        ...item,
-        type: item.type as Notification["type"]
-      })) as Notification[];
-      
+      const res = await restSelect('notifications', '*', params);
+      if (res.error) throw res.error;
+      const data = res.data || [];
+      const typedData = (data || []).map((item: any) => ({ ...item, type: item.type as Notification['type'] })) as Notification[];
       setNotifications(typedData);
       updateUnreadCount(typedData);
     } catch (error) {
