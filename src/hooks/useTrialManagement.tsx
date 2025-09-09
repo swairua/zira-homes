@@ -203,7 +203,11 @@ export function useTrialManagement() {
         console.log('❌ useTrialManagement: No subscription found and no RPC status');
       }
     } catch (error) {
-      console.error('❌ useTrialManagement: Error checking trial status:', error);
+      try {
+        console.error('❌ useTrialManagement: Error checking trial status:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+      } catch (e) {
+        console.error('❌ useTrialManagement: Error checking trial status (non-serializable):', error);
+      }
     } finally {
       console.log('🏁 useTrialManagement: Finished, setting loading to false');
       setLoading(false);
@@ -236,7 +240,11 @@ export function useTrialManagement() {
         })
         .eq('landlord_id', user.id);
     } catch (error) {
-      console.error('Error tracking feature usage:', error);
+      try {
+        console.error('Error tracking feature usage:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+      } catch (e) {
+        console.error('Error tracking feature usage (non-serializable):', error);
+      }
     }
   };
 
@@ -253,7 +261,11 @@ export function useTrialManagement() {
       
       return canAccess || false;
     } catch (error) {
-      console.error('Error checking feature access:', error);
+      try {
+        console.error('Error checking feature access:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+      } catch (e) {
+        console.error('Error checking feature access (non-serializable):', error);
+      }
       return false;
     }
   };
