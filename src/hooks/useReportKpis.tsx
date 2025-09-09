@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { useQuery } from '@tanstack/react-query';
 import { rpcProxy, restSelect } from '@/integrations/supabase/restProxy';
 import { getReportsForRole } from '@/lib/reporting/config';
 import { useRole } from '@/context/RoleContext';
