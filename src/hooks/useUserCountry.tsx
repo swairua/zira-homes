@@ -125,12 +125,9 @@ async function detectCountryFromProperties(userId: string): Promise<{
   countries: CountryCode[];
 }> {
   try {
-    const { data: properties, error } = await supabase
-      .from('properties')
-      .select('country')
-      .eq('owner_id', userId);
-
-    if (error) throw error;
+    const res = await restSelect('properties', 'country', { owner_id: `eq.${userId}` });
+    if (res.error) throw res.error;
+    const properties = res.data || [];
 
     if (!properties || properties.length === 0) {
       return { primary: getDefaultCountry(), countries: [] };
@@ -140,7 +137,7 @@ async function detectCountryFromProperties(userId: string): Promise<{
     const countryCount: Record<string, number> = {};
     const detectedCountries: CountryCode[] = [];
 
-    properties.forEach(property => {
+    properties.forEach((property: any) => {
       if (property.country) {
         const countryCode = getCountryFromName(property.country);
         if (countryCode) {
