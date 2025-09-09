@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Bell, User, Sun, Moon, Monitor, Settings, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
 import { supabase } from "@/integrations/supabase/client";
+import { restSelect } from '@/integrations/supabase/restProxy';
 import { NotificationsPopover } from "@/components/notifications/NotificationsPopover";
 import {
   DropdownMenu,
