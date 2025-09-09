@@ -77,19 +77,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       localStorage.removeItem('sb-kdpqimetajnhcqseajok-auth-token');
       sessionStorage.removeItem('sb-kdpqimetajnhcqseajok-auth-token');
 
-      // Attempt to sign out from Supabase with global scope
-      console.log("☁️ Calling Supabase signOut with global scope");
+      // Attempt to sign out via server-side endpoint (clears server cookies)
       try {
-        const { error } = await supabase.auth.signOut({ scope: 'global' });
-        if (error) {
-          console.warn("Supabase signOut error (continuing with local logout):", error);
+        const resp = await fetch('/api/auth/signout', { method: 'POST', credentials: 'same-origin' });
+        if (!resp.ok) {
+          console.warn('Server signout returned non-OK status');
         } else {
-          console.log("✅ Supabase signOut successful");
+          console.log('✅ Server signout successful');
         }
       } catch (e) {
-        console.warn('Error calling supabase.auth.signOut:', e);
+        console.warn('Error calling server signout endpoint:', e);
       }
-      
+
       // Small delay to ensure auth state processes
       await new Promise(resolve => setTimeout(resolve, 100));
       
