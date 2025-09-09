@@ -201,13 +201,10 @@ export function MaintenanceDetailsModal({
       }
 
       if (Object.keys(updateData).length > 0) {
-        const { error } = await supabase
-          .from("maintenance_requests")
-          .update(updateData)
-          .eq("id", request.id);
+        const { error } = await restUpdate("maintenance_requests", updateData, { id: `eq.${request.id}` });
 
         if (error) throw error;
-        
+
         toast.success("Schedule and cost updated successfully");
         // Force refresh parent component
         window.location.reload();
