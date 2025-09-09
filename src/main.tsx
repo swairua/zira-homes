@@ -41,10 +41,16 @@ import App from './App.tsx'
   }
 })();
 
+import { SupabaseStatusProvider } from '@/context/SupabaseStatusContext';
+import { SupabaseStatusBanner } from '@/components/SupabaseStatusBanner';
+
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <ImpersonationProvider>
-      <App />
-    </ImpersonationProvider>
+    <SupabaseStatusProvider>
+      <SupabaseStatusBanner />
+      <ImpersonationProvider>
+        <App />
+      </ImpersonationProvider>
+    </SupabaseStatusProvider>
   </React.StrictMode>
 );
