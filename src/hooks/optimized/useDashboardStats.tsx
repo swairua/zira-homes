@@ -64,18 +64,10 @@ const fetchChartData = async (): Promise<ChartDataPoint[]> => {
   const now = new Date();
   const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
   
-  // Fetch payments and expenses for last 6 months
+  // Fetch payments and expenses for last 6 months via REST proxy (use range filters)
   const [paymentsResult, expensesResult] = await Promise.all([
-    supabase
-      .from("payments")
-      .select("amount, payment_date")
-      .gte("payment_date", sixMonthsAgo.toISOString())
-      .lte("payment_date", now.toISOString()),
-    supabase
-      .from("expenses")
-      .select("amount, expense_date")
-      .gte("expense_date", sixMonthsAgo.toISOString())
-      .lte("expense_date", now.toISOString())
+    restSelect("payments", "amount,payment_date", { 'payment_date': `gte.${sixMonthsAgo.toISOString()}`, 'payment_date2': `lte.${now.toISOString()}` }),
+    restSelect("expenses", "amount,expense_date", { 'expense_date': `gte.${sixMonthsAgo.toISOString()}`, 'expense_date2': `lte.${now.toISOString()}` })
   ]);
 
   if (paymentsResult.error) throw paymentsResult.error;
