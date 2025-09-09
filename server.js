@@ -67,6 +67,28 @@ app.post('/api/auth/signin', express.json(), async (req, res) => {
   }
 });
 
+// Signup endpoint: forwards to Supabase signUp
+app.post('/api/auth/signup', express.json(), async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return res.status(500).json({ error: 'Auth not configured on server.' });
+  const body = req.body || {};
+  try {
+    const target = SUPABASE_URL.replace(/\/$/, '') + '/auth/v1/signup';
+    const resp = await fetch(target, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify(body)
+    });
+    const data = await resp.json();
+    if (!resp.ok) return res.status(resp.status).json({ error: data });
+    return res.status(200).json(data);
+  } catch (e) {
+    return res.status(502).json({ error: String(e) });
+  }
+});
+
 app.post('/api/auth/signout', express.json(), async (req, res) => {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return res.status(500).json({ error: 'Auth not configured on server.' });
   try {
