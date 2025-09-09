@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { restSelect, restUpsert } from '@/integrations/supabase/restProxy';
 
 export interface UserProfile {
   id: string;
