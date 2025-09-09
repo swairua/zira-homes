@@ -65,26 +65,44 @@ class ErrorReporter {
   }
 
   reportError(
-    error: Error, 
+    error: any,
     context?: Record<string, any>,
     userId?: string,
     severity?: ErrorReport['severity']
   ): string {
+    // Normalize non-Error inputs into an Error instance with readable message
+    let normalizedError: Error;
+    if (error instanceof Error) {
+      normalizedError = error;
+    } else {
+      let message = '';
+      try {
+        message = typeof error === 'string' ? error : JSON.stringify(error, Object.getOwnPropertyNames(error));
+      } catch (e) {
+        try { message = String(error); } catch (e2) { message = 'Unserializable error object'; }
+      }
+      normalizedError = new Error(message);
+      // Try to attach stack if available
+      if (error && typeof error.stack === 'string') {
+        try { (normalizedError as any).stack = error.stack; } catch (e) {}
+      }
+    }
+
     const errorReport: ErrorReport = {
       id: this.generateErrorId(),
-      message: error.message,
-      stack: error.stack,
+      message: normalizedError.message,
+      stack: normalizedError.stack,
       userId,
       userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
       url: typeof window !== 'undefined' ? window.location.href : undefined,
       timestamp: new Date().toISOString(),
-      severity: severity || this.determineErrorSeverity(error, context),
+      severity: severity || this.determineErrorSeverity(normalizedError, context),
       context,
-      fingerprint: this.createFingerprint(error, context)
+      fingerprint: this.createFingerprint(normalizedError, context)
     };
 
     // Log to our logging service
-    logger.error(error.message, error, {
+    logger.error(normalizedError.message, normalizedError, {
       errorId: errorReport.id,
       severity: errorReport.severity,
       ...context
@@ -130,14 +148,21 @@ class ErrorReporter {
 
     // Unhandled promise rejections
     window.addEventListener('unhandledrejection', (event) => {
-      const error = event.reason instanceof Error ? event.reason : new Error(String(event.reason));
-      this.reportError(error, { type: 'unhandledRejection' });
+      let reason = event.reason;
+      if (!(reason instanceof Error)) {
+        try {
+          reason = new Error(typeof event.reason === 'string' ? event.reason : JSON.stringify(event.reason));
+        } catch (e) {
+          reason = new Error(String(event.reason));
+        }
+      }
+      this.reportError(reason, { type: 'unhandledRejection' });
     });
 
     // Global JavaScript errors
     window.addEventListener('error', (event) => {
-      const error = event.error || new Error(event.message);
-      this.reportError(error, { 
+      const err = event.error || new Error(event.message);
+      this.reportError(err, {
         type: 'globalError',
         filename: event.filename,
         lineno: event.lineno,
