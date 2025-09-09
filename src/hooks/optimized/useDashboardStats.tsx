@@ -21,13 +21,15 @@ export interface ChartDataPoint {
   profit: number;
 }
 
+import { restSelect } from '@/integrations/supabase/restProxy';
+
 const fetchDashboardStats = async (): Promise<DashboardStats> => {
-  // Use Promise.all for parallel requests
+  // Use Promise.all for parallel requests via server-side REST proxy
   const [propertiesResult, unitsResult, tenantsResult, maintenanceResult] = await Promise.all([
-    supabase.from("properties").select("id"),
-    supabase.from("units").select("id, status, rent_amount"),
-    supabase.from("tenants").select("id"),
-    supabase.from("maintenance_requests").select("id").eq("status", "pending")
+    restSelect("properties", "id"),
+    restSelect("units", "id,status,rent_amount"),
+    restSelect("tenants", "id"),
+    restSelect("maintenance_requests", "id", { status: 'eq.pending' })
   ]);
 
   if (propertiesResult.error) throw propertiesResult.error;
@@ -35,16 +37,16 @@ const fetchDashboardStats = async (): Promise<DashboardStats> => {
   if (tenantsResult.error) throw tenantsResult.error;
   if (maintenanceResult.error) throw maintenanceResult.error;
 
-  const totalProperties = propertiesResult.data?.length || 0;
-  const totalUnits = unitsResult.data?.length || 0;
-  const occupiedUnits = unitsResult.data?.filter(unit => unit.status === "occupied").length || 0;
-  const vacantUnits = unitsResult.data?.filter(unit => unit.status === "vacant").length || 0;
-  const activeTenants = tenantsResult.data?.length || 0;
-  const monthlyRevenue = unitsResult.data
+  const totalProperties = (propertiesResult.data as any[])?.length || 0;
+  const totalUnits = (unitsResult.data as any[])?.length || 0;
+  const occupiedUnits = (unitsResult.data as any[])?.filter(unit => unit.status === "occupied").length || 0;
+  const vacantUnits = (unitsResult.data as any[])?.filter(unit => unit.status === "vacant").length || 0;
+  const activeTenants = (tenantsResult.data as any[])?.length || 0;
+  const monthlyRevenue = (unitsResult.data as any[])
     ?.filter(unit => unit.status === "occupied")
-    .reduce((sum, unit) => sum + (unit.rent_amount || 0), 0) || 0;
+    .reduce((sum: number, unit: any) => sum + (unit.rent_amount || 0), 0) || 0;
   const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
-  const maintenanceRequests = maintenanceResult.data?.length || 0;
+  const maintenanceRequests = (maintenanceResult.data as any[])?.length || 0;
 
   return {
     totalProperties,
