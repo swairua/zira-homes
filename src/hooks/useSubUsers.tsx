@@ -161,13 +161,8 @@ export const useSubUsers = () => {
 
   const updateSubUserPermissions = async (subUserId: string, permissions: SubUser['permissions']) => {
     try {
-      const { error } = await supabase
-        .from('sub_users')
-        .update({ permissions })
-        .eq('id', subUserId);
-
+      const { error } = await restUpdate('sub_users', { permissions }, { id: `eq.${subUserId}` });
       if (error) throw error;
-
       toast.success('Permissions updated successfully');
       fetchSubUsers();
     } catch (error) {
