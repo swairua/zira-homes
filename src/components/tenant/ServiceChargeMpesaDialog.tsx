@@ -77,13 +77,10 @@ export const ServiceChargeMpesaDialog: React.FC<ServiceChargeMpesaDialogProps> =
         startStatusPolling(data.data.CheckoutRequestID);
         
         // Update service charge invoice with M-Pesa details
-        await supabase
-          .from('service_charge_invoices')
-          .update({
-            mpesa_checkout_request_id: data.data.CheckoutRequestID,
-            payment_phone_number: formattedPhone,
-          })
-          .eq('id', invoice.id);
+        await restUpdate('service_charge_invoices', {
+          mpesa_checkout_request_id: data.data.CheckoutRequestID,
+          payment_phone_number: formattedPhone,
+        }, { id: `eq.${invoice.id}` });
 
         toast({
           title: "Payment Request Sent",
