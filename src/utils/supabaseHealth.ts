@@ -13,7 +13,8 @@ export async function checkSupabaseConnectivity(supabaseUrl: string, anonKey?: s
     if (anonKey) headers['apikey'] = anonKey;
 
     // Probe a Supabase API endpoint to better detect CORS/network issues
-    const probeUrl = supabaseUrl.replace(/\/$/, '') + '/rest/v1';
+    // In browser use the server-side proxy to avoid CORS; server proxy is available at /api/supabase/rest
+    const probeUrl = (typeof window !== 'undefined') ? '/api/supabase/rest' : (supabaseUrl.replace(/\/$/, '') + '/rest/v1');
     const resp = await fetch(probeUrl, { method: 'GET', mode: 'cors', headers, signal: controller.signal });
     clearTimeout(id);
 
