@@ -77,9 +77,8 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
       // Auto-reconcile for the tenant to allocate any remaining amount
       if (data.tenant_id) {
         try {
-          await supabase.rpc('reconcile_unallocated_payments_for_tenant' as any, {
-            p_tenant_id: data.tenant_id
-          }) as { data: any, error: any };
+          const res = await rpcProxy('reconcile_unallocated_payments_for_tenant', { p_tenant_id: data.tenant_id });
+          if (res.error) console.warn('reconcile_unallocated_payments_for_tenant error', res.error);
         } catch (reconcileError) {
           console.warn("Payment created but reconciliation failed:", reconcileError);
         }
