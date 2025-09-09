@@ -115,10 +115,8 @@ const AdminInvoicesManagement = () => {
       // Extract unique properties for filtering (only fetch once)
       if (properties.length === 0) {
         // Get properties from secure RPC function
-        const { data: allInvoices } = await supabase.rpc('get_invoice_overview', {
-          p_limit: 1000, // Get enough to extract unique properties
-          p_offset: 0
-        });
+        const allRes = await rpcProxy('get_invoice_overview', { p_limit: 1000, p_offset: 0 });
+        const allInvoices = allRes.data;
         if (allInvoices) {
           const uniqueProperties = Array.from(new Set((allInvoices || []).map((inv: any) => inv.property_name).filter(Boolean)))
             .map(name => ({ id: name as string, name: name as string }));
