@@ -38,8 +38,14 @@ export function useNotifications() {
 
       const res = await restSelect('notifications', '*', params);
       if (res.error) throw res.error;
-      const data = res.data || [];
-      const typedData = (data || []).map((item: any) => ({ ...item, type: item.type as Notification['type'] })) as Notification[];
+      let data: any = res.data;
+      // Normalize different response shapes (array, single object, wrapped { data: [...] }, empty string)
+      if (!Array.isArray(data)) {
+        if (data && typeof data === 'object' && Array.isArray((data as any).data)) data = (data as any).data;
+        else if (data == null || data === '') data = [];
+        else data = [data];
+      }
+      const typedData = (data as any[]).map((item: any) => ({ ...item, type: item.type as Notification['type'] })) as Notification[];
       setNotifications(typedData);
       updateUnreadCount(typedData);
     } catch (error) {

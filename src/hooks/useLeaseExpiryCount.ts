@@ -30,7 +30,15 @@ export function useLeaseExpiryCount() {
           return;
         }
 
-        const propertyIds = (propRes.data || []).map((p: any) => p.id).filter(Boolean);
+        // Normalize property response
+        let propData: any = propRes.data;
+        if (!Array.isArray(propData)) {
+          if (propData && typeof propData === 'object' && Array.isArray((propData as any).data)) propData = (propData as any).data;
+          else if (propData == null || propData === '') propData = [];
+          else propData = [propData];
+        }
+
+        const propertyIds = (propData || []).map((p: any) => p.id).filter(Boolean);
         if (propertyIds.length === 0) {
           setExpiringCount(0);
           setLoading(false);
@@ -46,7 +54,14 @@ export function useLeaseExpiryCount() {
           return;
         }
 
-        const unitIds = (unitsRes.data || []).map((u: any) => u.id).filter(Boolean);
+        let unitsData: any = unitsRes.data;
+        if (!Array.isArray(unitsData)) {
+          if (unitsData && typeof unitsData === 'object' && Array.isArray((unitsData as any).data)) unitsData = (unitsData as any).data;
+          else if (unitsData == null || unitsData === '') unitsData = [];
+          else unitsData = [unitsData];
+        }
+
+        const unitIds = (unitsData || []).map((u: any) => u.id).filter(Boolean);
         if (unitIds.length === 0) {
           setExpiringCount(0);
           setLoading(false);
@@ -59,7 +74,12 @@ export function useLeaseExpiryCount() {
           console.error('Error fetching expiring leases:', leasesRes.error);
           setExpiringCount(0);
         } else {
-          const leasesData = leasesRes.data || [];
+          let leasesData: any = leasesRes.data;
+          if (!Array.isArray(leasesData)) {
+            if (leasesData && typeof leasesData === 'object' && Array.isArray((leasesData as any).data)) leasesData = (leasesData as any).data;
+            else if (leasesData == null || leasesData === '') leasesData = [];
+            else leasesData = [leasesData];
+          }
           setExpiringCount(Array.isArray(leasesData) ? leasesData.length : 0);
         }
       } catch (error) {
