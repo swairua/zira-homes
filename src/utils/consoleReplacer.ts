@@ -24,7 +24,7 @@ class ConsoleReplacer {
 
   constructor(config: ConsoleReplacerConfig = defaultConfig) {
     this.config = config;
-    this.originalConsole = { ...console };
+    this.originalConsole = { ...console } as any;
   }
 
   initialize() {
@@ -45,15 +45,41 @@ class ConsoleReplacer {
     logger.info('Console methods replaced for production');
   }
 
+  private sanitizeMessageFromArgs(args: any[]) {
+    try {
+      const raw = args
+        .map(a => typeof a === 'string' ? a : (typeof a === 'object' ? JSON.stringify(a) : String(a)))
+        .join(' ');
+      const noAnsi = raw.replace(/\x1b\[[0-9;]*m/g, '');
+      const noHtml = noAnsi.replace(/<[^>]*>/g, '');
+      return noHtml.trim().toLowerCase();
+    } catch (e) {
+      try { return String(args).toLowerCase(); } catch { return ''; }
+    }
+  }
+
+  private shouldSuppressMessage(message: string) {
+    if (!message) return false;
+    const patterns: RegExp[] = [
+      /defaultprops/,
+      /support for defaultprops/,
+      /will be removed.*defaultprops/,
+      /deprecated.*defaultprops/,
+      /default props.*will be removed/,
+      /support for `defaultprops`/,
+      /support for `defaultprops`/,
+      /react.*defaultprops/,
+    ];
+    return patterns.some(p => p.test(message));
+  }
+
   private createReplacementMethod(level: string) {
     return (...args: any[]) => {
       // Combine args into a single message for filtering and logging
-      const message = args.map(arg => typeof arg === 'object' ? (() => {
-        try { return JSON.stringify(arg, null, 2); } catch (e) { return String(arg); }
-      })() : String(arg)).join(' ');
+      const message = this.sanitizeMessageFromArgs(args);
 
       // Filter out React defaultProps deprecation warnings and similar noisy messages
-      if (message.includes('defaultProps') || message.includes('Support for defaultProps') || message.includes('will be removed from function components')) {
+      if (this.shouldSuppressMessage(message)) {
         return; // swallow
       }
 

@@ -6,26 +6,52 @@ const originalLog = console.log;
 const originalWarn = console.warn;
 const originalError = console.error;
 
+function sanitizeMessageFromArgs(args: any[]) {
+  try {
+    const raw = args
+      .map(a => typeof a === 'string' ? a : (typeof a === 'object' ? JSON.stringify(a) : String(a)))
+      .join(' ');
+    // Remove ANSI escape codes and HTML tags to normalize
+    const noAnsi = raw.replace(/\x1b\[[0-9;]*m/g, '');
+    const noHtml = noAnsi.replace(/<[^>]*>/g, '');
+    return noHtml.trim().toLowerCase();
+  } catch (e) {
+    try { return String(args).toLowerCase(); } catch { return ''; }
+  }
+}
+
+function shouldSuppressMessage(message: string) {
+  if (!message) return false;
+  const patterns: RegExp[] = [
+    /defaultprops/, // direct mention
+    /support for defaultprops/, // explicit phrase
+    /will be removed.*defaultprops/, // variations mentioning removal
+    /deprecated.*defaultprops/, // deprecated mention
+    /default props.*will be removed/, // another ordering
+    /support for `defaultProps`/, // backtick variant
+  ];
+  return patterns.some(p => p.test(message));
+}
+
 // Override console methods in production
 if (isProduction) {
   console.log = () => {}; // Disable console.log in production
+
   console.warn = (...args: any[]) => {
-    // Filter out known non-actionable warnings (e.g., React deprecation notes about defaultProps)
-    const message = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
-    if (message.includes('defaultProps') || message.includes('Support for defaultProps') || message.includes('will be removed from function components')) {
-      return; // swallow this specific warning
-    }
+    const message = sanitizeMessageFromArgs(args);
+    if (shouldSuppressMessage(message)) return; // swallow these noisy React warnings
 
     // Only show warnings for critical issues
     if (args.some(arg => typeof arg === 'string' && (
       arg.includes('PDF') ||
-      arg.includes('database') ||
-      arg.includes('auth') ||
-      arg.includes('payment')
+      arg.toLowerCase().includes('database') ||
+      arg.toLowerCase().includes('auth') ||
+      arg.toLowerCase().includes('payment')
     ))) {
       originalWarn(...args);
     }
   };
+
   // Keep console.error for debugging production issues
   console.error = originalError;
 }
@@ -35,9 +61,9 @@ if (!isProduction) {
   console.warn = ((origWarn) => {
     return (...args: any[]) => {
       try {
-        const message = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
-        if (message.includes('defaultProps') || message.includes('Support for defaultProps') || message.includes('will be removed from function components')) {
-          return; // swallow
+        const message = sanitizeMessageFromArgs(args);
+        if (shouldSuppressMessage(message)) {
+          return; // swallow noisy defaultProps warnings
         }
       } catch (e) {
         // ignore serialization error
