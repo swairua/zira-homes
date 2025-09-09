@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { TablePaginator } from "@/components/ui/table-paginator";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { supabase } from "@/integrations/supabase/client";
+import { restSelect, restPost, restUpdate, restDelete } from '@/integrations/supabase/restProxy';
 import { toast } from "sonner";
 import { Plus, Edit, Trash2, Phone, Mail, Settings } from "lucide-react";
 
