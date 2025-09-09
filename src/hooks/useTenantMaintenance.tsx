@@ -45,9 +45,9 @@ export function useTenantMaintenance(limit = 50) {
       setLoading(true);
       setError(null);
 
-      const { data: result, error: rpcError } = await supabase
-        .rpc('get_tenant_maintenance_data', { p_limit: limit })
-        .maybeSingle();
+      const res = await rpcProxy('get_tenant_maintenance_data', { p_limit: limit });
+      const result = res.data;
+      const rpcError = res.error;
 
       if (rpcError) {
         throw rpcError;
