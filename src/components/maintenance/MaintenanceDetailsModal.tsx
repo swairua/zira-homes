@@ -17,6 +17,7 @@ import {
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { restUpdate } from '@/integrations/supabase/restProxy';
 
 interface MaintenanceRequest {
   id: string;
