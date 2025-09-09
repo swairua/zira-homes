@@ -58,25 +58,20 @@ export function FlowTester() {
   };
 
   const testPropertyCreation = async () => {
-    const { data, error } = await supabase
-      .from('properties')
-      .insert([{
-        name: 'Test Property',
-        address: '123 Test Street',
-        city: 'Nairobi',
-        state: 'Nairobi County',
-        zip_code: '00100',
-        country: 'Kenya',
-        property_type: 'Apartment',
-        total_units: 5
-      }])
-      .select()
-      .single();
+    const res = await restPost('properties', {
+      name: 'Test Property',
+      address: '123 Test Street',
+      city: 'Nairobi',
+      state: 'Nairobi County',
+      zip_code: '00100',
+      country: 'Kenya',
+      property_type: 'Apartment',
+      total_units: 5
+    });
 
-    if (error) throw new Error(`Property creation failed: ${error.message}`);
+    if (res.error) throw new Error(`Property creation failed: ${JSON.stringify(res.error)}`);
+    const data = res.data;
     if (!data) throw new Error('Property creation returned no data');
-    
-    // Store property ID for subsequent tests
     (window as any).__testPropertyId = data.id;
   };
 
