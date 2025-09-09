@@ -6,8 +6,8 @@ import { ImpersonationProvider } from "@/hooks/useImpersonation";
 
 // Initialize production services
 import './utils/productionConfig';
-import './utils/consoleReplacer';
 import './utils/consoleLogCleaner';
+import './utils/consoleReplacer';
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
