@@ -46,7 +46,12 @@ export const SecurityDashboard = () => {
       const orFilter = `(entity_type.eq.security,action.ilike.%25security%25,action.ilike.%25failed%25,action.ilike.%25suspicious%25)`;
       const res = await restSelect('user_activity_logs', '*', { or: orFilter });
       if (res.error) throw res.error;
-      const activityLogs = res.data || [];
+      let activityLogs: any = res.data;
+      if (!Array.isArray(activityLogs)) {
+        if (activityLogs && typeof activityLogs === 'object' && Array.isArray((activityLogs as any).data)) activityLogs = (activityLogs as any).data;
+        else if (activityLogs == null || activityLogs === '') activityLogs = [];
+        else activityLogs = [activityLogs];
+      }
 
       // Sort by performed_at desc and limit
       activityLogs.sort((a: any, b: any) => new Date(b.performed_at).getTime() - new Date(a.performed_at).getTime());
