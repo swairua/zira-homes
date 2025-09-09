@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Bell, Mail, MessageSquare, AlertCircle, CheckCircle, Clock, Settings, Eye, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { restSelect, restUpsert } from '@/integrations/supabase/restProxy';
 import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/useNotifications";
 import { toast } from "sonner";
