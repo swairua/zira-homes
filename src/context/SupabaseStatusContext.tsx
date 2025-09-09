@@ -15,8 +15,18 @@ export const SupabaseStatusProvider: React.FC<{ children: React.ReactNode }> = (
         // Read runtime config from window if available
         // @ts-ignore
         const runtime = typeof window !== 'undefined' ? (window.__RUNTIME_CONFIG || {}) : {};
-        const url = runtime.NEXT_PUBLIC_SUPABASE_URL || runtime.VITE_SUPABASE_URL || '';
-        const anon = runtime.NEXT_PUBLIC_SUPABASE_ANON_KEY || runtime.VITE_SUPABASE_ANON_KEY || undefined;
+        function readMeta(name: string) {
+          try {
+            const el = document.querySelector('meta[name="' + name + '"]');
+            return el ? el.getAttribute('content') || '' : '';
+          } catch (e) { return ''; }
+        }
+        const url = (
+          runtime.NEXT_PUBLIC_SUPABASE_URL || runtime.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || import.meta.env.NEXT_PUBLIC_SUPABASE_URL || readMeta('NEXT_PUBLIC_SUPABASE_URL') || ''
+        ).toString();
+        const anon = (
+          runtime.NEXT_PUBLIC_SUPABASE_ANON_KEY || runtime.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || readMeta('NEXT_PUBLIC_SUPABASE_ANON_KEY') || ''
+        ) || undefined;
         const res = await checkSupabaseConnectivity(url, anon, 3000);
         if (mounted) setStatus(res as SupabaseStatus);
       } catch (e) {
