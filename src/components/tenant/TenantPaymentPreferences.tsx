@@ -112,42 +112,23 @@ export const TenantPaymentPreferences: React.FC = () => {
   const loadLandlordPaymentPreferences = async () => {
     try {
       // Get tenant's current lease to find landlord
-      const { data: leaseData, error: leaseError } = await supabase
-        .from('leases')
-        .select(`
-          *,
-          units!leases_unit_id_fkey (
-            *,
-            properties!units_property_id_fkey (
-              owner_id,
-              manager_id
-            )
-          )
-        `)
-        .eq('tenant_id', user?.id)
-        .eq('status', 'active')
-        .maybeSingle();
-
-      if (leaseError) throw leaseError;
+      const selectStr = `*,units!leases_unit_id_fkey(*,properties!units_property_id_fkey(owner_id,manager_id))`;
+      const leaseRes = await restSelect('leases', selectStr, { tenant_id: `eq.${user?.id}`, status: 'eq.active' }, true);
+      if (leaseRes.error) throw leaseRes.error;
+      const leaseData = leaseRes.data;
 
       if (leaseData?.units?.properties?.owner_id) {
         const landlordId = leaseData.units.properties.owner_id;
-        
-        const { data: landlordPrefs, error: prefsError } = await supabase
-          .from('landlord_payment_preferences')
-          .select('*')
-          .eq('landlord_id', landlordId)
-          .maybeSingle();
-
-        if (prefsError && prefsError.code !== 'PGRST116') throw prefsError;
-        
+        const prefsRes = await restSelect('landlord_payment_preferences', '*', { landlord_id: `eq.${landlordId}` }, true);
+        if (prefsRes.error) throw prefsRes.error;
+        const landlordPrefs = prefsRes.data;
         if (landlordPrefs) {
           setLandlordPaymentPrefs({
             id: landlordPrefs.id,
             landlord_id: landlordPrefs.landlord_id,
             preferred_payment_method: landlordPrefs.preferred_payment_method,
             mpesa_phone_number: landlordPrefs.mpesa_phone_number,
-            bank_account_details: typeof landlordPrefs.bank_account_details === 'object' && landlordPrefs.bank_account_details !== null 
+            bank_account_details: typeof landlordPrefs.bank_account_details === 'object' && landlordPrefs.bank_account_details !== null
               ? landlordPrefs.bank_account_details as any
               : {},
             auto_payment_enabled: landlordPrefs.auto_payment_enabled || false,
@@ -162,14 +143,9 @@ export const TenantPaymentPreferences: React.FC = () => {
 
   const loadApprovedMethods = async () => {
     try {
-      const { data, error } = await supabase
-        .from('approved_payment_methods')
-        .select('*')
-        .eq('is_active', true)
-        .order('payment_method_type');
-
-      if (error) throw error;
-      setAllApprovedMethods(data || []);
+      const res = await restSelect('approved_payment_methods', '*', { is_active: 'eq.true' });
+      if (res.error) throw res.error;
+      setAllApprovedMethods(res.data || []);
     } catch (error) {
       console.error('Error loading approved methods:', error);
     }
