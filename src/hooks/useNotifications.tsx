@@ -95,7 +95,11 @@ export function useNotifications() {
 
       if (error) throw error;
     } catch (error) {
-      console.error("Error marking notification as read:", error);
+      try {
+        console.error("Error marking notification as read:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+      } catch (e) {
+        console.error('Error marking notification as read (non-serializable):', error);
+      }
       // Revert optimistic update
       fetchNotifications();
     }
