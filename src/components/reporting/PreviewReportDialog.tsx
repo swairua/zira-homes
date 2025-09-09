@@ -16,6 +16,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
+import { rpcProxy } from '@/integrations/supabase/restProxy';
 import { MarketComparisonToggle } from '@/components/reports/MarketComparisonToggle';
 
 interface PreviewReportDialogProps {
