@@ -99,10 +99,7 @@ export function AddUnitDialog({ onUnitAdded }: AddUnitDialogProps) {
         status: 'vacant',
       };
 
-      const { error } = await supabase
-        .from('units')
-        .insert([unitData]);
-
+      const { error } = await restPost('units', unitData);
       if (error) throw error;
 
       toast({
