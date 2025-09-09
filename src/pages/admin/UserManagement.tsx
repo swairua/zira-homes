@@ -11,6 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { TablePaginator } from "@/components/ui/table-paginator";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { supabase } from "@/integrations/supabase/client";
+import { rpcProxy } from '@/integrations/supabase/restProxy';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
