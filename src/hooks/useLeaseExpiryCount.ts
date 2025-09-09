@@ -39,13 +39,21 @@ export function useLeaseExpiryCount() {
           .lte('lease_end_date', ninetyDaysFromNow.toISOString());
 
         if (error) {
-          console.error('Error fetching expiring leases:', error);
+          try {
+            console.error('Error fetching expiring leases:', JSON.stringify(error, null, 2));
+          } catch (e) {
+            console.error('Error fetching expiring leases (non-serializable):', error);
+          }
           setExpiringCount(0);
         } else {
-          setExpiringCount(data?.length || 0);
+          setExpiringCount(Array.isArray(data) ? data.length : 0);
         }
       } catch (error) {
-        console.error('Error fetching lease expiry count:', error);
+        try {
+          console.error('Error fetching lease expiry count:', JSON.stringify(error, null, 2));
+        } catch (e) {
+          console.error('Error fetching lease expiry count (non-serializable):', error);
+        }
         setExpiringCount(0);
       } finally {
         setLoading(false);
