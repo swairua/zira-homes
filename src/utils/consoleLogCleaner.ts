@@ -6,6 +6,21 @@ const originalLog = console.log;
 const originalWarn = console.warn;
 const originalError = console.error;
 
+// Expose originals on window for other modules (logger/consoleReplacer) to use.
+if (typeof window !== 'undefined') {
+  try {
+    (window as any).__ORIGINAL_CONSOLE = {
+      log: originalLog.bind(console),
+      warn: originalWarn.bind(console),
+      error: originalError.bind(console),
+      info: console.info.bind(console),
+      debug: console.debug.bind(console),
+    };
+  } catch (e) {
+    // ignore
+  }
+}
+
 function sanitizeMessageFromArgs(args: any[]) {
   try {
     const raw = args
