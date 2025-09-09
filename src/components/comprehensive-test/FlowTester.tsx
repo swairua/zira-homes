@@ -151,17 +151,11 @@ export function FlowTester() {
 
   const testMpesaConfiguration = async () => {
     // Test M-Pesa config creation/retrieval
-    const { data, error } = await supabase
-      .from('landlord_mpesa_configs')
-      .select('*')
-      .limit(1);
-
-    if (error) throw new Error(`M-Pesa config test failed: ${error.message}`);
-    
-    // If no config exists, that's also a valid state for testing
-    if (data && data.length > 0) {
-      const config = data[0];
-      if (!config.consumer_key || !config.business_shortcode) {
+    const mpesaRes = await restSelect('landlord_mpesa_configs', '*', {}, true);
+    if (mpesaRes.error) throw new Error(`M-Pesa config test failed: ${JSON.stringify(mpesaRes.error)}`);
+    const mpesaData = mpesaRes.data ? (Array.isArray(mpesaRes.data) ? mpesaRes.data[0] : mpesaRes.data) : null;
+    if (mpesaData) {
+      if (!mpesaData.consumer_key || !mpesaData.business_shortcode) {
         throw new Error('M-Pesa configuration is incomplete');
       }
     }
