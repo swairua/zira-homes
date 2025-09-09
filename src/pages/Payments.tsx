@@ -107,10 +107,34 @@ const Payments = () => {
         supabase.from("properties").select("id, name")
       ]);
 
-      if (tenantsResult.error) throw tenantsResult.error;
-      if (leasesResult.error) throw leasesResult.error;
-      if (unitsResult.error) throw unitsResult.error;
-      if (propertiesResult.error) throw propertiesResult.error;
+      if (tenantsResult.error) {
+        try { console.error('❌ Tenants query error:', JSON.stringify(tenantsResult.error, Object.getOwnPropertyNames(tenantsResult.error), 2)); } catch (e) { console.error('❌ Tenants query error (non-serializable):', tenantsResult.error); }
+        toast({ title: 'Error', description: tenantsResult.error?.message || 'Failed to load tenants', variant: 'destructive' });
+        setPayments([]);
+        setLoading(false);
+        return;
+      }
+      if (leasesResult.error) {
+        try { console.error('❌ Leases query error:', JSON.stringify(leasesResult.error, Object.getOwnPropertyNames(leasesResult.error), 2)); } catch (e) { console.error('❌ Leases query error (non-serializable):', leasesResult.error); }
+        toast({ title: 'Error', description: leasesResult.error?.message || 'Failed to load leases', variant: 'destructive' });
+        setPayments([]);
+        setLoading(false);
+        return;
+      }
+      if (unitsResult.error) {
+        try { console.error('❌ Units query error:', JSON.stringify(unitsResult.error, Object.getOwnPropertyNames(unitsResult.error), 2)); } catch (e) { console.error('❌ Units query error (non-serializable):', unitsResult.error); }
+        toast({ title: 'Error', description: unitsResult.error?.message || 'Failed to load units', variant: 'destructive' });
+        setPayments([]);
+        setLoading(false);
+        return;
+      }
+      if (propertiesResult.error) {
+        try { console.error('❌ Properties query error:', JSON.stringify(propertiesResult.error, Object.getOwnPropertyNames(propertiesResult.error), 2)); } catch (e) { console.error('❌ Properties query error (non-serializable):', propertiesResult.error); }
+        toast({ title: 'Error', description: propertiesResult.error?.message || 'Failed to load properties', variant: 'destructive' });
+        setPayments([]);
+        setLoading(false);
+        return;
+      }
 
       // Create lookup maps
       const tenantMap = new Map(tenantsResult.data?.map(t => [t.id, t]) || []);
