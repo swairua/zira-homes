@@ -99,35 +99,58 @@ export const useSubUsers = () => {
     try {
       console.log('Creating sub-user with edge function:', data);
       
-      const { data: result, error } = await supabase.functions.invoke('create-sub-user', {
-        body: data
-      });
+      // Prefer server-side RPC proxy if available
+      try {
+        const rpcRes = await rpcProxy('create_sub_user', data);
+        if (!rpcRes.error) {
+          const result = rpcRes.data;
+          if (result?.temporary_password) {
+            toast.success(`Sub-user created successfully! Share these credentials with them: Email: ${data.email}, Temporary password: ${result.temporary_password}`, { duration: 10000 });
+          } else {
+            toast.success(`Sub-user added successfully! They can log in using their existing credentials at ${data.email}`, { duration: 6000 });
+          }
+          fetchSubUsers();
+          return;
+        }
+      } catch (e) {
+        console.warn('RPC create_sub_user failed, falling back to edge function or REST:', e);
+      }
 
-      if (error) {
+      // Fallback: attempt to POST to server endpoint or use direct function invoke if available
+      try {
+        const resp = await fetch('/api/auth/create-sub-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        if (resp.ok) {
+          const payload = await resp.json();
+          toast.success('Sub-user created successfully');
+          fetchSubUsers();
+          return;
+        }
+      } catch (e) {
+        console.warn('Server create-sub-user endpoint failed:', e);
+      }
+
+      // Final fallback: try invoking Supabase edge function if available
+      try {
+        // @ts-ignore
+        if (supabase && typeof supabase.functions?.invoke === 'function') {
+          const { data: result, error } = await supabase.functions.invoke('create-sub-user', { body: data });
+          if (error) throw error;
+          if (result?.temporary_password) {
+            toast.success(`Sub-user created successfully! Share these credentials with them: Email: ${data.email}, Temporary password: ${result.temporary_password}`, { duration: 10000 });
+          } else {
+            toast.success(`Sub-user added successfully! They can log in using their existing credentials at ${data.email}`, { duration: 6000 });
+          }
+          fetchSubUsers();
+          return;
+        }
+      } catch (error) {
         console.error('Edge function error:', error);
-        throw new Error(error.message || 'Failed to create sub-user');
+        throw new Error('Failed to create sub-user');
       }
-
-      if (!result?.success) {
-        throw new Error(result?.error || 'Failed to create sub-user');
-      }
-
-      console.log('Sub-user created successfully:', result);
-      
-      // Show appropriate message based on whether temporary password was provided
-      if (result.temporary_password) {
-        toast.success(
-          `Sub-user created successfully! Share these credentials with them: Email: ${data.email}, Temporary password: ${result.temporary_password}`,
-          { duration: 10000 }
-        );
-      } else {
-        toast.success(
-          `Sub-user added successfully! They can log in using their existing credentials at ${data.email}`,
-          { duration: 6000 }
-        );
-      }
-      
-      fetchSubUsers();
     } catch (error) {
       console.error('Error creating sub-user:', error);
       const message = error instanceof Error ? error.message : 'Failed to create sub-user';
