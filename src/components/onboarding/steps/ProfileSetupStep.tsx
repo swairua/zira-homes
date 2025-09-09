@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { User, Mail, Phone, MapPin, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { restSelect, restUpsert } from '@/integrations/supabase/restProxy';
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
