@@ -106,10 +106,7 @@ export function AddUnitsStep({ step, onNext }: AddUnitsStepProps) {
         return;
       }
 
-      const { error } = await supabase
-        .from('units')
-        .insert(unitsToInsert);
-
+      const { error } = await restPost('units', unitsToInsert);
       if (error) throw error;
 
       toast({
