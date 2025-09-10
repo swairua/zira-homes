@@ -72,6 +72,8 @@ const Invoices = () => {
 
       if (error) {
         console.error('❌ Invoice overview RPC error:', error);
+        const rpcMessage = error?.message || error?.details || error?.hint || JSON.stringify(error);
+        toast.error(`Invoice overview RPC error: ${rpcMessage}`);
         throw error;
       }
 
