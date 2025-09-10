@@ -160,8 +160,8 @@ const Expenses = () => {
           </Button>
         </div>
 
-        {/* If fetching expenses failed, show error */}
-        {fetchError && (
+        {/* If fetching expenses failed, show error only in non-production for safety */}
+        {fetchError && process.env.NODE_ENV !== 'production' && (
           <Alert variant="destructive" className="mb-4">
             <AlertTitle>Failed to load expenses</AlertTitle>
             <AlertDescription>
