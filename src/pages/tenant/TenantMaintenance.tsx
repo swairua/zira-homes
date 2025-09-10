@@ -9,6 +9,7 @@ import { Plus, Search, Filter, Calendar, AlertCircle, CheckCircle, Clock, Wrench
 import { useTenantMaintenance } from "@/hooks/useTenantMaintenance";
 import { TenantMaintenanceDetailsDialog } from "@/components/tenant/TenantMaintenanceDetailsDialog";
 import { Separator } from "@/components/ui/separator";
+import CreateMaintenanceDialog from "@/components/tenant/CreateMaintenanceDialog";
 import { LoadingSkeleton } from "@/components/ui/loading-skeleton";
 
 export default function TenantMaintenance() {
