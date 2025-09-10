@@ -185,9 +185,12 @@ export const CreateInvoiceDialog = ({ onInvoiceCreated }: CreateInvoiceDialogPro
       setOpen(false);
       form.reset();
       onInvoiceCreated?.();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating invoice:", error);
-      toast.error("Failed to create invoice");
+      const message = error?.message || error?.error || (typeof error === 'string' ? error : JSON.stringify(error));
+      const detail = error?.details || error?.hint || null;
+      toast.error(message || "Failed to create invoice");
+      if (detail) console.error("Invoice creation detail:", detail);
     } finally {
       setLoading(false);
     }
