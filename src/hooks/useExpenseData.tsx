@@ -66,9 +66,19 @@ export function useExpenseData() {
       if (fetchError) throw fetchError;
 
       setExpenses((data as any) || []);
-    } catch (err) {
-      console.error("Error fetching expenses:", err);
-      setError("Failed to fetch expenses");
+    } catch (err: any) {
+      // Log full Supabase error object when present
+      try {
+        if (err && typeof err === 'object') {
+          console.error('Error fetching expenses (full):', JSON.stringify(err, null, 2));
+        } else {
+          console.error('Error fetching expenses:', err);
+        }
+      } catch (e) {
+        console.error('Error fetching expenses (fallback):', err);
+      }
+
+      setError(err?.message || err?.msg || 'Failed to fetch expenses');
       setExpenses([]);
     } finally {
       setLoading(false);
