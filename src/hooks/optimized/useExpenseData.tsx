@@ -58,7 +58,7 @@ const fetchExpenses = async (filters?: ExpenseFilters): Promise<ExpenseWithDetai
     .from("expenses")
     .select(`
       *,
-      properties(name),
+      properties!fk_expenses_property_id(name),
       units(unit_number),
       tenants(first_name, last_name),
       meter_readings(meter_type, units_consumed, rate_per_unit)
