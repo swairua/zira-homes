@@ -8,20 +8,23 @@ const originalError = console.error;
 
 // Override console methods in production and filter noisy warnings in development
 if (isProduction) {
-  console.log = () => {}; // Disable console.log in production
-  console.warn = (...args: any[]) => {
-    // Only show warnings for critical issues
-    if (args.some(arg => typeof arg === 'string' && (
-      arg.includes('PDF') ||
-      arg.includes('database') ||
-      arg.includes('auth') ||
-      arg.includes('payment')
-    ))) {
-      originalWarn(...args);
-    }
-  };
-  // Keep console.error for debugging production issues
-  console.error = originalError;
+  // Disable all console output in production to mute errors and logs
+  console.log = () => {};
+  console.warn = () => {};
+  console.error = () => {};
+
+  // Prevent uncaught errors from bubbling to the console or showing overlays
+  if (typeof window !== 'undefined') {
+    // Swallow window.onerror
+    window.addEventListener('error', (ev) => {
+      try { ev.preventDefault(); } catch (e) { /* noop */ }
+    }, { passive: true });
+
+    // Swallow unhandled promise rejections
+    window.addEventListener('unhandledrejection', (ev) => {
+      try { ev.preventDefault(); } catch (e) { /* noop */ }
+    }, { passive: true });
+  }
 } else {
   // In development, filter known noisy library warnings (e.g., Recharts defaultProps deprecation)
   console.warn = (...args: any[]) => {
@@ -73,7 +76,8 @@ export const measurePerformance = async <T>(
     return result;
   } catch (error) {
     const duration = performance.now() - start;
-    console.error(`❌ ${operation} failed after ${duration}ms:`, error);
+    // In production errors are muted; still call originalError for potential external logging hooks
+    try { originalError && originalError(`❌ ${operation} failed after ${duration}ms:`, error); } catch (e) { /* noop */ }
     throw error;
   }
 };
