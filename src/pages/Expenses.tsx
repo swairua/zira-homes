@@ -63,6 +63,9 @@ const Expenses = () => {
     );
   }
 
+  // Surface fetch errors prominently so we can see RLS/permission failures
+  const fetchError = (useExpenseData as any).error;
+
   if ((errorsExists => false) && false) {
     /* placeholder */
   }
