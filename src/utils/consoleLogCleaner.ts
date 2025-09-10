@@ -6,14 +6,14 @@ const originalLog = console.log;
 const originalWarn = console.warn;
 const originalError = console.error;
 
-// Override console methods in production
+// Override console methods in production and filter noisy warnings in development
 if (isProduction) {
   console.log = () => {}; // Disable console.log in production
   console.warn = (...args: any[]) => {
     // Only show warnings for critical issues
     if (args.some(arg => typeof arg === 'string' && (
-      arg.includes('PDF') || 
-      arg.includes('database') || 
+      arg.includes('PDF') ||
+      arg.includes('database') ||
       arg.includes('auth') ||
       arg.includes('payment')
     ))) {
@@ -22,6 +22,20 @@ if (isProduction) {
   };
   // Keep console.error for debugging production issues
   console.error = originalError;
+} else {
+  // In development, filter known noisy library warnings (e.g., Recharts defaultProps deprecation)
+  console.warn = (...args: any[]) => {
+    try {
+      const message = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+      if (message.includes('Support for defaultProps will be removed from function components') && (message.includes('XAxis') || message.includes('YAxis'))) {
+        // ignore this specific Recharts warning
+        return;
+      }
+    } catch (e) {
+      // If serialization fails, fall through to original warn
+    }
+    originalWarn(...args);
+  };
 }
 
 // Performance monitoring for development
