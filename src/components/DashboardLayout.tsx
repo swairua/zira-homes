@@ -4,6 +4,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { Header } from "@/components/Header";
 import { FloatingTrialCountdown } from "@/components/trial/FloatingTrialCountdown";
 import { GatedFloatingActionMenu } from "@/components/dashboard/GatedFloatingActionMenu";
+import RpcDebugPanel from "@/components/Debug/RpcDebugPanel";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -23,6 +24,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               {children}
             </div>
           </main>
+          <RpcDebugPanel />
         </SidebarInset>
       </div>
     </SidebarProvider>

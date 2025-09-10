@@ -63,64 +63,58 @@ const Tenants = () => {
 
   const fetchTenants = async () => {
     try {
-      console.log("🔍 Fetching tenants with server-side pagination", { page, pageSize, offset });
-      
-      // Build the base query for tenants with joined data
-      let query = supabase
-        .from('tenants')
-        .select(`
-          *,
-          leases!tenant_id (
-            monthly_rent,
-            unit:units!unit_id (
-              unit_number,
-              property:properties!property_id (
-                name
-              )
-            )
-          )
-        `, { count: 'exact' });
+      setLoading(true);
+      console.log("🔍 Fetching tenants via RPC for consistent landlord view", { page, pageSize, offset });
 
-      // Apply search filter
-      if (searchTerm) {
-        query = query.or(`first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+      // Use RPC which enforces the same permission logic as dashboard
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_landlord_tenants_summary', {
+        p_search: searchTerm || '',
+        p_employment_filter: filterEmployment || 'all',
+        p_property_filter: filterProperty || 'all',
+        p_limit: pageSize,
+        p_offset: offset
+      }).maybeSingle();
+
+      if (rpcError) {
+        console.error('RPC error fetching tenants summary:', rpcError);
+        throw rpcError;
       }
 
-      // Apply employment filter
-      if (filterEmployment !== "all") {
-        query = query.eq('employment_status', filterEmployment);
-      }
+      const tenantsArray = (rpcData && (rpcData as any).tenants) ? JSON.parse(JSON.stringify((rpcData as any).tenants)) : [];
+      const total = (rpcData && (rpcData as any).total_count) ? Number((rpcData as any).total_count) : 0;
 
-      // Add pagination and ordering
-      const { data: tenantsData, error: tenantsError, count } = await query
-        .range(offset, offset + pageSize - 1)
-        .order('created_at', { ascending: false });
-
-      if (tenantsError) {
-        console.error('Error calling tenants query:', tenantsError);
-        throw tenantsError;
-      }
-
-      // Transform the data to match the expected interface
-      const transformedTenants = (tenantsData || []).map((tenant: any) => ({
-        ...tenant,
-        property_name: tenant.leases?.[0]?.unit?.property?.name,
-        unit_number: tenant.leases?.[0]?.unit?.unit_number,
-        rent_amount: tenant.leases?.[0]?.monthly_rent
+      // Normalize items to expected fields
+      const transformedTenants = (tenantsArray || []).map((t: any) => ({
+        id: t.id,
+        first_name: t.first_name,
+        last_name: t.last_name,
+        email: t.email,
+        phone: t.phone,
+        employment_status: t.employment_status,
+        employer_name: t.employer_name,
+        monthly_income: t.monthly_income,
+        emergency_contact_name: t.emergency_contact_name,
+        emergency_contact_phone: t.emergency_contact_phone,
+        previous_address: t.previous_address,
+        created_at: t.created_at,
+        property_name: t.property_name,
+        unit_number: t.unit_number,
+        rent_amount: t.rent_amount
       }));
 
-      console.log("✅ Tenants loaded:", transformedTenants.length, "of", count);
+      console.log("✅ Tenants (RPC) loaded:", transformedTenants.length, "of", total);
 
       setTenants(transformedTenants as Tenant[]);
-      setTotalCount(count || 0);
+      setTotalCount(total);
     } catch (error) {
-      console.error('Error fetching tenants:', error);
+      console.error('Error fetching tenants via RPC:', error);
       toast({
         title: "Error",
         description: "Failed to load tenants",
         variant: "destructive",
       });
       setTenants([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }

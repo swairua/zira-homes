@@ -262,8 +262,8 @@ const reportQueries = {
       console.log('Fetching lease expiry report with dates:', { startDate, endDate });
       
       const { data, error } = await (supabase as any).rpc('get_lease_expiry_report', {
-        p_start_date: startDate,
-        p_end_date: endDate
+        p_start_date: startDate ?? null,
+        p_end_date: endDate ?? null
       });
 
       if (error) {

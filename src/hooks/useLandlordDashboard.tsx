@@ -65,19 +65,38 @@ export function useLandlordDashboard() {
       }
 
       // Validate and normalize result data
+      const propertyStats = (result as any)?.property_stats && typeof (result as any).property_stats === 'object'
+        ? {
+            total_properties: Number((result as any).property_stats.total_properties) || 0,
+            total_units: Number((result as any).property_stats.total_units) || 0,
+            occupied_units: Number((result as any).property_stats.occupied_units) || 0,
+            monthly_revenue: Number((result as any).property_stats.monthly_revenue) || 0,
+          }
+        : null;
+
+      // Also fetch tenant summary to ensure dashboard and Tenants page counts align
+      let tenantsCount = 0;
+      try {
+        const { data: tenantsSummary } = await supabase.rpc('get_landlord_tenants_summary', { p_limit: 1, p_offset: 0 }).maybeSingle();
+        if (tenantsSummary && (tenantsSummary as any).total_count !== undefined) {
+          tenantsCount = Number((tenantsSummary as any).total_count) || 0;
+        }
+      } catch (e) {
+        // If RPC fails, fallback to occupied_units
+        console.warn('Failed to fetch tenants summary for dashboard count, falling back to occupied_units', e);
+      }
+
       const validatedData: LandlordDashboardData = {
-        property_stats: (result as any)?.property_stats && typeof (result as any).property_stats === 'object' 
-          ? {
-              total_properties: Number((result as any).property_stats.total_properties) || 0,
-              total_units: Number((result as any).property_stats.total_units) || 0,
-              occupied_units: Number((result as any).property_stats.occupied_units) || 0,
-              monthly_revenue: Number((result as any).property_stats.monthly_revenue) || 0,
-            }
-          : null,
+        property_stats: propertyStats,
         recent_payments: Array.isArray((result as any)?.recent_payments) ? (result as any).recent_payments : [],
         pending_maintenance: Array.isArray((result as any)?.pending_maintenance) ? (result as any).pending_maintenance : []
       };
-      
+
+      // Attach tenantsCount as a non-standard field on property_stats if available
+      if (validatedData.property_stats) {
+        (validatedData.property_stats as any).active_tenants = tenantsCount || validatedData.property_stats.occupied_units || 0;
+      }
+
       setData(validatedData);
     } catch (err) {
       console.error('Error fetching dashboard data:', err);

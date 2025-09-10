@@ -58,8 +58,8 @@ const fetchExpenses = async (filters?: ExpenseFilters): Promise<ExpenseWithDetai
     .from("expenses")
     .select(`
       *,
-      properties(name),
-      units(unit_number),
+      properties!fk_expenses_property_id(name),
+      units!fk_expenses_unit_id(unit_number),
       tenants(first_name, last_name),
       meter_readings(meter_type, units_consumed, rate_per_unit)
     `);
@@ -170,7 +170,7 @@ export function useExpenseSummary(dateRange?: { from: Date; to: Date }) {
     queryFn: async () => {
       let query = supabase
         .from("expenses")
-        .select("amount, expense_date, category, expense_type, properties(name)");
+        .select("amount, expense_date, category, expense_type, properties!fk_expenses_property_id(name)");
 
       if (dateRange) {
         query = query

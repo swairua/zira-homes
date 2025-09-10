@@ -15,37 +15,38 @@ export function useLeaseExpiryCount() {
       }
 
       try {
-        // Get leases expiring in the next 90 days
-        const ninetyDaysFromNow = new Date();
-        ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90);
+        // Use server-side RPC which handles permissions and joins safely
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_lease_expiry_report', { p_start_date: null, p_end_date: null }).maybeSingle();
+        if (rpcError) {
+          // Format Supabase/PostgREST error into readable string
+          const formatted = (() => {
+            try {
+              if (!rpcError) return 'Unknown RPC error';
+              if (typeof rpcError === 'string') return rpcError;
+              const parts: string[] = [];
+              if ((rpcError as any).message) parts.push((rpcError as any).message);
+              if ((rpcError as any).details) parts.push((rpcError as any).details);
+              if ((rpcError as any).hint) parts.push(`hint: ${(rpcError as any).hint}`);
+              if (parts.length === 0) return JSON.stringify(rpcError);
+              return parts.join(' | ');
+            } catch (e) {
+              return String(rpcError);
+            }
+          })();
 
-        const { data, error } = await supabase
-          .from('leases')
-          .select(`
-            id,
-            lease_end_date,
-            status,
-            units!inner (
-              property_id,
-              properties!inner (
-                owner_id,
-                manager_id
-              )
-            )
-          `)
-          .or(`units.properties.owner_id.eq.${user.id},units.properties.manager_id.eq.${user.id}`)
-          .eq('status', 'active')
-          .gte('lease_end_date', new Date().toISOString())
-          .lte('lease_end_date', ninetyDaysFromNow.toISOString());
+          console.error('Error fetching expiring leases (RPC):', formatted);
+          // Log full object for debugging separately
+          console.debug('Full RPC error object:', rpcError);
 
-        if (error) {
-          console.error('Error fetching expiring leases:', error);
           setExpiringCount(0);
         } else {
-          setExpiringCount(data?.length || 0);
+          const kpis = rpcData?.kpis || null;
+          const count = kpis?.expiring_leases ?? 0;
+          setExpiringCount(Number(count) || 0);
         }
-      } catch (error) {
-        console.error('Error fetching lease expiry count:', error);
+      } catch (err) {
+        console.error('Error fetching lease expiry count (unexpected):', err && ((err as any).message || JSON.stringify(err)));
+        console.debug('Full unexpected error object:', err);
         setExpiringCount(0);
       } finally {
         setLoading(false);

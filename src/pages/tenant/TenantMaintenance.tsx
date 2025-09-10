@@ -9,6 +9,7 @@ import { Plus, Search, Filter, Calendar, AlertCircle, CheckCircle, Clock, Wrench
 import { useTenantMaintenance } from "@/hooks/useTenantMaintenance";
 import { TenantMaintenanceDetailsDialog } from "@/components/tenant/TenantMaintenanceDetailsDialog";
 import { Separator } from "@/components/ui/separator";
+import CreateMaintenanceDialog from "@/components/tenant/CreateMaintenanceDialog";
 import { LoadingSkeleton } from "@/components/ui/loading-skeleton";
 
 export default function TenantMaintenance() {
@@ -109,10 +110,7 @@ export default function TenantMaintenance() {
             <h1 className="text-3xl font-bold">Maintenance Requests</h1>
             <p className="text-muted-foreground">Submit and track maintenance requests for your unit</p>
           </div>
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            New Request
-          </Button>
+          <CreateMaintenanceDialog onCreated={refetch} />
         </div>
 
         {/* Stats Cards */}
