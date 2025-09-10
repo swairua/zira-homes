@@ -1,39 +1,34 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+
+const RPCS = [
+  { key: 'get_landlord_dashboard_data', label: 'Dashboard' },
+  { key: 'get_landlord_tenants_summary', label: 'Tenants', params: { p_limit: 50, p_offset: 0 } },
+  { key: 'get_lease_expiry_report', label: 'Lease Expiry', params: { p_start_date: null, p_end_date: null } },
+  { key: 'get_expense_summary_report', label: 'Expense Summary', params: { p_start_date: null, p_end_date: null } },
+];
 
 export const RpcDebugPanel: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [dashboardResp, setDashboardResp] = useState<any>(null);
-  const [tenantsResp, setTenantsResp] = useState<any>(null);
+  const [responses, setResponses] = useState<Record<string, any>>({});
   const [lastError, setLastError] = useState<string | null>(null);
+  const [sessionInfo, setSessionInfo] = useState<any>(null);
 
-  const fetchAll = async () => {
-    setLoading(true);
-    setLastError(null);
-
-    try {
-      const [d, t] = await Promise.all([
-        supabase.rpc('get_landlord_dashboard_data').then(res => res).catch(e => ({ error: e })),
-        supabase.rpc('get_landlord_tenants_summary', { p_limit: 50, p_offset: 0 }).then(res => res).catch(e => ({ error: e })),
-      ]);
-
-      // normalize responses
-      const norm = (r: any) => {
-        if (!r) return null;
-        if (r.error) return { error: formatError(r.error) };
-        return { data: r.data ?? r };
-      };
-
-      setDashboardResp(norm(d));
-      setTenantsResp(norm(t));
-    } catch (err) {
-      setLastError(String(err));
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!mounted) return;
+        setSessionInfo(sessionData ?? null);
+      } catch (e) {
+        // ignore
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   const formatError = (e: any) => {
     try {
@@ -51,10 +46,42 @@ export const RpcDebugPanel: React.FC = () => {
   };
 
   const copyToClipboard = (text: string) => {
+    try { navigator.clipboard.writeText(text); } catch (e) { /* ignore */ }
+  };
+
+  const fetchAll = async () => {
+    setLoading(true);
+    setLastError(null);
+
     try {
-      navigator.clipboard.writeText(text);
-    } catch (e) {
-      // ignore
+      const promises = RPCS.map(rpc => {
+        const params = (rpc as any).params ?? undefined;
+        return supabase.rpc(rpc.key, params).then(res => ({ key: rpc.key, res })).catch(err => ({ key: rpc.key, res: { error: err } }));
+      });
+
+      const results = await Promise.all(promises);
+      const next: Record<string, any> = {};
+
+      for (const r of results) {
+        const raw = r.res;
+        if (!raw) {
+          next[r.key] = { error: 'No response' };
+          continue;
+        }
+
+        // preserve full raw response including status/error/data
+        if ((raw as any).error) {
+          next[r.key] = { raw, error: formatError((raw as any).error) };
+        } else {
+          next[r.key] = { raw, data: (raw as any).data ?? (raw as any) };
+        }
+      }
+
+      setResponses(next);
+    } catch (err) {
+      setLastError(String(err));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -65,7 +92,7 @@ export const RpcDebugPanel: React.FC = () => {
           onClick={() => {
             const next = !open;
             setOpen(next);
-            if (next && !dashboardResp && !tenantsResp) fetchAll();
+            if (next && Object.keys(responses).length === 0) fetchAll();
           }}
           title="Toggle RPC Debug Panel"
           className="bg-white/10 hover:bg-white/20 text-white rounded-full px-3 py-2 shadow-md border border-white/10"
@@ -81,43 +108,42 @@ export const RpcDebugPanel: React.FC = () => {
               <h3 className="text-lg font-semibold">RPC Debug Panel</h3>
               <div className="flex gap-2">
                 <Button onClick={fetchAll} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</Button>
-                <Button onClick={() => { setDashboardResp(null); setTenantsResp(null); setLastError(null); }}>Clear</Button>
+                <Button onClick={() => { setResponses({}); setLastError(null); }}>Clear</Button>
                 <Button variant="outline" onClick={() => setOpen(false)}>Close</Button>
               </div>
             </div>
+
+            {sessionInfo && (
+              <div className="mb-3 text-sm">
+                <strong>Auth session:</strong>
+                <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }} className="text-xs bg-muted/10 p-2 rounded">{JSON.stringify(sessionInfo, null, 2)}</pre>
+              </div>
+            )}
 
             {lastError && (
               <div className="mb-3 text-sm text-destructive">Last error: {lastError}</div>
             )}
 
             <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <strong>Dashboard RPC (get_landlord_dashboard_data)</strong>
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={() => copyToClipboard(JSON.stringify(dashboardResp, null, 2))}>Copy</Button>
+              {RPCS.map(rpc => (
+                <div key={rpc.key}>
+                  <div className="flex items-center justify-between mb-2">
+                    <strong>{rpc.label} RPC ({rpc.key})</strong>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => copyToClipboard(JSON.stringify(responses[rpc.key] ?? {}, null, 2))}>Copy</Button>
+                    </div>
                   </div>
-                </div>
-                <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '50vh', overflow: 'auto' }} className="text-sm bg-muted/10 p-2 rounded">
-                  {dashboardResp ? JSON.stringify(dashboardResp, null, 2) : 'No data fetched yet'}
-                </pre>
-              </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <strong>Tenants RPC (get_landlord_tenants_summary)</strong>
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={() => copyToClipboard(JSON.stringify(tenantsResp, null, 2))}>Copy</Button>
-                  </div>
+                  <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '50vh', overflow: 'auto' }} className="text-sm bg-muted/10 p-2 rounded">
+                    {responses[rpc.key] ? JSON.stringify(responses[rpc.key], null, 2) : 'No data fetched yet'}
+                  </pre>
                 </div>
-                <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '50vh', overflow: 'auto' }} className="text-sm bg-muted/10 p-2 rounded">
-                  {tenantsResp ? JSON.stringify(tenantsResp, null, 2) : 'No data fetched yet'}
-                </pre>
-              </div>
+              ))}
             </div>
 
             <div className="mt-3 text-xs text-muted-foreground">
-              Note: This panel makes unauthenticated RPC calls using the browser session. Data returned respects RLS and current auth.
+              Note: This panel performs RPC calls using the browser session and therefore data returned respects RLS and the current auth.
+              To run RPCs with elevated privileges or to inspect policies directly you must run checks from a trusted backend using the Supabase service_role key or connect the Supabase MCP. Do not expose service_role keys in the browser.
             </div>
           </div>
         </div>
