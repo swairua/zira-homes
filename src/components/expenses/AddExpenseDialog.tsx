@@ -153,7 +153,7 @@ export function AddExpenseDialog({ open, onOpenChange, properties, onSuccess }: 
           ...data,
           amount: Number(data.amount),
           expense_type: "one-time",
-          // RLS policy will handle user attribution
+          created_by: userData.user.id,
         }];
       } else if (bulkType === "all-units") {
         // All units in property
@@ -162,7 +162,7 @@ export function AddExpenseDialog({ open, onOpenChange, properties, onSuccess }: 
           unit_id: unit.id,
           amount: Number(data.amount),
           expense_type: "one-time",
-          // RLS policy will handle user attribution
+          created_by: userData.user.id,
         }));
       } else if (bulkType === "selected-units") {
         // Selected units only
@@ -171,7 +171,7 @@ export function AddExpenseDialog({ open, onOpenChange, properties, onSuccess }: 
           unit_id: unitId,
           amount: Number(data.amount),
           expense_type: "one-time",
-          // RLS policy will handle user attribution
+          created_by: userData.user.id,
         }));
       }
 
@@ -228,7 +228,7 @@ export function AddExpenseDialog({ open, onOpenChange, properties, onSuccess }: 
           previous_reading: Number(data.previous_reading),
           current_reading: Number(data.current_reading),
           rate_per_unit: Number(data.rate_per_unit),
-          // RLS policy will handle user attribution
+          created_by: userData.user.id,
         }])
         .select()
         .single();
@@ -256,7 +256,7 @@ export function AddExpenseDialog({ open, onOpenChange, properties, onSuccess }: 
           description: `${data.meter_type} usage: ${unitsConsumed} units`,
           expense_type: "metered",
           meter_reading_id: meterData.id,
-          // RLS policy will handle user attribution
+          created_by: userData.user.id,
         }])
         .select();
 
