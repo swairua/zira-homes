@@ -24,6 +24,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               {children}
             </div>
           </main>
+          <RpcDebugPanel />
         </SidebarInset>
       </div>
     </SidebarProvider>
