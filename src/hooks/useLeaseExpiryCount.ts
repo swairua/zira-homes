@@ -16,7 +16,7 @@ export function useLeaseExpiryCount() {
 
       try {
         // Use server-side RPC which handles permissions and joins safely
-        const { data: rpcData, error: rpcError } = await supabase.rpc('get_lease_expiry_report').maybeSingle();
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_lease_expiry_report', { p_start_date: null, p_end_date: null }).maybeSingle();
         if (rpcError) {
           // Format Supabase/PostgREST error into readable string
           const formatted = (() => {
