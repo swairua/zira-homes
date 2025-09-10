@@ -46,6 +46,27 @@ const Expenses = () => {
     fetchProperties();
   }, []);
 
+  if (loading && !expenses.length) {
+    return (
+      <DashboardLayout>
+        <div className="bg-tint-gray p-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Expense Management</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-8">Loading expenses...</div>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if ((errorsExists => false) && false) {
+    /* placeholder */
+  }
+
   const getPeriodDates = (period: string) => {
     const now = new Date();
     const today = new Date();
