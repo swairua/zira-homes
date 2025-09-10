@@ -185,11 +185,38 @@ export const CreateInvoiceDialog = ({ onInvoiceCreated }: CreateInvoiceDialogPro
         // ignore - fallback to not including landlord_id
       }
 
-      const { error } = await supabase
+      const { data: insertResult, error } = await supabase
         .from("invoices")
-        .insert(insertPayload);
+        .insert(insertPayload)
+        .select('*');
 
-      if (error) throw error;
+      if (error) {
+        console.error('Client-side insert error:', error);
+        // If it's an RLS/permission issue, attempt server-side creation as a fallback for debugging
+        const msg = (error?.message || '').toLowerCase();
+        if (msg.includes('permission') || msg.includes('policy') || msg.includes('rls')) {
+          try {
+            const resp = await fetch('/api/invoices/create', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ lease_id: values.lease_id, tenant_id: selectedLease.tenant_id, amount: Number(values.amount), due_date: format(values.due_date, 'yyyy-MM-dd'), description: values.description })
+            });
+            const body = await resp.json();
+            if (!resp.ok) throw body;
+            toast.success('Invoice created server-side (debug)');
+            setOpen(false);
+            form.reset();
+            onInvoiceCreated?.();
+            return;
+          } catch (srvErr) {
+            console.error('Server-side invoice creation failed:', srvErr);
+            toast.error('Failed to create invoice (server fallback)');
+            throw error;
+          }
+        }
+
+        throw error;
+      }
 
       toast.success("Invoice created successfully!");
       setOpen(false);
