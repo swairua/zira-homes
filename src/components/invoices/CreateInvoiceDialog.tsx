@@ -165,19 +165,29 @@ export const CreateInvoiceDialog = ({ onInvoiceCreated }: CreateInvoiceDialogPro
         return;
       }
 
-      // Insert invoice (include landlord_id so RLS allows landlord to create)
+      // Insert invoice. Some deployments don't have a landlord_id column on invoices; rely on lease->unit->property mapping for RLS.
+      const insertPayload: any = {
+        lease_id: values.lease_id,
+        tenant_id: selectedLease.tenant_id,
+        amount: Number(values.amount),
+        due_date: format(values.due_date, "yyyy-MM-dd"),
+        invoice_date: format(new Date(), "yyyy-MM-dd"),
+        description: values.description || `Monthly rent - ${format(new Date(), "MMMM yyyy")}`,
+        status: "pending"
+      };
+
+      // If the invoices table includes landlord_id (some schemas), include it; otherwise skip
+      try {
+        const { data: colInfo } = await supabase.rpc('get_table_columns', { p_table_name: 'invoices' }).catch(() => ({ data: null }));
+        const hasLandlordCol = Array.isArray(colInfo) && colInfo.some((c: any) => c.column_name === 'landlord_id');
+        if (hasLandlordCol) insertPayload.landlord_id = landlordId;
+      } catch (e) {
+        // ignore - fallback to not including landlord_id
+      }
+
       const { error } = await supabase
         .from("invoices")
-        .insert({
-          lease_id: values.lease_id,
-          tenant_id: selectedLease.tenant_id,
-          landlord_id: landlordId,
-          amount: Number(values.amount),
-          due_date: format(values.due_date, "yyyy-MM-dd"),
-          invoice_date: format(new Date(), "yyyy-MM-dd"),
-          description: values.description || `Monthly rent - ${format(new Date(), "MMMM yyyy")}`,
-          status: "pending"
-        });
+        .insert(insertPayload);
 
       if (error) throw error;
 
