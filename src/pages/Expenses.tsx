@@ -161,6 +161,16 @@ const Expenses = () => {
           </Button>
         </div>
 
+        {/* If fetching expenses failed, show error */}
+        {fetchError && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertTitle>Failed to load expenses</AlertTitle>
+            <AlertDescription>
+              {typeof fetchError === 'string' ? fetchError : JSON.stringify(fetchError)}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Period Filter & Summary Cards */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
           <div className="flex items-center gap-2">
