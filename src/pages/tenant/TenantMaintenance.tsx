@@ -110,10 +110,7 @@ export default function TenantMaintenance() {
             <h1 className="text-3xl font-bold">Maintenance Requests</h1>
             <p className="text-muted-foreground">Submit and track maintenance requests for your unit</p>
           </div>
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            New Request
-          </Button>
+          <CreateMaintenanceDialog onCreated={refetch} />
         </div>
 
         {/* Stats Cards */}
