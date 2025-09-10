@@ -54,6 +54,37 @@ if (isProduction) {
     }
     originalWarn(...args);
   };
+
+  // Additionally, prevent this specific Recharts warning from surfacing as a global error overlay
+  if (typeof window !== 'undefined') {
+    window.addEventListener('error', (event: ErrorEvent) => {
+      try {
+        const msg = event?.message || (event.error && event.error.message) || '';
+        if (typeof msg === 'string' && msg.includes('Support for defaultProps') && /\b(XAxis|YAxis)\b/.test(msg)) {
+          // swallow this noisy Recharts warning
+          try { event.preventDefault(); } catch (_e) { /* noop */ }
+          return;
+        }
+      } catch (e) {
+        // nothing
+      }
+      // otherwise let it proceed (do not call originalError here because global handler will run)
+    }, { passive: true });
+
+    window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
+      try {
+        const reason = event?.reason;
+        const msg = typeof reason === 'string' ? reason : (reason && reason.message) ? reason.message : '';
+        if (typeof msg === 'string' && msg.includes('Support for defaultProps') && /\b(XAxis|YAxis)\b/.test(msg)) {
+          try { event.preventDefault(); } catch (_e) { /* noop */ }
+          return;
+        }
+      } catch (e) {
+        // nothing
+      }
+      // otherwise leave it
+    }, { passive: true });
+  }
 }
 
 // Performance monitoring for development
