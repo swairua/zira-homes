@@ -26,8 +26,23 @@ if (isProduction) {
   // In development, filter known noisy library warnings (e.g., Recharts defaultProps deprecation)
   console.warn = (...args: any[]) => {
     try {
-      const message = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
-      if (message.includes('Support for defaultProps will be removed from function components') && (message.includes('XAxis') || message.includes('YAxis'))) {
+      // Build a joined message safely
+      const parts = args.map(a => {
+        try {
+          return typeof a === 'object' ? JSON.stringify(a) : String(a);
+        } catch (e) {
+          return String(a);
+        }
+      });
+      const message = parts.join(' ');
+
+      // Detect Recharts defaultProps deprecation in both formatted and unformatted warning forms
+      const isDefaultPropsDeprecation = message.includes('Support for defaultProps will be removed from function components')
+        || (typeof args[0] === 'string' && args[0].includes('Support for defaultProps'));
+
+      const mentionsAxis = parts.some(p => /\b(XAxis|YAxis)\b/.test(p));
+
+      if (isDefaultPropsDeprecation && mentionsAxis) {
         // ignore this specific Recharts warning
         return;
       }
