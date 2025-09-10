@@ -245,7 +245,7 @@ export function AddExpenseDialog({ open, onOpenChange, properties, onSuccess }: 
       if (unitError) throw unitError;
 
       // Create corresponding expense record
-      const { error: expenseError } = await supabase
+      const { data: insertedExpenses, error: expenseError } = await supabase
         .from("expenses")
         .insert([{
           property_id: unitData.property_id,
@@ -257,7 +257,8 @@ export function AddExpenseDialog({ open, onOpenChange, properties, onSuccess }: 
           expense_type: "metered",
           meter_reading_id: meterData.id,
           // RLS policy will handle user attribution
-        }]);
+        }])
+        .select();
 
       if (expenseError) throw expenseError;
 
@@ -266,9 +267,11 @@ export function AddExpenseDialog({ open, onOpenChange, properties, onSuccess }: 
         description: "Meter reading and expense recorded successfully",
       });
 
+      console.debug('Inserted expense rows (metered):', insertedExpenses);
+
       meterForm.reset();
       onOpenChange(false);
-      onSuccess();
+      try { onSuccess && (onSuccess as any)(insertedExpenses); } catch (e) { onSuccess && onSuccess(); }
     } catch (error) {
       console.error("Error recording meter reading:", error);
       toast({
