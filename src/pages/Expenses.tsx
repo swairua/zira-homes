@@ -13,6 +13,7 @@ import { Plus, Search, DollarSign, TrendingDown, Calendar, Zap, RotateCcw, PieCh
 import { KpiGrid } from "@/components/kpi/KpiGrid";
 import { KpiStatCard } from "@/components/kpi/KpiStatCard";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
 interface Property {
   id: string;
