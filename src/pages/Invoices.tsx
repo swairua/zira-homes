@@ -74,7 +74,31 @@ const Invoices = () => {
         console.error('❌ Invoice overview RPC error:', error);
         const rpcMessage = error?.message || error?.details || error?.hint || JSON.stringify(error);
         toast.error(`Invoice overview RPC error: ${rpcMessage}`);
-        throw error;
+        // Fall back to server-side endpoint that uses service_role
+        try {
+          const resp = await fetch(`/api/invoices/overview`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ p_limit: pageSize, p_offset: offset, p_status: filterStatus !== 'all' ? filterStatus : null, p_search: searchTerm || null })
+          });
+          const srvData = await resp.json();
+          if (!resp.ok) throw srvData;
+          // Use server data
+          const data = srvData;
+          const transformedInvoices = (data || []).map((invoice: any) => ({
+            ...invoice,
+            tenants: { first_name: invoice.first_name || '', last_name: invoice.last_name || '', email: invoice.email || '' },
+            leases: { units: { unit_number: invoice.unit_number || '', properties: { name: invoice.property_name || '' } } }
+          }));
+          setInvoices(transformedInvoices as Invoice[]);
+          setTotalCount((data || []).length);
+          setLoading(false);
+          return;
+        } catch (srvErr) {
+          console.error('Server-side invoice overview fallback failed:', srvErr);
+          toast.error('Failed to load invoices (server fallback)');
+          throw error;
+        }
       }
 
       // Get total count for pagination (we'll need to make a separate call for this)
