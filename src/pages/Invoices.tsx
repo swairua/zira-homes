@@ -106,9 +106,10 @@ const Invoices = () => {
       console.log("🔗 Invoice overview loaded:", transformedInvoices.length, "of", (data || []).length);
       setInvoices(transformedInvoices as Invoice[]);
       setTotalCount((data || []).length);
-    } catch (error) {
+    } catch (error: any) {
       console.error('💥 Error in fetchInvoices:', error);
-      toast.error('Failed to load invoices');
+      const message = error?.message || error?.details || error?.hint || (typeof error === 'string' ? error : JSON.stringify(error));
+      toast.error(message || 'Failed to load invoices');
     } finally {
       setLoading(false);
     }
