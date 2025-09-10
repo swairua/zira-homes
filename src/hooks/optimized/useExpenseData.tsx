@@ -170,7 +170,7 @@ export function useExpenseSummary(dateRange?: { from: Date; to: Date }) {
     queryFn: async () => {
       let query = supabase
         .from("expenses")
-        .select("amount, expense_date, category, expense_type, properties(name)");
+        .select("amount, expense_date, category, expense_type, properties!fk_expenses_property_id(name)");
 
       if (dateRange) {
         query = query
