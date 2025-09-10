@@ -130,18 +130,40 @@ class ErrorReporter {
 
     // Unhandled promise rejections
     window.addEventListener('unhandledrejection', (event) => {
+      try {
+        const reason = event.reason;
+        const msg = typeof reason === 'string' ? reason : (reason && reason.message) ? reason.message : '';
+        // Ignore noisy Recharts defaultProps deprecation warnings which surface as errors in some environments
+        if (typeof msg === 'string' && msg.includes('Support for defaultProps') && /\b(XAxis|YAxis)\b/.test(msg)) {
+          try { event.preventDefault(); } catch (e) { /* noop */ }
+          return;
+        }
+      } catch (e) {
+        // continue to normal handling
+      }
+
       const error = event.reason instanceof Error ? event.reason : new Error(String(event.reason));
       this.reportError(error, { type: 'unhandledRejection' });
     });
 
     // Global JavaScript errors
     window.addEventListener('error', (event) => {
+      try {
+        const msg = event?.message || (event.error && event.error.message) || '';
+        if (typeof msg === 'string' && msg.includes('Support for defaultProps') && /\b(XAxis|YAxis)\b/.test(msg)) {
+          try { event.preventDefault(); } catch (e) { /* noop */ }
+          return;
+        }
+      } catch (e) {
+        // fall through
+      }
+
       const error = event.error || new Error(event.message);
-      this.reportError(error, { 
+      this.reportError(error, {
         type: 'globalError',
-        filename: event.filename,
-        lineno: event.lineno,
-        colno: event.colno
+        filename: (event as any).filename,
+        lineno: (event as any).lineno,
+        colno: (event as any).colno
       });
     });
   }
