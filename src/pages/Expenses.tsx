@@ -27,7 +27,7 @@ const Expenses = () => {
   const [periodFilter, setPeriodFilter] = useState("last_12_months");
   const [dialogOpen, setDialogOpen] = useState(false);
   
-  const { expenses, loading, summary, refetch } = useExpenseData();
+  const { expenses, loading, summary, refetch, error: fetchError } = useExpenseData();
 
   const fetchProperties = async () => {
     try {
