@@ -15,37 +15,18 @@ export function useLeaseExpiryCount() {
       }
 
       try {
-        // Get leases expiring in the next 90 days
-        const ninetyDaysFromNow = new Date();
-        ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90);
-
-        const { data, error } = await supabase
-          .from('leases')
-          .select(`
-            id,
-            lease_end_date,
-            status,
-            units!inner (
-              property_id,
-              properties!inner (
-                owner_id,
-                manager_id
-              )
-            )
-          `)
-          .or(`units.properties.owner_id.eq.${user.id},units.properties.manager_id.eq.${user.id}`)
-          .eq('status', 'active')
-          .gte('lease_end_date', new Date().toISOString())
-          .lte('lease_end_date', ninetyDaysFromNow.toISOString());
-
-        if (error) {
-          console.error('Error fetching expiring leases:', error);
+        // Use server-side RPC which handles permissions and joins safely
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_lease_expiry_report').maybeSingle();
+        if (rpcError) {
+          console.error('Error fetching expiring leases (RPC):', rpcError);
           setExpiringCount(0);
         } else {
-          setExpiringCount(data?.length || 0);
+          const kpis = rpcData?.kpis || null;
+          const count = kpis?.expiring_leases ?? 0;
+          setExpiringCount(Number(count) || 0);
         }
-      } catch (error) {
-        console.error('Error fetching lease expiry count:', error);
+      } catch (err) {
+        console.error('Error fetching lease expiry count (unexpected):', err);
         setExpiringCount(0);
       } finally {
         setLoading(false);
