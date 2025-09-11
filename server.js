@@ -67,6 +67,26 @@
 
         const url = req.url || '/';
 
+        // Health route to validate supabase connectivity
+        if (url.startsWith('/api/health')) {
+          try {
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+            const serviceRole = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY;
+            if (!supabaseUrl) return sendJSON(res, 500, { error: 'Supabase URL not configured' });
+            if (!serviceRole) return sendJSON(res, 500, { error: 'Supabase service role key not configured' });
+
+            const testUrl = supabaseUrl.replace(/\/$/, '') + '/rest/v1/invoices?select=id&limit=1';
+            const response = await fetch(testUrl, { headers: { 'apikey': serviceRole, 'Authorization': `Bearer ${serviceRole}` } });
+            const text = await response.text();
+            let data;
+            try { data = JSON.parse(text); } catch (e) { data = text; }
+            return sendJSON(res, 200, { ok: response.ok, status: response.status, data });
+          } catch (err) {
+            console.error('Health check failed:', err);
+            return sendJSON(res, 500, { ok: false, error: String(err) });
+          }
+        }
+
         // API routes
         if (url.startsWith('/api/leases/expiring')) {
           return handleRpcProxy('/rest/v1/rpc/get_lease_expiry_report', req, res, (body) => {
