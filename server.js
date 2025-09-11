@@ -60,6 +60,10 @@
 
     const server = http.createServer(async (req, res) => {
       try {
+        // Log incoming request (avoid printing auth token value)
+        const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+        console.log('[DEV SERVER] Incoming', req.method, req.url, 'content-length=', req.headers['content-length'] || 0, 'auth_present=', !!authHeader);
+
         // Simple security headers
         res.setHeader('X-Frame-Options', 'DENY');
         res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -80,6 +84,7 @@
             const text = await response.text();
             let data;
             try { data = JSON.parse(text); } catch (e) { data = text; }
+            console.log('[DEV SERVER] Health check response status=', response.status);
             return sendJSON(res, 200, { ok: response.ok, status: response.status, data });
           } catch (err) {
             console.error('Health check failed:', err);
@@ -156,6 +161,7 @@
 
         // Fallback for other /api routes
         if (url.startsWith('/api')) {
+          console.log('[DEV SERVER] API route not found:', url);
           return sendJSON(res, 404, { error: 'API endpoint not found' });
         }
 
@@ -165,6 +171,7 @@
         if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
           const ext = path.extname(filePath).toLowerCase();
           const mime = ext === '.html' ? 'text/html' : ext === '.js' ? 'application/javascript' : ext === '.css' ? 'text/css' : 'application/octet-stream';
+          console.log('[DEV SERVER] Serving static file:', filePath);
           res.writeHead(200, { 'Content-Type': mime });
           fs.createReadStream(filePath).pipe(res);
           return;
@@ -173,6 +180,7 @@
         // SPA fallback to index.html if exists
         const indexPath = path.join(__dirname, 'dist', 'index.html');
         if (fs.existsSync(indexPath)) {
+          console.log('[DEV SERVER] SPA fallback to index.html');
           res.writeHead(200, { 'Content-Type': 'text/html' });
           fs.createReadStream(indexPath).pipe(res);
           return;
