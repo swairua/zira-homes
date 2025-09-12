@@ -371,8 +371,9 @@ const PlatformAnalytics = () => {
                   <p className="text-muted-foreground">Active users throughout the day</p>
                 </CardHeader>
                 <CardContent>
+                  <ErrorBoundary level="component">
                   <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={analytics?.activityData || []}>
+                    <LineChart data={safeActivityData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="time" />
                       <YAxis />
@@ -380,6 +381,7 @@ const PlatformAnalytics = () => {
                       <Line type="monotone" dataKey="active" stroke="#0088FE" strokeWidth={3} />
                     </LineChart>
                   </ResponsiveContainer>
+                  </ErrorBoundary>
                 </CardContent>
               </Card>
 
