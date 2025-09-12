@@ -82,17 +82,21 @@ const RevenueExpenseChart = memo(({ data }: { data: ChartDataPoint[] }) => {
         />
         <Tooltip content={<CustomTooltip />} />
         <Legend />
-        <Bar 
-          dataKey="revenue" 
-          fill={chartColors.revenue} 
+        <Bar
+          dataKey="revenue"
+          fill={chartColors.revenue}
           name="Revenue"
           radius={[2, 2, 0, 0]}
+          minPointSize={0}
+          barSize={20}
         />
-        <Bar 
-          dataKey="expenses" 
-          fill={chartColors.expenses} 
+        <Bar
+          dataKey="expenses"
+          fill={chartColors.expenses}
           name="Expenses"
           radius={[2, 2, 0, 0]}
+          minPointSize={0}
+          barSize={20}
         />
       </BarChart>
     </ResponsiveContainer>
