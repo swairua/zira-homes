@@ -3,6 +3,7 @@ import { getCurrencySymbol } from "@/utils/currency";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line } from "recharts";
 import { ChartDataPoint } from "@/hooks/optimized/useDashboardStats";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface OptimizedChartsSectionProps {
   chartData?: ChartDataPoint[];
