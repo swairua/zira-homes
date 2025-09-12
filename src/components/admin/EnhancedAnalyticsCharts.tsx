@@ -19,6 +19,7 @@ import {
   Area
 } from 'recharts';
 import { supabase } from "@/integrations/supabase/client";
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 interface RevenueData {
   month: string;
