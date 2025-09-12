@@ -233,7 +233,7 @@ export const ReportRenderer = ({ reportId, filters, className, isPrintMode = fal
 
       case 'pie':
       case 'donut':
-        return (
+        return wrap(
           <ResponsiveContainer {...commonProps}>
             <PieChart>
               <Pie
