@@ -37,6 +37,29 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 const PlatformAnalytics = () => {
   const { analytics, loading, refetch } = usePlatformAnalytics();
 
+  const sanitize = (arr: any[] | undefined) => {
+    if (!Array.isArray(arr)) return [];
+    return arr.map((r: any) => {
+      if (!r || typeof r !== 'object') return {};
+      const out: any = {};
+      Object.keys(r).forEach((k) => {
+        const v = r[k];
+        if (v == null) out[k] = 0;
+        else if (typeof v === 'string') {
+          const num = Number(v.replace(/,/g, ''));
+          out[k] = Number.isFinite(num) ? num : v;
+        } else out[k] = v;
+      });
+      return out;
+    });
+  };
+
+  const safeUserGrowthData = sanitize(analytics?.userGrowthData);
+  const safePieData = sanitize(analytics?.planDistribution);
+  const safeBarData = sanitize(analytics?.userGrowthData);
+  const safeRevenueData = sanitize(analytics?.revenueData);
+  const safeActivityData = sanitize(analytics?.activityData);
+
   return (
     <DashboardLayout>
       <div className="bg-tint-gray p-6 space-y-8">
