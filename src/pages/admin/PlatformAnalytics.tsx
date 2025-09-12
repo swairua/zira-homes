@@ -56,6 +56,7 @@ const PlatformAnalytics = () => {
 
   const safeUserGrowthData = sanitize(analytics?.userGrowthData);
   const safePieData = sanitize(analytics?.planDistribution);
+  const safeUserTypeData = sanitize(analytics?.userTypeData);
   const safeBarData = sanitize(analytics?.userGrowthData);
   const safeRevenueData = sanitize(analytics?.revenueData);
   const safeActivityData = sanitize(analytics?.activityData);
