@@ -35,18 +35,31 @@ const RevenueExpenseChart = memo(({ data }: { data: ChartDataPoint[] }) => {
     }
   }, []);
 
+  // Defensive copy of incoming data to ensure numbers for Recharts
+  const safeData = useMemo(() => (data || []).map(d => ({
+    ...(d as any),
+    revenue: Number((d as any).revenue) || 0,
+    expenses: Number((d as any).expenses) || 0,
+    profit: Number((d as any).profit) || 0,
+    month: (d as any).month || ''
+  })), [data]);
+
   const CustomTooltip = memo(({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-card border rounded-lg shadow-lg p-3">
-          <p className="font-medium text-card-foreground">{`Month: ${label}`}</p>
-          {payload.map((entry: any, index: number) => (
-            <p key={index} style={{ color: entry.color }} className="text-sm">
-              {`${entry.dataKey}: ${getCurrencySymbol()} ${formatCurrency(entry.value)}`}
-            </p>
-          ))}
-        </div>
-      );
+    try {
+      if (active && payload && payload.length) {
+        return (
+          <div className="bg-card border rounded-lg shadow-lg p-3">
+            <p className="font-medium text-card-foreground">{`Month: ${label}`}</p>
+            {payload.map((entry: any, index: number) => (
+              <p key={index} style={{ color: entry.color }} className="text-sm">
+                {`${entry.dataKey}: ${getCurrencySymbol()} ${formatCurrency(Number(entry?.value) || 0)}`}
+              </p>
+            ))}
+          </div>
+        );
+      }
+    } catch (e) {
+      console.error('CustomTooltip render error', e);
     }
     return null;
   });
@@ -101,16 +114,29 @@ const ProfitTrendChart = memo(({ data }: { data: ChartDataPoint[] }) => {
     }
   }, []);
 
+  const safeData = useMemo(() => (data || []).map(d => ({
+    ...(d as any),
+    revenue: Number((d as any).revenue) || 0,
+    expenses: Number((d as any).expenses) || 0,
+    profit: Number((d as any).profit) || 0,
+    month: (d as any).month || ''
+  })), [data]);
+
   const CustomTooltip = memo(({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-card border rounded-lg shadow-lg p-3">
-          <p className="font-medium text-card-foreground">{`Month: ${label}`}</p>
-          <p style={{ color: chartColor }} className="text-sm">
-            {`Profit: ${getCurrencySymbol()} ${formatCurrency(payload[0].value)}`}
-          </p>
-        </div>
-      );
+    try {
+      if (active && payload && payload.length) {
+        const val = Number(payload?.[0]?.value) || 0;
+        return (
+          <div className="bg-card border rounded-lg shadow-lg p-3">
+            <p className="font-medium text-card-foreground">{`Month: ${label}`}</p>
+            <p style={{ color: chartColor }} className="text-sm">
+              {`Profit: ${getCurrencySymbol()} ${formatCurrency(val)}`}
+            </p>
+          </div>
+        );
+      }
+    } catch (e) {
+      console.error('CustomTooltip render error', e);
     }
     return null;
   });
