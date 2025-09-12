@@ -285,8 +285,9 @@ const PlatformAnalytics = () => {
                   <p className="text-muted-foreground">New user registrations over time</p>
                 </CardHeader>
                 <CardContent>
+                  <ErrorBoundary level="component">
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={analytics?.userGrowthData || []}>
+                    <BarChart data={safeBarData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" />
                       <YAxis />
@@ -294,6 +295,7 @@ const PlatformAnalytics = () => {
                       <Bar dataKey="users" fill="#0088FE" />
                     </BarChart>
                   </ResponsiveContainer>
+                  </ErrorBoundary>
                 </CardContent>
               </Card>
             </div>
