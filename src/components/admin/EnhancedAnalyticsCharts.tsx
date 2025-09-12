@@ -40,6 +40,26 @@ export const EnhancedAnalyticsCharts: React.FC = () => {
   const [distributionData, setDistributionData] = useState<DistributionData[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const sanitizeArray = (arr: any[]): any[] => {
+    if (!Array.isArray(arr)) return [];
+    return arr.map((r) => {
+      if (!r || typeof r !== 'object') return {};
+      const out: any = {};
+      Object.keys(r).forEach((k) => {
+        const v = (r as any)[k];
+        if (v == null) out[k] = 0;
+        else if (typeof v === 'string') {
+          const num = Number(v.replace(/,/g, ''));
+          out[k] = Number.isFinite(num) ? num : v;
+        } else out[k] = v;
+      });
+      return out;
+    });
+  };
+
+  const safeRevenueData = sanitizeArray(revenueData);
+  const safeDistribution = sanitizeArray(distributionData);
+
   useEffect(() => {
     fetchAnalyticsData();
   }, []);
