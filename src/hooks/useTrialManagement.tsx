@@ -203,7 +203,11 @@ export function useTrialManagement() {
         console.log('❌ useTrialManagement: No subscription found and no RPC status');
       }
     } catch (error) {
-      console.error('❌ useTrialManagement: Error checking trial status:', error);
+      try {
+        console.error('❌ useTrialManagement: Error checking trial status:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+      } catch (e) {
+        console.error('❌ useTrialManagement: Error checking trial status (unserializable):', error);
+      }
     } finally {
       console.log('🏁 useTrialManagement: Finished, setting loading to false');
       setLoading(false);
