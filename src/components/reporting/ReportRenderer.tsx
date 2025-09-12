@@ -126,8 +126,30 @@ export const ReportRenderer = ({ reportId, filters, className, isPrintMode = fal
     );
   }
 
+  const sanitizeChartData = (raw: any[]): any[] => {
+    if (!Array.isArray(raw)) return [];
+    return raw.map((entry) => {
+      if (entry == null || typeof entry !== 'object') return {};
+      const out: any = {};
+      Object.keys(entry).forEach((k) => {
+        const v = (entry as any)[k];
+        if (v == null) {
+          out[k] = 0;
+        } else if (typeof v === 'string') {
+          // try to parse numbers encoded as strings
+          const num = Number(v.replace(/,/g, ''));
+          out[k] = Number.isFinite(num) ? num : v;
+        } else {
+          out[k] = v;
+        }
+      });
+      return out;
+    });
+  };
+
   const renderChart = (chart: any) => {
-    const chartData = data.charts[chart.id];
+    const rawData = data.charts[chart.id];
+    const chartData = sanitizeChartData(rawData);
     if (!chartData || chartData.length === 0) return null;
 
     const commonProps = {
@@ -136,9 +158,13 @@ export const ReportRenderer = ({ reportId, filters, className, isPrintMode = fal
       data: chartData
     };
 
+    const wrap = (node: React.ReactNode) => (
+      <ErrorBoundary level="component">{node}</ErrorBoundary>
+    );
+
     switch (chart.type) {
       case 'line':
-        return (
+        return wrap(
           <ResponsiveContainer {...commonProps}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
