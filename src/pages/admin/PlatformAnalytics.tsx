@@ -32,6 +32,7 @@ import {
   RefreshCw
 } from "lucide-react";
 import { usePlatformAnalytics } from "@/hooks/usePlatformAnalytics";
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 const PlatformAnalytics = () => {
   const { analytics, loading, refetch } = usePlatformAnalytics();
