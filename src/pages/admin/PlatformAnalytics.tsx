@@ -192,8 +192,9 @@ const PlatformAnalytics = () => {
                   <p className="text-muted-foreground">User and property growth trends over time</p>
                 </CardHeader>
                 <CardContent>
+                  <ErrorBoundary level="component">
                   <ResponsiveContainer width="100%" height={400}>
-                    <AreaChart data={analytics?.userGrowthData || []}>
+                    <AreaChart data={safeUserGrowthData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" />
                       <YAxis />
@@ -203,6 +204,7 @@ const PlatformAnalytics = () => {
                       <Area type="monotone" dataKey="properties" stackId="2" stroke="#00C49F" fill="#00C49F" fillOpacity={0.3} />
                     </AreaChart>
                   </ResponsiveContainer>
+                </ErrorBoundary>
                 </CardContent>
               </Card>
 
