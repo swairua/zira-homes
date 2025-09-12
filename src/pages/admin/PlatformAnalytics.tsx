@@ -256,10 +256,11 @@ const PlatformAnalytics = () => {
                   <p className="text-muted-foreground">Breakdown by user type</p>
                 </CardHeader>
                 <CardContent>
+                  <ErrorBoundary level="component">
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                       <Pie
-                        data={analytics?.userTypeData || []}
+                        data={safeUserTypeData}
                         cx="50%"
                         cy="50%"
                         outerRadius={80}
@@ -267,13 +268,14 @@ const PlatformAnalytics = () => {
                         dataKey="value"
                         label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}
                       >
-                        {(analytics?.userTypeData || []).map((entry, index) => (
+                        {safeUserTypeData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
                       <Tooltip />
                     </PieChart>
                   </ResponsiveContainer>
+                  </ErrorBoundary>
                 </CardContent>
               </Card>
 
