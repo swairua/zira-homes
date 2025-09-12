@@ -309,8 +309,9 @@ const PlatformAnalytics = () => {
                   <p className="text-muted-foreground">Commission and subscription revenue trends</p>
                 </CardHeader>
                 <CardContent>
+                  <ErrorBoundary level="component">
                   <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={analytics?.revenueData || []}>
+                    <BarChart data={safeRevenueData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" />
                       <YAxis />
@@ -320,6 +321,7 @@ const PlatformAnalytics = () => {
                       <Bar dataKey="subscriptions" stackId="a" fill="#00C49F" name="Subscriptions" />
                     </BarChart>
                   </ResponsiveContainer>
+                  </ErrorBoundary>
                 </CardContent>
               </Card>
 
