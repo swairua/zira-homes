@@ -163,12 +163,12 @@ const ProfitTrendChart = memo(({ data }: { data: ChartDataPoint[] }) => {
         />
         <Tooltip content={<CustomTooltip />} />
         <Legend />
-        <Line 
-          type="monotone" 
-          dataKey="profit" 
+        <Line
+          type="monotone"
+          dataKey="profit"
           stroke={chartColor}
           strokeWidth={3}
-          dot={{ fill: chartColor, strokeWidth: 2, r: 4 }}
+          dot={typeof chartColor === 'string' ? { fill: chartColor, strokeWidth: 2, r: 4 } : false}
           name="Profit"
         />
       </LineChart>
