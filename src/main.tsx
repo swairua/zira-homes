@@ -43,6 +43,26 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     }
     _warn(...args);
   };
+
+  // Aggressive runtime patch: remove defaultProps from known Recharts function components
+  // so React no longer emits the deprecation warning. This mutates the imported module at runtime.
+  try {
+    // import dynamically to avoid bundling if recharts is not present
+    const Recharts = await import('recharts');
+    const names = ['XAxis', 'YAxis', 'Tooltip', 'Legend', 'CartesianGrid', 'Surface', 'Bar', 'Line'];
+    names.forEach((n) => {
+      try {
+        const comp = (Recharts as any)[n];
+        if (comp && comp.hasOwnProperty('defaultProps')) {
+          try { delete (comp as any).defaultProps; } catch(e) { (comp as any).defaultProps = undefined; }
+        }
+      } catch (e) {
+        // ignore individual failures
+      }
+    });
+  } catch (e) {
+    // recharts not available or dynamic import failed
+  }
 }
 
 createRoot(document.getElementById("root")!).render(
