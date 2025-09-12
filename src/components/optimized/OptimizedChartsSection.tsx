@@ -234,7 +234,9 @@ export const OptimizedChartsSection = memo(({ chartData, isLoading }: OptimizedC
           <CardTitle>Revenue vs Expenses</CardTitle>
         </CardHeader>
         <CardContent>
-          <RevenueExpenseChart data={chartData} />
+          <ErrorBoundary level="component">
+            <RevenueExpenseChart data={chartData} />
+          </ErrorBoundary>
         </CardContent>
       </Card>
       <Card>
@@ -242,7 +244,9 @@ export const OptimizedChartsSection = memo(({ chartData, isLoading }: OptimizedC
           <CardTitle>Profit Trend</CardTitle>
         </CardHeader>
         <CardContent>
-          <ProfitTrendChart data={chartData} />
+          <ErrorBoundary level="component">
+            <ProfitTrendChart data={chartData} />
+          </ErrorBoundary>
         </CardContent>
       </Card>
     </div>
