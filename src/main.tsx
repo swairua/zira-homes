@@ -9,16 +9,33 @@ import './utils/productionConfig';
 import './utils/consoleReplacer';
 import './utils/consoleLogCleaner';
 
-// Suppress noisy React warning about defaultProps used inside third-party function components
-// (appears for Recharts in development). We only silence this specific message to avoid
-// hiding other useful warnings.
+// Suppress specific React defaultProps deprecation warnings originating from third-party libraries (e.g., Recharts).
+// We only silence the exact deprecation message to avoid hiding other important errors.
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  const _error = console.error.bind(console);
   const _warn = console.warn.bind(console);
+  const needle = 'Support for defaultProps will be removed from function components';
+
+  console.error = (...args: any[]) => {
+    try {
+      const m = args[0];
+      const text = typeof m === 'string' ? m : (m && (m.message || m.toString())) || '';
+      if (typeof text === 'string' && text.includes(needle)) {
+        // swallow this specific deprecation warning
+        return;
+      }
+    } catch (e) {
+      // fall through to default
+    }
+    _error(...args);
+  };
+
+  // Also guard console.warn just in case some libraries use warn
   console.warn = (...args: any[]) => {
     try {
       const m = args[0];
-      const text = typeof m === 'string' ? m : (m && m.message) || JSON.stringify(m || '');
-      if (typeof text === 'string' && text.includes('Support for defaultProps will be removed from function components')) {
+      const text = typeof m === 'string' ? m : (m && (m.message || m.toString())) || '';
+      if (typeof text === 'string' && text.includes(needle)) {
         return;
       }
     } catch (e) {
