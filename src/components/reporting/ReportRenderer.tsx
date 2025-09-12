@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -170,9 +169,11 @@ export const ReportRenderer = ({ reportId, filters, className, isPrintMode = fal
               <Legend />
               {chart.yKeys?.map((key, index) => (
                 <Bar
-                  key={key}
+                  key={String(key)}
                   dataKey={key}
                   fill={`hsl(${index * 60}, 70%, 50%)`}
+                  minPointSize={0}
+                  barSize={20}
                 />
               ))}
             </BarChart>
