@@ -205,8 +205,9 @@ export const EnhancedAnalyticsCharts: React.FC = () => {
           </p>
         </CardHeader>
         <CardContent>
+          <ErrorBoundary level="component">
           <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={revenueData}>
+            <AreaChart data={safeRevenueData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis tickFormatter={formatCurrency} />
@@ -241,6 +242,7 @@ export const EnhancedAnalyticsCharts: React.FC = () => {
               />
             </AreaChart>
           </ResponsiveContainer>
+          </ErrorBoundary>
         </CardContent>
       </Card>
 
@@ -253,10 +255,11 @@ export const EnhancedAnalyticsCharts: React.FC = () => {
           </p>
         </CardHeader>
         <CardContent>
+          <ErrorBoundary level="component">
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
-                data={distributionData}
+                data={safeDistribution}
                 cx="50%"
                 cy="50%"
                 labelLine={false}
@@ -272,6 +275,7 @@ export const EnhancedAnalyticsCharts: React.FC = () => {
               <Tooltip />
             </PieChart>
           </ResponsiveContainer>
+          </ErrorBoundary>
         </CardContent>
       </Card>
 
@@ -284,8 +288,9 @@ export const EnhancedAnalyticsCharts: React.FC = () => {
           </p>
         </CardHeader>
         <CardContent>
+          <ErrorBoundary level="component">
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={revenueData}>
+            <LineChart data={safeRevenueData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis tickFormatter={formatCurrency} />
@@ -300,6 +305,7 @@ export const EnhancedAnalyticsCharts: React.FC = () => {
               />
             </LineChart>
           </ResponsiveContainer>
+          </ErrorBoundary>
         </CardContent>
       </Card>
     </div>
