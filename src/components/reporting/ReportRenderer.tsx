@@ -147,11 +147,12 @@ export const ReportRenderer = ({ reportId, filters, className, isPrintMode = fal
               <Legend />
               {chart.yKeys?.map((key, index) => (
                 <Line
-                  key={key}
+                  key={String(key)}
                   type="monotone"
                   dataKey={key}
                   stroke={`hsl(${index * 60}, 70%, 50%)`}
                   strokeWidth={2}
+                  dot={{ r: 3 }}
                 />
               ))}
             </LineChart>
