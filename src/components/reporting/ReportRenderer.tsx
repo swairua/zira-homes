@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { OptimizedTable } from './OptimizedTable';
 import { LineChart, Line, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, Legend, ResponsiveContainer } from 'recharts';
 import { getReportConfig } from '@/lib/reporting/config';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { getReportData } from '@/lib/reporting/queries';
 import { formatValue, formatValueCompact } from '@/lib/format';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
