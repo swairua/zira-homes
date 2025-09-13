@@ -724,9 +724,10 @@ const reportQueries = {
       // Include property filter if provided (function supports optional p_property_id)
       const rpcParams: any = {
         p_start_date: startDate,
-        p_end_date: endDate
+        p_end_date: endDate,
+        // Always include p_property_id (nullable) to disambiguate overloaded functions in Postgres
+        p_property_id: filters.propertyId || null
       };
-      if (filters.propertyId) rpcParams.p_property_id = filters.propertyId;
 
       let data: any = null;
       try {
