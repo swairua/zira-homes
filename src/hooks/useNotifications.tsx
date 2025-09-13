@@ -60,7 +60,20 @@ export function useNotifications() {
       setNotifications(typedData);
       updateUnreadCount(typedData);
     } catch (error) {
-      console.error("Error fetching notifications:", error);
+      // Better serialize errors for logging
+      let serialized;
+      try {
+        serialized = JSON.stringify(error, Object.getOwnPropertyNames(error));
+      } catch (e) {
+        serialized = String(error);
+      }
+
+      if (typeof (error as any)?.message === 'string' && (error as any).message.toLowerCase().includes('failed to fetch')) {
+        console.error('Error fetching notifications: network/fetch failed. Check Supabase URL, CORS, and connectivity.', serialized);
+      } else {
+        console.error('Error fetching notifications:', serialized);
+      }
+
       setNotifications([]);
       setUnreadCount(0);
     } finally {
