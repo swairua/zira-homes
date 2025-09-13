@@ -721,14 +721,38 @@ const reportQueries = {
       console.log('Fetching financial summary report with dates:', { startDate, endDate });
       console.log('Financial summary filters:', filters);
       
-      const { data, error } = await (supabase as any).rpc('get_financial_summary_report', {
+      // Include property filter if provided (function supports optional p_property_id)
+      const rpcParams: any = {
         p_start_date: startDate,
         p_end_date: endDate
-      });
+      };
+      if (filters.propertyId) rpcParams.p_property_id = filters.propertyId;
 
-      if (error) {
-        console.error('Error fetching financial summary report:', error);
-        throw error;
+      let data: any = null;
+      try {
+        const rpcResult = await (supabase as any).rpc('get_financial_summary_report', rpcParams);
+        // Supabase RPC may return { data, error } or throw; normalize
+        if (rpcResult && Object.prototype.hasOwnProperty.call(rpcResult, 'error')) {
+          const { error } = rpcResult as any;
+          if (error) {
+            // Serialize error for logging
+            let serialized;
+            try { serialized = JSON.stringify(error, Object.getOwnPropertyNames(error)); } catch (e) { serialized = String(error); }
+            console.error('Error fetching financial summary report (rpc error):', serialized);
+            // Return early to be handled by outer catch
+            throw error;
+          }
+          data = (rpcResult as any).data;
+        } else {
+          // Some clients return the data directly
+          data = rpcResult;
+        }
+      } catch (rpcError) {
+        let serialized;
+        try { serialized = JSON.stringify(rpcError, Object.getOwnPropertyNames(rpcError)); } catch (e) { serialized = String(rpcError); }
+        console.error('Error fetching financial summary report (exception):', serialized);
+        // Re-throw to be caught by outer catch where we produce empty report
+        throw rpcError;
       }
 
       const reportResponse = data as unknown as ReportResponse;
