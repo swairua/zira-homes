@@ -854,7 +854,20 @@ const reportQueries = {
         table: normalizedTable
       };
     } catch (error) {
-      console.error('Failed to fetch financial summary report:', error);
+      // Serialize error
+      let serialized;
+      try { serialized = JSON.stringify(error, Object.getOwnPropertyNames(error)); } catch (e) { serialized = String(error); }
+      console.error('Failed to fetch financial summary report:', serialized);
+
+      // Detect missing column errors (Postgres 42703) which usually mean the RPC function is out-of-sync with code
+      const errObj: any = error as any;
+      if (errObj && (errObj.code === '42703' || (typeof errObj.message === 'string' && errObj.message.includes('column')))) {
+        console.error('🔧 SQL column missing error detected when running get_financial_summary_report. This typically means the stored function in the database does not match the expected implementation in migrations. Suggested fixes:');
+        console.error('- Run the latest DB migrations to recreate get_financial_summary_report so it includes total_income / total_expenses aliases.');
+        console.error('- Inspect the function body in supabase/migrations/*get_financial_summary_report*.sql and ensure the CTE producing kpis aliases columns as total_income and total_expenses.');
+        console.error('- If you cannot run migrations, consider temporarily falling back to a simplified client-side summary or contact your DBA.');
+      }
+
       return {
         kpis: {},
         charts: {},
