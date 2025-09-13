@@ -23,6 +23,7 @@ import { formatAmount } from "@/utils/currency";
 import { format, differenceInDays } from "date-fns";
 import { DisabledActionWrapper } from "@/components/feature-access/DisabledActionWrapper";
 import { FEATURES } from "@/hooks/usePlanFeatureAccess";
+import { LeaseDetailsDialog } from "@/components/lease/LeaseDetailsDialog";
 
 interface LeaseData {
   id: string;
@@ -400,6 +401,17 @@ function LeasesList({ leases, loading, selectedLeases, onSelectionChange }: Leas
               <div className="text-right">
                 <div className="font-medium">{formatAmount(lease.monthly_rent)}</div>
                 <p className="text-xs text-muted-foreground">monthly rent</p>
+                <div className="mt-2 flex justify-end">
+                  <LeaseDetailsDialog
+                    leaseId={lease.id}
+                    trigger={
+                      <Button size="sm" variant="outline" onClick={(e) => e.stopPropagation()}>
+                        <Eye className="h-4 w-4 mr-2" />
+                        View Details
+                      </Button>
+                    }
+                  />
+                </div>
               </div>
             </div>
           </div>
