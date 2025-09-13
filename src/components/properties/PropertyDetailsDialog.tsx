@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Eye, Edit, Building2, MapPin, Info, Calendar } from "lucide-react";
 import { PropertyEditForm } from "@/components/forms/PropertyEditForm";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Property {
   id: string;
@@ -23,9 +24,10 @@ interface PropertyDetailsDialogProps {
   property: Property;
   mode: 'view' | 'edit';
   trigger?: React.ReactNode;
+  onUpdated?: () => void;
 }
 
-export function PropertyDetailsDialog({ property, mode, trigger }: PropertyDetailsDialogProps) {
+export function PropertyDetailsDialog({ property, mode, trigger, onUpdated }: PropertyDetailsDialogProps) {
   const [open, setOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(mode === 'edit');
 
@@ -38,10 +40,31 @@ export function PropertyDetailsDialog({ property, mode, trigger }: PropertyDetai
   };
 
   const handleSave = async (data: any) => {
-    // TODO: Implement actual save functionality with Supabase
-    console.log('Saving property:', data);
+    const updatePayload = {
+      name: data.name,
+      address: data.address,
+      city: data.city,
+      state: data.state,
+      zip_code: data.zip_code,
+      property_type: data.property_type,
+      total_units: data.total_units,
+      description: data.description || null,
+      amenities: Array.isArray(data.amenities) ? data.amenities : null,
+      updated_at: new Date().toISOString(),
+    } as const;
+
+    const { error } = await supabase
+      .from('properties')
+      .update(updatePayload)
+      .eq('id', property.id);
+
+    if (error) {
+      throw error;
+    }
+
     setIsEditing(false);
     setOpen(false);
+    onUpdated?.();
   };
 
   const handleCancel = () => {
@@ -81,12 +104,12 @@ export function PropertyDetailsDialog({ property, mode, trigger }: PropertyDetai
             {isEditing ? 'Edit Property' : 'Property Details'}
           </DialogTitle>
         </DialogHeader>
-        
+
         {isEditing ? (
-          <PropertyEditForm 
-            property={property} 
-            onSave={handleSave} 
-            onCancel={handleCancel} 
+          <PropertyEditForm
+            property={property}
+            onSave={handleSave}
+            onCancel={handleCancel}
           />
         ) : (
           <>
