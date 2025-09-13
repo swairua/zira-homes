@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 async function main() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE;
-  const targetEmail = process.env.TARGET_USER_EMAIL || 'medplus@gmail.com';
+  const targetEmail = process.env.TARGET_USER_EMAIL || 'gichukisimon@gmail.com';
 
   if (!supabaseUrl || !supabaseKey) {
     console.error('Missing SUPABASE env vars. Ensure NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE are set.');
