@@ -19,6 +19,7 @@ import {
   Area
 } from 'recharts';
 import { supabase } from "@/integrations/supabase/client";
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 interface RevenueData {
   month: string;
@@ -38,6 +39,26 @@ export const EnhancedAnalyticsCharts: React.FC = () => {
   const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
   const [distributionData, setDistributionData] = useState<DistributionData[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const sanitizeArray = (arr: any[]): any[] => {
+    if (!Array.isArray(arr)) return [];
+    return arr.map((r) => {
+      if (!r || typeof r !== 'object') return {};
+      const out: any = {};
+      Object.keys(r).forEach((k) => {
+        const v = (r as any)[k];
+        if (v == null) out[k] = 0;
+        else if (typeof v === 'string') {
+          const num = Number(v.replace(/,/g, ''));
+          out[k] = Number.isFinite(num) ? num : v;
+        } else out[k] = v;
+      });
+      return out;
+    });
+  };
+
+  const safeRevenueData = sanitizeArray(revenueData);
+  const safeDistribution = sanitizeArray(distributionData);
 
   useEffect(() => {
     fetchAnalyticsData();
@@ -184,8 +205,9 @@ export const EnhancedAnalyticsCharts: React.FC = () => {
           </p>
         </CardHeader>
         <CardContent>
+          <ErrorBoundary level="component">
           <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={revenueData}>
+            <AreaChart data={safeRevenueData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis tickFormatter={formatCurrency} />
@@ -220,6 +242,7 @@ export const EnhancedAnalyticsCharts: React.FC = () => {
               />
             </AreaChart>
           </ResponsiveContainer>
+          </ErrorBoundary>
         </CardContent>
       </Card>
 
@@ -232,10 +255,11 @@ export const EnhancedAnalyticsCharts: React.FC = () => {
           </p>
         </CardHeader>
         <CardContent>
+          <ErrorBoundary level="component">
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
-                data={distributionData}
+                data={safeDistribution}
                 cx="50%"
                 cy="50%"
                 labelLine={false}
@@ -251,6 +275,7 @@ export const EnhancedAnalyticsCharts: React.FC = () => {
               <Tooltip />
             </PieChart>
           </ResponsiveContainer>
+          </ErrorBoundary>
         </CardContent>
       </Card>
 
@@ -263,8 +288,9 @@ export const EnhancedAnalyticsCharts: React.FC = () => {
           </p>
         </CardHeader>
         <CardContent>
+          <ErrorBoundary level="component">
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={revenueData}>
+            <LineChart data={safeRevenueData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis tickFormatter={formatCurrency} />
@@ -279,6 +305,7 @@ export const EnhancedAnalyticsCharts: React.FC = () => {
               />
             </LineChart>
           </ResponsiveContainer>
+          </ErrorBoundary>
         </CardContent>
       </Card>
     </div>

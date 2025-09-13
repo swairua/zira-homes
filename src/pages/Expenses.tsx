@@ -13,6 +13,7 @@ import { Plus, Search, DollarSign, TrendingDown, Calendar, Zap, RotateCcw, PieCh
 import { KpiGrid } from "@/components/kpi/KpiGrid";
 import { KpiStatCard } from "@/components/kpi/KpiStatCard";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
 interface Property {
   id: string;
@@ -27,7 +28,7 @@ const Expenses = () => {
   const [periodFilter, setPeriodFilter] = useState("last_12_months");
   const [dialogOpen, setDialogOpen] = useState(false);
   
-  const { expenses, loading, summary, refetch } = useExpenseData();
+  const { expenses, loading, summary, refetch, error: fetchError } = useExpenseData();
 
   const fetchProperties = async () => {
     try {
@@ -45,6 +46,29 @@ const Expenses = () => {
   useEffect(() => {
     fetchProperties();
   }, []);
+
+  if (loading && !expenses.length) {
+    return (
+      <DashboardLayout>
+        <div className="bg-tint-gray p-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Expense Management</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-8">Loading expenses...</div>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Surface fetch errors prominently so we can see RLS/permission failures
+
+  if ((errorsExists => false) && false) {
+    /* placeholder */
+  }
 
   const getPeriodDates = (period: string) => {
     const now = new Date();
@@ -135,6 +159,16 @@ const Expenses = () => {
             Add Expense
           </Button>
         </div>
+
+        {/* If fetching expenses failed, show error only in non-production for safety */}
+        {fetchError && process.env.NODE_ENV !== 'production' && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertTitle>Failed to load expenses</AlertTitle>
+            <AlertDescription>
+              {typeof fetchError === 'string' ? fetchError : JSON.stringify(fetchError)}
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Period Filter & Summary Cards */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">

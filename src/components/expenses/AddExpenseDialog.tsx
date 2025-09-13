@@ -153,7 +153,7 @@ export function AddExpenseDialog({ open, onOpenChange, properties, onSuccess }: 
           ...data,
           amount: Number(data.amount),
           expense_type: "one-time",
-          // RLS policy will handle user attribution
+          created_by: userData.user.id,
         }];
       } else if (bulkType === "all-units") {
         // All units in property
@@ -162,7 +162,7 @@ export function AddExpenseDialog({ open, onOpenChange, properties, onSuccess }: 
           unit_id: unit.id,
           amount: Number(data.amount),
           expense_type: "one-time",
-          // RLS policy will handle user attribution
+          created_by: userData.user.id,
         }));
       } else if (bulkType === "selected-units") {
         // Selected units only
@@ -171,26 +171,36 @@ export function AddExpenseDialog({ open, onOpenChange, properties, onSuccess }: 
           unit_id: unitId,
           amount: Number(data.amount),
           expense_type: "one-time",
-          // RLS policy will handle user attribution
+          created_by: userData.user.id,
         }));
       }
 
-      const { error } = await supabase
+      const { data: insertedData, error } = await supabase
         .from("expenses")
-        .insert(expenseEntries);
+        .insert(expenseEntries)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        // When RLS prevents reading back inserted rows, the insert may still succeed but select will error
+        throw error;
+      }
+
+      const createdCount = Array.isArray(insertedData) ? insertedData.length : (insertedData ? 1 : 0);
 
       toast({
         title: "Success",
-        description: `${expenseEntries.length} expense record(s) created successfully`,
+        description: `${createdCount} expense record(s) created successfully`,
       });
+
+      // Log full inserted rows for debugging (visible in browser console)
+      console.debug('Inserted expense rows:', insertedData);
 
       oneTimeForm.reset();
       setBulkType("single");
       setSelectedUnits([]);
       onOpenChange(false);
-      onSuccess();
+      // Call onSuccess to allow parent to refetch; also pass inserted rows for immediate UI usage if needed
+      try { onSuccess && (onSuccess as any)(insertedData); } catch (e) { onSuccess && onSuccess(); }
     } catch (error) {
       console.error("Error recording expense:", error);
       toast({
@@ -218,7 +228,7 @@ export function AddExpenseDialog({ open, onOpenChange, properties, onSuccess }: 
           previous_reading: Number(data.previous_reading),
           current_reading: Number(data.current_reading),
           rate_per_unit: Number(data.rate_per_unit),
-          // RLS policy will handle user attribution
+          created_by: userData.user.id,
         }])
         .select()
         .single();
@@ -235,7 +245,7 @@ export function AddExpenseDialog({ open, onOpenChange, properties, onSuccess }: 
       if (unitError) throw unitError;
 
       // Create corresponding expense record
-      const { error: expenseError } = await supabase
+      const { data: insertedExpenses, error: expenseError } = await supabase
         .from("expenses")
         .insert([{
           property_id: unitData.property_id,
@@ -246,8 +256,9 @@ export function AddExpenseDialog({ open, onOpenChange, properties, onSuccess }: 
           description: `${data.meter_type} usage: ${unitsConsumed} units`,
           expense_type: "metered",
           meter_reading_id: meterData.id,
-          // RLS policy will handle user attribution
-        }]);
+          created_by: userData.user.id,
+        }])
+        .select();
 
       if (expenseError) throw expenseError;
 
@@ -256,9 +267,11 @@ export function AddExpenseDialog({ open, onOpenChange, properties, onSuccess }: 
         description: "Meter reading and expense recorded successfully",
       });
 
+      console.debug('Inserted expense rows (metered):', insertedExpenses);
+
       meterForm.reset();
       onOpenChange(false);
-      onSuccess();
+      try { onSuccess && (onSuccess as any)(insertedExpenses); } catch (e) { onSuccess && onSuccess(); }
     } catch (error) {
       console.error("Error recording meter reading:", error);
       toast({

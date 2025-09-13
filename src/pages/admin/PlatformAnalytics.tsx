@@ -32,9 +32,34 @@ import {
   RefreshCw
 } from "lucide-react";
 import { usePlatformAnalytics } from "@/hooks/usePlatformAnalytics";
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 const PlatformAnalytics = () => {
   const { analytics, loading, refetch } = usePlatformAnalytics();
+
+  const sanitize = (arr: any[] | undefined) => {
+    if (!Array.isArray(arr)) return [];
+    return arr.map((r: any) => {
+      if (!r || typeof r !== 'object') return {};
+      const out: any = {};
+      Object.keys(r).forEach((k) => {
+        const v = r[k];
+        if (v == null) out[k] = 0;
+        else if (typeof v === 'string') {
+          const num = Number(v.replace(/,/g, ''));
+          out[k] = Number.isFinite(num) ? num : v;
+        } else out[k] = v;
+      });
+      return out;
+    });
+  };
+
+  const safeUserGrowthData = sanitize(analytics?.userGrowthData);
+  const safePieData = sanitize(analytics?.planDistribution);
+  const safeUserTypeData = sanitize(analytics?.userTypeData);
+  const safeBarData = sanitize(analytics?.userGrowthData);
+  const safeRevenueData = sanitize(analytics?.revenueData);
+  const safeActivityData = sanitize(analytics?.activityData);
 
   return (
     <DashboardLayout>
@@ -167,8 +192,9 @@ const PlatformAnalytics = () => {
                   <p className="text-muted-foreground">User and property growth trends over time</p>
                 </CardHeader>
                 <CardContent>
+                  <ErrorBoundary level="component">
                   <ResponsiveContainer width="100%" height={400}>
-                    <AreaChart data={analytics?.userGrowthData || []}>
+                    <AreaChart data={safeUserGrowthData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" />
                       <YAxis />
@@ -178,6 +204,7 @@ const PlatformAnalytics = () => {
                       <Area type="monotone" dataKey="properties" stackId="2" stroke="#00C49F" fill="#00C49F" fillOpacity={0.3} />
                     </AreaChart>
                   </ResponsiveContainer>
+                </ErrorBoundary>
                 </CardContent>
               </Card>
 
@@ -229,10 +256,11 @@ const PlatformAnalytics = () => {
                   <p className="text-muted-foreground">Breakdown by user type</p>
                 </CardHeader>
                 <CardContent>
+                  <ErrorBoundary level="component">
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                       <Pie
-                        data={analytics?.userTypeData || []}
+                        data={safeUserTypeData}
                         cx="50%"
                         cy="50%"
                         outerRadius={80}
@@ -240,13 +268,14 @@ const PlatformAnalytics = () => {
                         dataKey="value"
                         label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}
                       >
-                        {(analytics?.userTypeData || []).map((entry, index) => (
+                        {safeUserTypeData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
                       <Tooltip />
                     </PieChart>
                   </ResponsiveContainer>
+                  </ErrorBoundary>
                 </CardContent>
               </Card>
 
@@ -256,8 +285,9 @@ const PlatformAnalytics = () => {
                   <p className="text-muted-foreground">New user registrations over time</p>
                 </CardHeader>
                 <CardContent>
+                  <ErrorBoundary level="component">
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={analytics?.userGrowthData || []}>
+                    <BarChart data={safeBarData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" />
                       <YAxis />
@@ -265,6 +295,7 @@ const PlatformAnalytics = () => {
                       <Bar dataKey="users" fill="#0088FE" />
                     </BarChart>
                   </ResponsiveContainer>
+                  </ErrorBoundary>
                 </CardContent>
               </Card>
             </div>
@@ -278,8 +309,9 @@ const PlatformAnalytics = () => {
                   <p className="text-muted-foreground">Commission and subscription revenue trends</p>
                 </CardHeader>
                 <CardContent>
+                  <ErrorBoundary level="component">
                   <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={analytics?.revenueData || []}>
+                    <BarChart data={safeRevenueData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" />
                       <YAxis />
@@ -289,6 +321,7 @@ const PlatformAnalytics = () => {
                       <Bar dataKey="subscriptions" stackId="a" fill="#00C49F" name="Subscriptions" />
                     </BarChart>
                   </ResponsiveContainer>
+                  </ErrorBoundary>
                 </CardContent>
               </Card>
 
@@ -338,8 +371,9 @@ const PlatformAnalytics = () => {
                   <p className="text-muted-foreground">Active users throughout the day</p>
                 </CardHeader>
                 <CardContent>
+                  <ErrorBoundary level="component">
                   <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={analytics?.activityData || []}>
+                    <LineChart data={safeActivityData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="time" />
                       <YAxis />
@@ -347,6 +381,7 @@ const PlatformAnalytics = () => {
                       <Line type="monotone" dataKey="active" stroke="#0088FE" strokeWidth={3} />
                     </LineChart>
                   </ResponsiveContainer>
+                  </ErrorBoundary>
                 </CardContent>
               </Card>
 

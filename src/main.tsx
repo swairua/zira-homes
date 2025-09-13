@@ -9,6 +9,7 @@ import './utils/productionConfig';
 import './utils/consoleReplacer';
 import './utils/consoleLogCleaner';
 
+
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ImpersonationProvider>

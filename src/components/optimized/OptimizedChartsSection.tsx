@@ -3,6 +3,7 @@ import { getCurrencySymbol } from "@/utils/currency";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line } from "recharts";
 import { ChartDataPoint } from "@/hooks/optimized/useDashboardStats";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface OptimizedChartsSectionProps {
   chartData?: ChartDataPoint[];
@@ -34,18 +35,31 @@ const RevenueExpenseChart = memo(({ data }: { data: ChartDataPoint[] }) => {
     }
   }, []);
 
+  // Defensive copy of incoming data to ensure numbers for Recharts
+  const safeData = useMemo(() => (data || []).map(d => ({
+    ...(d as any),
+    revenue: Number((d as any).revenue) || 0,
+    expenses: Number((d as any).expenses) || 0,
+    profit: Number((d as any).profit) || 0,
+    month: (d as any).month || ''
+  })), [data]);
+
   const CustomTooltip = memo(({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-card border rounded-lg shadow-lg p-3">
-          <p className="font-medium text-card-foreground">{`Month: ${label}`}</p>
-          {payload.map((entry: any, index: number) => (
-            <p key={index} style={{ color: entry.color }} className="text-sm">
-              {`${entry.dataKey}: ${getCurrencySymbol()} ${formatCurrency(entry.value)}`}
-            </p>
-          ))}
-        </div>
-      );
+    try {
+      if (active && payload && payload.length) {
+        return (
+          <div className="bg-card border rounded-lg shadow-lg p-3">
+            <p className="font-medium text-card-foreground">{`Month: ${label}`}</p>
+            {payload.map((entry: any, index: number) => (
+              <p key={index} style={{ color: entry.color }} className="text-sm">
+                {`${entry.dataKey}: ${getCurrencySymbol()} ${formatCurrency(Number(entry?.value) || 0)}`}
+              </p>
+            ))}
+          </div>
+        );
+      }
+    } catch (e) {
+      console.error('CustomTooltip render error', e);
     }
     return null;
   });
@@ -54,7 +68,7 @@ const RevenueExpenseChart = memo(({ data }: { data: ChartDataPoint[] }) => {
 
   return (
     <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+      <BarChart data={safeData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
         <XAxis 
           dataKey="month" 
@@ -68,17 +82,21 @@ const RevenueExpenseChart = memo(({ data }: { data: ChartDataPoint[] }) => {
         />
         <Tooltip content={<CustomTooltip />} />
         <Legend />
-        <Bar 
-          dataKey="revenue" 
-          fill={chartColors.revenue} 
+        <Bar
+          dataKey="revenue"
+          fill={chartColors.revenue}
           name="Revenue"
           radius={[2, 2, 0, 0]}
+          minPointSize={0}
+          barSize={20}
         />
-        <Bar 
-          dataKey="expenses" 
-          fill={chartColors.expenses} 
+        <Bar
+          dataKey="expenses"
+          fill={chartColors.expenses}
           name="Expenses"
           radius={[2, 2, 0, 0]}
+          minPointSize={0}
+          barSize={20}
         />
       </BarChart>
     </ResponsiveContainer>
@@ -100,16 +118,29 @@ const ProfitTrendChart = memo(({ data }: { data: ChartDataPoint[] }) => {
     }
   }, []);
 
+  const safeData = useMemo(() => (data || []).map(d => ({
+    ...(d as any),
+    revenue: Number((d as any).revenue) || 0,
+    expenses: Number((d as any).expenses) || 0,
+    profit: Number((d as any).profit) || 0,
+    month: (d as any).month || ''
+  })), [data]);
+
   const CustomTooltip = memo(({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-card border rounded-lg shadow-lg p-3">
-          <p className="font-medium text-card-foreground">{`Month: ${label}`}</p>
-          <p style={{ color: chartColor }} className="text-sm">
-            {`Profit: ${getCurrencySymbol()} ${formatCurrency(payload[0].value)}`}
-          </p>
-        </div>
-      );
+    try {
+      if (active && payload && payload.length) {
+        const val = Number(payload?.[0]?.value) || 0;
+        return (
+          <div className="bg-card border rounded-lg shadow-lg p-3">
+            <p className="font-medium text-card-foreground">{`Month: ${label}`}</p>
+            <p style={{ color: chartColor }} className="text-sm">
+              {`Profit: ${getCurrencySymbol()} ${formatCurrency(val)}`}
+            </p>
+          </div>
+        );
+      }
+    } catch (e) {
+      console.error('CustomTooltip render error', e);
     }
     return null;
   });
@@ -118,7 +149,7 @@ const ProfitTrendChart = memo(({ data }: { data: ChartDataPoint[] }) => {
 
   return (
     <ResponsiveContainer width="100%" height={300}>
-      <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+      <LineChart data={safeData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
         <XAxis 
           dataKey="month" 
@@ -132,12 +163,12 @@ const ProfitTrendChart = memo(({ data }: { data: ChartDataPoint[] }) => {
         />
         <Tooltip content={<CustomTooltip />} />
         <Legend />
-        <Line 
-          type="monotone" 
-          dataKey="profit" 
+        <Line
+          type="monotone"
+          dataKey="profit"
           stroke={chartColor}
           strokeWidth={3}
-          dot={{ fill: chartColor, strokeWidth: 2, r: 4 }}
+          dot={typeof chartColor === 'string' ? { fill: chartColor, strokeWidth: 2, r: 4 } : false}
           name="Profit"
         />
       </LineChart>
@@ -207,7 +238,9 @@ export const OptimizedChartsSection = memo(({ chartData, isLoading }: OptimizedC
           <CardTitle>Revenue vs Expenses</CardTitle>
         </CardHeader>
         <CardContent>
-          <RevenueExpenseChart data={chartData} />
+          <ErrorBoundary level="component">
+            <RevenueExpenseChart data={chartData} />
+          </ErrorBoundary>
         </CardContent>
       </Card>
       <Card>
@@ -215,7 +248,9 @@ export const OptimizedChartsSection = memo(({ chartData, isLoading }: OptimizedC
           <CardTitle>Profit Trend</CardTitle>
         </CardHeader>
         <CardContent>
-          <ProfitTrendChart data={chartData} />
+          <ErrorBoundary level="component">
+            <ProfitTrendChart data={chartData} />
+          </ErrorBoundary>
         </CardContent>
       </Card>
     </div>

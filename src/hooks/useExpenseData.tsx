@@ -54,10 +54,10 @@ export function useExpenseData() {
 
       const { data, error: fetchError } = await supabase
         .from("expenses")
-        .select(`
+      .select(`
           *,
-          properties(name),
-          units(unit_number),
+          properties!fk_expenses_property_id(name),
+          units!fk_expenses_unit_id(unit_number),
           tenants(first_name, last_name),
           meter_readings(meter_type, units_consumed, rate_per_unit)
         `)
@@ -66,9 +66,19 @@ export function useExpenseData() {
       if (fetchError) throw fetchError;
 
       setExpenses((data as any) || []);
-    } catch (err) {
-      console.error("Error fetching expenses:", err);
-      setError("Failed to fetch expenses");
+    } catch (err: any) {
+      // Log full Supabase error object when present
+      try {
+        if (err && typeof err === 'object') {
+          console.error('Error fetching expenses (full):', JSON.stringify(err, null, 2));
+        } else {
+          console.error('Error fetching expenses:', err);
+        }
+      } catch (e) {
+        console.error('Error fetching expenses (fallback):', err);
+      }
+
+      setError(err?.message || err?.msg || 'Failed to fetch expenses');
       setExpenses([]);
     } finally {
       setLoading(false);

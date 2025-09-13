@@ -1,10 +1,10 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { OptimizedTable } from './OptimizedTable';
 import { LineChart, Line, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, Legend, ResponsiveContainer } from 'recharts';
 import { getReportConfig } from '@/lib/reporting/config';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { getReportData } from '@/lib/reporting/queries';
 import { formatValue, formatValueCompact } from '@/lib/format';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -126,8 +126,30 @@ export const ReportRenderer = ({ reportId, filters, className, isPrintMode = fal
     );
   }
 
+  const sanitizeChartData = (raw: any[]): any[] => {
+    if (!Array.isArray(raw)) return [];
+    return raw.map((entry) => {
+      if (entry == null || typeof entry !== 'object') return {};
+      const out: any = {};
+      Object.keys(entry).forEach((k) => {
+        const v = (entry as any)[k];
+        if (v == null) {
+          out[k] = 0;
+        } else if (typeof v === 'string') {
+          // try to parse numbers encoded as strings
+          const num = Number(v.replace(/,/g, ''));
+          out[k] = Number.isFinite(num) ? num : v;
+        } else {
+          out[k] = v;
+        }
+      });
+      return out;
+    });
+  };
+
   const renderChart = (chart: any) => {
-    const chartData = data.charts[chart.id];
+    const rawData = data.charts[chart.id];
+    const chartData = sanitizeChartData(rawData);
     if (!chartData || chartData.length === 0) return null;
 
     const commonProps = {
@@ -136,9 +158,13 @@ export const ReportRenderer = ({ reportId, filters, className, isPrintMode = fal
       data: chartData
     };
 
+    const wrap = (node: React.ReactNode) => (
+      <ErrorBoundary level="component">{node}</ErrorBoundary>
+    );
+
     switch (chart.type) {
       case 'line':
-        return (
+        return wrap(
           <ResponsiveContainer {...commonProps}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -148,11 +174,12 @@ export const ReportRenderer = ({ reportId, filters, className, isPrintMode = fal
               <Legend />
               {chart.yKeys?.map((key, index) => (
                 <Line
-                  key={key}
+                  key={String(key)}
                   type="monotone"
                   dataKey={key}
                   stroke={`hsl(${index * 60}, 70%, 50%)`}
                   strokeWidth={2}
+                  dot={{ r: 3 }}
                 />
               ))}
             </LineChart>
@@ -170,9 +197,11 @@ export const ReportRenderer = ({ reportId, filters, className, isPrintMode = fal
               <Legend />
               {chart.yKeys?.map((key, index) => (
                 <Bar
-                  key={key}
+                  key={String(key)}
                   dataKey={key}
                   fill={`hsl(${index * 60}, 70%, 50%)`}
+                  minPointSize={0}
+                  barSize={20}
                 />
               ))}
             </BarChart>
@@ -204,7 +233,7 @@ export const ReportRenderer = ({ reportId, filters, className, isPrintMode = fal
 
       case 'pie':
       case 'donut':
-        return (
+        return wrap(
           <ResponsiveContainer {...commonProps}>
             <PieChart>
               <Pie

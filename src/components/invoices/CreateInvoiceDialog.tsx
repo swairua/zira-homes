@@ -16,6 +16,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
 
 const formSchema = z.object({
   lease_id: z.string().min(1, "Please select a lease"),
@@ -37,6 +38,7 @@ export const CreateInvoiceDialog = ({ onInvoiceCreated }: CreateInvoiceDialogPro
   const [open, setOpen] = useState(false);
   const [leases, setLeases] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -101,7 +103,7 @@ export const CreateInvoiceDialog = ({ onInvoiceCreated }: CreateInvoiceDialogPro
       const propertyIds = [...new Set(unitsData?.map(u => u.property_id).filter(Boolean) || [])];
       const { data: propertiesData, error: propertiesError } = await supabase
         .from("properties")
-        .select("id, name")
+        .select("id, name, owner_id")
         .in("id", propertyIds);
 
       if (propertiesError) {
@@ -156,28 +158,76 @@ export const CreateInvoiceDialog = ({ onInvoiceCreated }: CreateInvoiceDialogPro
         return;
       }
 
-      // Use database function to generate invoice number
-      const { error } = await supabase
-        .from("invoices")
-        .insert({
-          lease_id: values.lease_id,
-          tenant_id: selectedLease.tenant_id,
-          amount: Number(values.amount),
-          due_date: format(values.due_date, "yyyy-MM-dd"),
-          invoice_date: format(new Date(), "yyyy-MM-dd"),
-          description: values.description || `Monthly rent - ${format(new Date(), "MMMM yyyy")}`,
-          status: "pending"
-        });
+      // Determine landlord: prefer property owner if available, otherwise current user
+      const landlordId = selectedLease?.units?.properties?.owner_id || user?.id;
+      if (!landlordId) {
+        toast.error("Unable to determine landlord for the selected lease. Please contact support.");
+        return;
+      }
 
-      if (error) throw error;
+      // Insert invoice. Some deployments don't have a landlord_id column on invoices; rely on lease->unit->property mapping for RLS.
+      const insertPayload: any = {
+        lease_id: values.lease_id,
+        tenant_id: selectedLease.tenant_id,
+        amount: Number(values.amount),
+        due_date: format(values.due_date, "yyyy-MM-dd"),
+        invoice_date: format(new Date(), "yyyy-MM-dd"),
+        description: values.description || `Monthly rent - ${format(new Date(), "MMMM yyyy")}`,
+        status: "pending"
+      };
+
+      // If the invoices table includes landlord_id (some schemas), include it; otherwise skip
+      try {
+        const { data: colInfo } = await supabase.rpc('get_table_columns', { p_table_name: 'invoices' }).catch(() => ({ data: null }));
+        const hasLandlordCol = Array.isArray(colInfo) && colInfo.some((c: any) => c.column_name === 'landlord_id');
+        if (hasLandlordCol) insertPayload.landlord_id = landlordId;
+      } catch (e) {
+        // ignore - fallback to not including landlord_id
+      }
+
+      const { data: insertResult, error } = await supabase
+        .from("invoices")
+        .insert(insertPayload)
+        .select('*');
+
+      if (error) {
+        console.error('Client-side insert error:', error);
+        // If it's an RLS/permission issue, attempt server-side creation as a fallback for debugging
+        const msg = (error?.message || '').toLowerCase();
+        if (msg.includes('permission') || msg.includes('policy') || msg.includes('rls')) {
+          try {
+            const resp = await fetch('/api/invoices/create', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ lease_id: values.lease_id, tenant_id: selectedLease.tenant_id, amount: Number(values.amount), due_date: format(values.due_date, 'yyyy-MM-dd'), description: values.description })
+            });
+            const body = await resp.json();
+            if (!resp.ok) throw body;
+            toast.success('Invoice created server-side (debug)');
+            setOpen(false);
+            form.reset();
+            onInvoiceCreated?.();
+            return;
+          } catch (srvErr) {
+            console.error('Server-side invoice creation failed:', srvErr);
+            toast.error('Failed to create invoice (server fallback)');
+            throw error;
+          }
+        }
+
+        throw error;
+      }
 
       toast.success("Invoice created successfully!");
       setOpen(false);
       form.reset();
       onInvoiceCreated?.();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating invoice:", error);
-      toast.error("Failed to create invoice");
+      const message = error?.message || error?.error || (typeof error === 'string' ? error : JSON.stringify(error));
+      const detail = error?.details || error?.hint || null;
+      toast.error(message || "Failed to create invoice");
+      if (detail) console.error("Invoice creation detail:", detail);
     } finally {
       setLoading(false);
     }

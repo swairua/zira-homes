@@ -44,7 +44,7 @@ export function usePlanFeatureAccess(
 
     try {
       console.log(`🔍 Checking access for feature: ${feature}, count: ${count}`);
-      
+
       const { data, error } = await supabase.rpc('check_plan_feature_access', {
         _user_id: user.id,
         _feature: feature,
@@ -52,14 +52,58 @@ export function usePlanFeatureAccess(
       });
 
       if (error) {
-        console.error('❌ Feature access check error:', error);
-        throw error;
+        // Provide clear, serializable logging
+        let serialized;
+        try {
+          serialized = JSON.stringify(error, Object.getOwnPropertyNames(error));
+        } catch (e) {
+          serialized = String(error);
+        }
+
+        // Detect network/fetch failures and return a safe fallback
+        if (typeof error.message === 'string' && error.message.toLowerCase().includes('failed to fetch')) {
+          console.error('❌ Feature access RPC failed due to network/fetch error. This often indicates a CORS or network issue contacting Supabase. Details:', serialized);
+          return {
+            allowed: false,
+            is_limited: true,
+            reason: 'network_error',
+            status: 'rpc_failed',
+            plan_name: undefined
+          };
+        }
+
+        console.error('❌ Feature access check error:', serialized);
+
+        // Return a default denied response (do not throw) so callers get a predictable object
+        return {
+          allowed: false,
+          is_limited: true,
+          reason: 'rpc_error',
+          status: (error as any)?.code || 'rpc_error'
+        };
       }
 
-      console.log('✅ Feature access result:', data);
+      try {
+        console.log('✅ Feature access result:', JSON.stringify(data));
+      } catch (e) {
+        console.log('✅ Feature access result (unserializable):', data);
+      }
       return (data as any) as FeatureAccessResult;
     } catch (error) {
-      console.error('❌ Error checking feature access:', error);
+      // Handle unexpected errors (including network) with clearer logs
+      let serialized;
+      try {
+        serialized = JSON.stringify(error, Object.getOwnPropertyNames(error));
+      } catch (e) {
+        serialized = String(error);
+      }
+      console.error('❌ Error checking feature access:', serialized);
+
+      // If it's a typical network error, provide guidance
+      if (typeof (error as any)?.message === 'string' && (error as any).message.toLowerCase().includes('failed to fetch')) {
+        console.error('👉 Suggestion: verify NEXT_PUBLIC_SUPABASE_URL, internet connectivity, and CORS settings for your Supabase project');
+      }
+
       return {
         allowed: false,
         is_limited: true,

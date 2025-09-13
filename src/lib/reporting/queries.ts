@@ -262,8 +262,8 @@ const reportQueries = {
       console.log('Fetching lease expiry report with dates:', { startDate, endDate });
       
       const { data, error } = await (supabase as any).rpc('get_lease_expiry_report', {
-        p_start_date: startDate,
-        p_end_date: endDate
+        p_start_date: startDate ?? null,
+        p_end_date: endDate ?? null
       });
 
       if (error) {
@@ -721,14 +721,39 @@ const reportQueries = {
       console.log('Fetching financial summary report with dates:', { startDate, endDate });
       console.log('Financial summary filters:', filters);
       
-      const { data, error } = await (supabase as any).rpc('get_financial_summary_report', {
+      // Include property filter if provided (function supports optional p_property_id)
+      const rpcParams: any = {
         p_start_date: startDate,
-        p_end_date: endDate
-      });
+        p_end_date: endDate,
+        // Always include p_property_id (nullable) to disambiguate overloaded functions in Postgres
+        p_property_id: filters.propertyId || null
+      };
 
-      if (error) {
-        console.error('Error fetching financial summary report:', error);
-        throw error;
+      let data: any = null;
+      try {
+        const rpcResult = await (supabase as any).rpc('get_financial_summary_report', rpcParams);
+        // Supabase RPC may return { data, error } or throw; normalize
+        if (rpcResult && Object.prototype.hasOwnProperty.call(rpcResult, 'error')) {
+          const { error } = rpcResult as any;
+          if (error) {
+            // Serialize error for logging
+            let serialized;
+            try { serialized = JSON.stringify(error, Object.getOwnPropertyNames(error)); } catch (e) { serialized = String(error); }
+            console.error('Error fetching financial summary report (rpc error):', serialized);
+            // Return early to be handled by outer catch
+            throw error;
+          }
+          data = (rpcResult as any).data;
+        } else {
+          // Some clients return the data directly
+          data = rpcResult;
+        }
+      } catch (rpcError) {
+        let serialized;
+        try { serialized = JSON.stringify(rpcError, Object.getOwnPropertyNames(rpcError)); } catch (e) { serialized = String(rpcError); }
+        console.error('Error fetching financial summary report (exception):', serialized);
+        // Re-throw to be caught by outer catch where we produce empty report
+        throw rpcError;
       }
 
       const reportResponse = data as unknown as ReportResponse;
@@ -830,7 +855,20 @@ const reportQueries = {
         table: normalizedTable
       };
     } catch (error) {
-      console.error('Failed to fetch financial summary report:', error);
+      // Serialize error
+      let serialized;
+      try { serialized = JSON.stringify(error, Object.getOwnPropertyNames(error)); } catch (e) { serialized = String(error); }
+      console.error('Failed to fetch financial summary report:', serialized);
+
+      // Detect missing column errors (Postgres 42703) which usually mean the RPC function is out-of-sync with code
+      const errObj: any = error as any;
+      if (errObj && (errObj.code === '42703' || (typeof errObj.message === 'string' && errObj.message.includes('column')))) {
+        console.error('🔧 SQL column missing error detected when running get_financial_summary_report. This typically means the stored function in the database does not match the expected implementation in migrations. Suggested fixes:');
+        console.error('- Run the latest DB migrations to recreate get_financial_summary_report so it includes total_income / total_expenses aliases.');
+        console.error('- Inspect the function body in supabase/migrations/*get_financial_summary_report*.sql and ensure the CTE producing kpis aliases columns as total_income and total_expenses.');
+        console.error('- If you cannot run migrations, consider temporarily falling back to a simplified client-side summary or contact your DBA.');
+      }
+
       return {
         kpis: {},
         charts: {},

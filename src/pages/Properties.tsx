@@ -327,9 +327,10 @@ const Properties = () => {
                           </Button>
                         }
                       />
-                      <PropertyDetailsDialog 
-                        property={property} 
+                      <PropertyDetailsDialog
+                        property={property}
                         mode="edit"
+                        onUpdated={fetchProperties}
                         trigger={
                           <Button size="sm" className="flex-1 bg-accent hover:bg-accent/90">
                             <Edit className="h-4 w-4 mr-1" />
@@ -381,9 +382,10 @@ const Properties = () => {
                                  </Button>
                                }
                              />
-                             <PropertyDetailsDialog 
-                               property={property} 
+                             <PropertyDetailsDialog
+                               property={property}
                                mode="edit"
+                               onUpdated={fetchProperties}
                                trigger={
                                  <Button size="sm" className="bg-accent hover:bg-accent/90">
                                    <Edit className="h-4 w-4" />
