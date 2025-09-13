@@ -23,12 +23,24 @@ async function main() {
       .maybeSingle();
 
     if (profileError) throw profileError;
-    if (!profile) {
-      console.error('No profile found for email:', targetEmail);
-      process.exit(2);
+    let userId = null;
+    if (profile && profile.id) {
+      userId = profile.id;
+      console.log('Found profile id:', userId);
+    } else {
+      console.log('No profile row found, trying auth admin lookup...');
+      const { data: userResult, error: userError } = await supabase.auth.admin.getUserByEmail(targetEmail);
+      if (userError) {
+        console.error('Auth admin lookup failed:', userError);
+        process.exit(2);
+      }
+      if (!userResult || !userResult.data) {
+        console.error('No auth user found for email:', targetEmail);
+        process.exit(2);
+      }
+      userId = userResult.data.id;
+      console.log('Found auth user id:', userId);
     }
-
-    console.log('Found profile id:', profile.id);
 
     console.log('Searching for Professional plan...');
     const { data: plans, error: plansError } = await supabase
