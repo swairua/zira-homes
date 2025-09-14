@@ -34,7 +34,7 @@ export function QuickExpiryCheck({ onViewDetails, hideWhenEmpty = false }: Quick
   const [selectedTimeframe, setSelectedTimeframe] = useState(90);
   const [expiryData, setExpiryData] = useState<ExpiryData>({ count: 0, leases: [] });
   const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const navigate = useNavigate();
 
   const timeframes = [
