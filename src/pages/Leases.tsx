@@ -81,6 +81,21 @@ const Leases = () => {
 
 
   const fetchLeases = async () => {
+    const formatError = (e: any) => {
+      try {
+        if (!e) return 'Unknown error';
+        if (typeof e === 'string') return e;
+        const parts: string[] = [];
+        if (e.message) parts.push(e.message);
+        if (e.details) parts.push(e.details);
+        if (e.hint) parts.push(`hint: ${e.hint}`);
+        if (e.code) parts.push(`code: ${e.code}`);
+        if (e.status) parts.push(`status: ${e.status}`);
+        if (parts.length === 0) return JSON.stringify(e);
+        return parts.join(' | ');
+      } catch { return String(e); }
+    };
+
     try {
       console.log("🔍 Starting leases fetch for user:", user?.id);
 
@@ -98,34 +113,67 @@ const Leases = () => {
         const endDate = new Date(today.getTime() + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
         const rpcArgs = days === 90 ? { p_start_date: null, p_end_date: null } : { p_start_date: startDate, p_end_date: endDate };
 
-        const { data, error } = await (supabase as any)
-          .rpc('get_lease_expiry_report', rpcArgs)
-          .maybeSingle();
-        if (error) throw error;
+        try {
+          const { data, error } = await (supabase as any)
+            .rpc('get_lease_expiry_report', rpcArgs)
+            .maybeSingle();
+          if (error) throw error;
 
-        const raw = Array.isArray(data) ? data[0] : data;
-        const rows = Array.isArray(raw?.table) ? raw.table : [];
-        const mapped = rows.map((l: any) => {
-          const tn = (l.tenant_name || '').trim();
-          const parts = tn.split(' ');
-          const last = parts.length > 1 ? parts.pop() : '';
-          const first = parts.join(' ');
-          return {
-            id: l.id || `${l.property_name || ''}-${l.unit_number || ''}-${l.lease_end_date || ''}`,
-            tenant_id: l.tenant_id || '',
-            unit_id: l.unit_id || '',
-            lease_start_date: l.lease_start_date || null,
-            lease_end_date: l.lease_end_date || null,
-            monthly_rent: Number(l.monthly_rent || 0),
-            security_deposit: Number(l.security_deposit || 0),
-            status: l.status || 'active',
-            tenants: { first_name: first || tn, last_name: last || '' },
-            units: { unit_number: l.unit_number || '', properties: { name: l.property_name || '' } }
-          } as any;
-        });
-        setLeases(mapped);
-        console.log("✅ Loaded leases via RPC:", mapped.length);
-        return;
+          const raw = Array.isArray(data) ? data[0] : data;
+          const rows = Array.isArray(raw?.table) ? raw.table : [];
+          const mapped = rows.map((l: any) => {
+            const tn = (l.tenant_name || '').trim();
+            const parts = tn.split(' ');
+            const last = parts.length > 1 ? parts.pop() : '';
+            const first = parts.join(' ');
+            return {
+              id: l.id || `${l.property_name || ''}-${l.unit_number || ''}-${l.lease_end_date || ''}`,
+              tenant_id: l.tenant_id || '',
+              unit_id: l.unit_id || '',
+              lease_start_date: l.lease_start_date || null,
+              lease_end_date: l.lease_end_date || null,
+              monthly_rent: Number(l.monthly_rent || 0),
+              security_deposit: Number(l.security_deposit || 0),
+              status: l.status || 'active',
+              tenants: { first_name: first || tn, last_name: last || '' },
+              units: { unit_number: l.unit_number || '', properties: { name: l.property_name || '' } }
+            } as any;
+          });
+          setLeases(mapped);
+          console.log("✅ Loaded leases via RPC:", mapped.length);
+          return;
+        } catch (rpcErr) {
+          console.warn('RPC leases load failed, trying server fallback:', formatError(rpcErr));
+          try {
+            const url = '/api/leases/expiring';
+            let res: Response;
+            if (days === 90) {
+              res = await fetch(url, { method: 'GET' });
+            } else {
+              res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ p_start_date: startDate, p_end_date: endDate }) });
+            }
+            const payload = await res.json();
+            const raw = Array.isArray(payload) ? payload[0] : payload;
+            const rows = Array.isArray(raw?.table) ? raw.table : [];
+            const mapped = rows.map((l: any) => ({
+              id: l.id || `${l.property_name || ''}-${l.unit_number || ''}-${l.lease_end_date || ''}`,
+              tenant_id: l.tenant_id || '',
+              unit_id: l.unit_id || '',
+              lease_start_date: l.lease_start_date || null,
+              lease_end_date: l.lease_end_date || null,
+              monthly_rent: Number(l.monthly_rent || 0),
+              security_deposit: Number(l.security_deposit || 0),
+              status: l.status || 'active',
+              tenants: { first_name: (l.first_name || '').toString(), last_name: (l.last_name || '').toString() },
+              units: { unit_number: l.unit_number || '', properties: { name: l.property_name || '' } }
+            }));
+            setLeases(mapped);
+            console.log('✅ Loaded leases via server fallback:', mapped.length);
+            return;
+          } catch (srvErr) {
+            throw srvErr;
+          }
+        }
       }
 
       // Otherwise: original fetch for full list
@@ -191,8 +239,8 @@ const Leases = () => {
       console.log("🔗 Joined leases:", joinedLeases.length);
       setLeases(joinedLeases);
     } catch (error: any) {
-      const msg = String(error?.message || error);
-      console.error("💥 Error in fetchLeases:", error);
+      const msg = formatError(error);
+      console.error("💥 Error in fetchLeases:", msg, error);
       if (msg.toLowerCase().includes('failed to fetch')) {
         toast({
           title: "Network error",
@@ -202,7 +250,7 @@ const Leases = () => {
       } else {
         toast({
           title: "Error",
-          description: "Failed to load leases. Please check your permissions.",
+          description: msg,
           variant: "destructive",
         });
       }
