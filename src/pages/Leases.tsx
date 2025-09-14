@@ -264,7 +264,7 @@ const Leases = () => {
   useEffect(() => {
     fetchLeases();
     fetchTenantsAndUnits();
-  }, []);
+  }, [expiringWithinDays]);
 
   const onSubmit = async (data: LeaseFormData) => {
     const formatError = (e: any) => {
@@ -656,7 +656,7 @@ const Leases = () => {
                         <div className="flex items-center space-x-1">
                           <Calendar className="h-4 w-4" />
                           <span className="text-sm">
-                            {format(new Date(lease.lease_start_date), 'MMM dd, yyyy')} - {format(new Date(lease.lease_end_date), 'MMM dd, yyyy')}
+                            {(lease.lease_start_date ? format(new Date(lease.lease_start_date), 'MMM dd, yyyy') : '—')} - {(lease.lease_end_date ? format(new Date(lease.lease_end_date), 'MMM dd, yyyy') : '—')}
                           </span>
                         </div>
                         <div className="flex items-center space-x-1 mt-1">
