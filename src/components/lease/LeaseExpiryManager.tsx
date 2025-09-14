@@ -124,7 +124,8 @@ export function LeaseExpiryManager({
       let normalized = leasesData
         .map((l: any) => {
           const end = l?.lease_end_date ? new Date(l.lease_end_date) : null;
-          const days = end ? Math.max(0, differenceInDays(end, startOfToday)) : 0;
+          const computedDays = end ? Math.max(0, differenceInDays(end, startOfToday)) : 0;
+          const days = Number.isFinite(Number(l?.days_until_expiry)) ? Number(l.days_until_expiry) : computedDays;
           return {
             id: l.id || `${l.property_name || l.property || ''}-${l.unit_number || l.unit || ''}-${l.lease_end_date || ''}`,
             lease_end_date: l.lease_end_date,
