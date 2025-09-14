@@ -102,6 +102,40 @@
           });
         }
 
+        // Proxy Supabase Edge Functions with service role for safer server-side execution
+        if (url.startsWith('/api/edge/')) {
+          try {
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+            const serviceRole = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY;
+            if (!supabaseUrl) return sendJSON(res, 500, { error: 'Supabase URL not configured' });
+            if (!serviceRole) return sendJSON(res, 500, { error: 'Supabase service role key (SUPABASE_SERVICE_ROLE) not configured on the server' });
+
+            const fnName = url.replace(/^\/?api\/edge\//, '').split('?')[0];
+            if (!fnName) return sendJSON(res, 400, { error: 'Function name is required' });
+            const body = await parseJSONBody(req) || {};
+
+            const fnUrl = supabaseUrl.replace(/\/$/, '') + `/functions/v1/${fnName}`;
+            const response = await fetch(fnUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': serviceRole,
+                'Authorization': `Bearer ${serviceRole}`,
+              },
+              body: JSON.stringify(body),
+            });
+
+            const text = await response.text();
+            let data;
+            try { data = JSON.parse(text); } catch { data = text; }
+            if (!response.ok) return sendJSON(res, response.status, { error: 'Edge function proxy error', details: data });
+            return sendJSON(res, 200, data);
+          } catch (err) {
+            console.error('Error proxying edge function:', err);
+            return sendJSON(res, 500, { error: 'Internal server error' });
+          }
+        }
+
         if (url.startsWith('/api/invoices/overview')) {
           return handleRpcProxy('/rest/v1/rpc/get_invoice_overview', req, res, (body) => ({
             p_limit: body.p_limit ?? 50,

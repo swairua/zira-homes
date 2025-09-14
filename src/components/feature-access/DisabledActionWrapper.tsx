@@ -6,6 +6,7 @@ import { Lock, Crown } from "lucide-react";
 import { usePlanFeatureAccess, type Feature } from "@/hooks/usePlanFeatureAccess";
 import { usePlatformAnalytics } from "@/hooks/usePlatformAnalytics";
 import { PlanUpgradeButton } from "./PlanUpgradeButton";
+import { useAuth } from "@/hooks/useAuth";
 
 interface DisabledActionWrapperProps {
   feature: Feature;
@@ -28,14 +29,29 @@ export function DisabledActionWrapper({
 }: DisabledActionWrapperProps) {
   const { allowed, is_limited, remaining, plan_name, loading } = usePlanFeatureAccess(feature, currentCount);
   const { analytics } = usePlatformAnalytics();
+  const { hasRole } = useAuth();
 
   const handleDisabledClick = () => {
     // Track disabled feature interaction
     console.log('Feature interaction:', feature, 'disabled_click');
   };
 
-  // If allowed, render the children normally
-  if (allowed && !loading) {
+  // Allow Admins/System to bypass gating
+  const [adminBypass, setAdminBypass] = React.useState<boolean>(false);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const isAdmin = await hasRole('Admin');
+        const isSystem = await hasRole('System');
+        setAdminBypass(Boolean(isAdmin || isSystem));
+      } catch {
+        setAdminBypass(false);
+      }
+    })();
+  }, [hasRole]);
+
+  // If allowed or admin bypass, render the children normally
+  if ((allowed || adminBypass) && !loading) {
     return children;
   }
 

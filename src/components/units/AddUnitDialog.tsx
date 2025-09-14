@@ -88,23 +88,58 @@ export function AddUnitDialog({ onUnitAdded }: AddUnitDialogProps) {
   };
 
   const onSubmit = async (data: UnitFormData) => {
+    const formatError = (e: any) => {
+      try {
+        if (!e) return 'Unknown error';
+        if (typeof e === 'string') return e;
+        const parts: string[] = [];
+        if (e.message) parts.push(e.message);
+        if (e.details) parts.push(e.details);
+        if (e.hint) parts.push(`hint: ${e.hint}`);
+        if (e.code) parts.push(`code: ${e.code}`);
+        if (parts.length === 0) return JSON.stringify(e);
+        return parts.join(' | ');
+      } catch { return String(e); }
+    };
+
     try {
       setLoading(true);
 
-      // Combine form data with unit specifications
-      const unitData = {
-        ...data,
-        ...unitSpecifications,
+      // Validate required fields
+      if (!data.property_id) {
+        toast({ title: 'Property required', description: 'Please select a property.', variant: 'destructive' });
+        return;
+      }
+      if (!data.unit_number) {
+        toast({ title: 'Unit number required', description: 'Please enter a unit number.', variant: 'destructive' });
+        return;
+      }
+      if (!data.unit_type) {
+        toast({ title: 'Unit type required', description: 'Please select a unit type.', variant: 'destructive' });
+        return;
+      }
+
+      // Build payload restricted to columns that exist in the units table schema
+      const specs = unitSpecifications || {};
+      const payload: any = {
+        property_id: data.property_id,
+        unit_number: data.unit_number,
+        unit_type: data.unit_type,
         rent_amount: Number(data.rent_amount),
-        security_deposit: data.security_deposit ? Number(data.security_deposit) : null,
-        water_deposit: data.water_deposit ? Number(data.water_deposit) : null,
-        electricity_deposit: data.electricity_deposit ? Number(data.electricity_deposit) : null,
+        security_deposit: data.security_deposit != null ? Number(data.security_deposit) : null,
+        description: data.description || null,
+        amenities: Array.isArray(data.amenities) ? data.amenities : null,
         status: 'vacant',
       };
+      // Optional numeric specs supported by schema
+      if (specs.bedrooms != null) payload.bedrooms = Number(specs.bedrooms);
+      if (specs.bathrooms != null) payload.bathrooms = Number(specs.bathrooms);
+      if (specs.square_feet != null) payload.square_feet = Number(specs.square_feet);
+      if (specs.block_id) payload.block_id = String(specs.block_id);
 
       const { error } = await supabase
         .from('units')
-        .insert([unitData]);
+        .insert([payload]);
 
       if (error) throw error;
 
@@ -118,10 +153,11 @@ export function AddUnitDialog({ onUnitAdded }: AddUnitDialogProps) {
       setOpen(false);
       onUnitAdded();
     } catch (error: any) {
-      console.error('Error adding unit:', error);
+      const msg = formatError(error);
+      console.error('Error adding unit:', msg, error);
       toast({
         title: "Error",
-        description: error.message || "Failed to add unit",
+        description: msg,
         variant: "destructive",
       });
     } finally {
