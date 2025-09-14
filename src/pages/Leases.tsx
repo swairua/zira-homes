@@ -166,37 +166,44 @@ const Leases = () => {
   const fetchTenantsAndUnits = async () => {
     try {
       if (!user?.id) return;
-      
-      // Get tenants separately
+
+      // Get tenants
       const { data: tenantsData, error: tenantsError } = await supabase
         .from("tenants")
         .select("id, first_name, last_name");
-
       if (tenantsError) throw tenantsError;
 
-      // Get ONLY vacant units for user's properties to prevent duplicate active leases
+      const isAdmin = await hasRole('Admin');
+
+      if (isAdmin) {
+        // Admin: all vacant units with property names
+        const { data: allUnits, error: unitsErr } = await (supabase as any)
+          .from("units")
+          .select("id, unit_number, status, properties:properties(id, name)")
+          .eq('status', 'vacant');
+        if (unitsErr) throw unitsErr;
+        setTenants(tenantsData || []);
+        setUnits(allUnits || []);
+        return;
+      }
+
+      // Non-admin: only user's properties
       const { data: unitsData, error: unitsError } = await supabase
         .from("units")
         .select("id, unit_number, property_id, status")
         .eq('status', 'vacant');
-
       if (unitsError) throw unitsError;
 
-      // Get user's properties
       const { data: propertiesData, error: propertiesError } = await supabase
         .from("properties")
         .select("id, name")
         .or(`owner_id.eq.${user.id},manager_id.eq.${user.id}`);
-
       if (propertiesError) throw propertiesError;
 
-      // Create property map and filter units to only those owned by user
       const propertyMap = new Map(propertiesData?.map(p => [p.id, p]) || []);
-      const userVacantUnits = unitsData?.filter(unit => propertyMap.has(unit.property_id))
-        .map(unit => ({
-          ...unit,
-          properties: propertyMap.get(unit.property_id)
-        })) || [];
+      const userVacantUnits = (unitsData || [])
+        .filter(unit => propertyMap.has(unit.property_id))
+        .map(unit => ({ ...unit, properties: propertyMap.get(unit.property_id) }));
 
       setTenants(tenantsData || []);
       setUnits(userVacantUnits);
