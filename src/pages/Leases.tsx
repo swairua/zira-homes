@@ -81,6 +81,21 @@ const Leases = () => {
 
 
   const fetchLeases = async () => {
+    const formatError = (e: any) => {
+      try {
+        if (!e) return 'Unknown error';
+        if (typeof e === 'string') return e;
+        const parts: string[] = [];
+        if (e.message) parts.push(e.message);
+        if (e.details) parts.push(e.details);
+        if (e.hint) parts.push(`hint: ${e.hint}`);
+        if (e.code) parts.push(`code: ${e.code}`);
+        if (e.status) parts.push(`status: ${e.status}`);
+        if (parts.length === 0) return JSON.stringify(e);
+        return parts.join(' | ');
+      } catch { return String(e); }
+    };
+
     try {
       console.log("🔍 Starting leases fetch for user:", user?.id);
 
@@ -90,7 +105,78 @@ const Leases = () => {
         return;
       }
 
-      // Admins can see all leases with related data in a single query
+      // If an expiry window is requested, use the same RPC as the dashboard for parity
+      if (expiringWithinDays != null) {
+        const days = Number(expiringWithinDays);
+        const today = new Date();
+        const startDate = today.toISOString().slice(0, 10);
+        const endDate = new Date(today.getTime() + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const rpcArgs = days === 90 ? { p_start_date: null, p_end_date: null } : { p_start_date: startDate, p_end_date: endDate };
+
+        try {
+          const { data, error } = await (supabase as any)
+            .rpc('get_lease_expiry_report', rpcArgs)
+            .maybeSingle();
+          if (error) throw error;
+
+          const raw = Array.isArray(data) ? data[0] : data;
+          const rows = Array.isArray(raw?.table) ? raw.table : [];
+          const mapped = rows.map((l: any) => {
+            const tn = (l.tenant_name || '').trim();
+            const parts = tn.split(' ');
+            const last = parts.length > 1 ? parts.pop() : '';
+            const first = parts.join(' ');
+            return {
+              id: l.id || `${l.property_name || ''}-${l.unit_number || ''}-${l.lease_end_date || ''}`,
+              tenant_id: l.tenant_id || '',
+              unit_id: l.unit_id || '',
+              lease_start_date: l.lease_start_date || null,
+              lease_end_date: l.lease_end_date || null,
+              monthly_rent: Number(l.monthly_rent || 0),
+              security_deposit: Number(l.security_deposit || 0),
+              status: l.status || 'active',
+              tenants: { first_name: first || tn, last_name: last || '' },
+              units: { unit_number: l.unit_number || '', properties: { name: l.property_name || '' } }
+            } as any;
+          });
+          setLeases(mapped);
+          console.log("✅ Loaded leases via RPC:", mapped.length);
+          return;
+        } catch (rpcErr) {
+          console.warn('RPC leases load failed, trying server fallback:', formatError(rpcErr));
+          try {
+            const url = '/api/leases/expiring';
+            let res: Response;
+            if (days === 90) {
+              res = await fetch(url, { method: 'GET' });
+            } else {
+              res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ p_start_date: startDate, p_end_date: endDate }) });
+            }
+            const payload = await res.json();
+            const raw = Array.isArray(payload) ? payload[0] : payload;
+            const rows = Array.isArray(raw?.table) ? raw.table : [];
+            const mapped = rows.map((l: any) => ({
+              id: l.id || `${l.property_name || ''}-${l.unit_number || ''}-${l.lease_end_date || ''}`,
+              tenant_id: l.tenant_id || '',
+              unit_id: l.unit_id || '',
+              lease_start_date: l.lease_start_date || null,
+              lease_end_date: l.lease_end_date || null,
+              monthly_rent: Number(l.monthly_rent || 0),
+              security_deposit: Number(l.security_deposit || 0),
+              status: l.status || 'active',
+              tenants: { first_name: (l.first_name || '').toString(), last_name: (l.last_name || '').toString() },
+              units: { unit_number: l.unit_number || '', properties: { name: l.property_name || '' } }
+            }));
+            setLeases(mapped);
+            console.log('✅ Loaded leases via server fallback:', mapped.length);
+            return;
+          } catch (srvErr) {
+            throw srvErr;
+          }
+        }
+      }
+
+      // Otherwise: original fetch for full list
       const isAdmin = await hasRole('Admin');
 
       if (isAdmin) {
@@ -153,8 +239,8 @@ const Leases = () => {
       console.log("🔗 Joined leases:", joinedLeases.length);
       setLeases(joinedLeases);
     } catch (error: any) {
-      const msg = String(error?.message || error);
-      console.error("💥 Error in fetchLeases:", error);
+      const msg = formatError(error);
+      console.error("💥 Error in fetchLeases:", msg, error);
       if (msg.toLowerCase().includes('failed to fetch')) {
         toast({
           title: "Network error",
@@ -164,7 +250,7 @@ const Leases = () => {
       } else {
         toast({
           title: "Error",
-          description: "Failed to load leases. Please check your permissions.",
+          description: msg,
           variant: "destructive",
         });
       }
@@ -226,18 +312,70 @@ const Leases = () => {
   useEffect(() => {
     fetchLeases();
     fetchTenantsAndUnits();
-  }, []);
+  }, [expiringWithinDays]);
 
   const onSubmit = async (data: LeaseFormData) => {
+    const formatError = (e: any) => {
+      try {
+        if (!e) return 'Unknown error';
+        if (typeof e === 'string') return e;
+        const parts: string[] = [];
+        if (e.message) parts.push(e.message);
+        if (e.details) parts.push(e.details);
+        if (e.hint) parts.push(`hint: ${e.hint}`);
+        if (e.code) parts.push(`code: ${e.code}`);
+        if (e.status) parts.push(`status: ${e.status}`);
+        if (parts.length === 0) return JSON.stringify(e);
+        return parts.join(' | ');
+      } catch {
+        return String(e);
+      }
+    };
+
     try {
+      // Basic client-side validation for clearer errors
+      if (!data.tenant_id || !data.unit_id) {
+        toast({ title: 'Missing fields', description: 'Please select both a tenant and a unit.', variant: 'destructive' });
+        return;
+      }
+      if (!data.lease_start_date || !data.lease_end_date) {
+        toast({ title: 'Missing dates', description: 'Start and end dates are required.', variant: 'destructive' });
+        return;
+      }
+      const start = new Date(data.lease_start_date);
+      const end = new Date(data.lease_end_date);
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        toast({ title: 'Invalid dates', description: 'Please provide valid start and end dates.', variant: 'destructive' });
+        return;
+      }
+      if (end < start) {
+        toast({ title: 'Date range error', description: 'End date must be after start date.', variant: 'destructive' });
+        return;
+      }
+      const monthly = Number(data.monthly_rent);
+      const deposit = Number(data.security_deposit);
+      if (!Number.isFinite(monthly) || monthly <= 0) {
+        toast({ title: 'Invalid amount', description: 'Monthly rent must be greater than 0.', variant: 'destructive' });
+        return;
+      }
+      if (!Number.isFinite(deposit) || deposit < 0) {
+        toast({ title: 'Invalid amount', description: 'Security deposit cannot be negative.', variant: 'destructive' });
+        return;
+      }
+
+      const payload = {
+        tenant_id: data.tenant_id,
+        unit_id: data.unit_id,
+        lease_start_date: start.toISOString().slice(0, 10),
+        lease_end_date: end.toISOString().slice(0, 10),
+        monthly_rent: monthly,
+        security_deposit: deposit,
+        status: 'active'
+      } as const;
+
       const { error } = await supabase
         .from("leases")
-        .insert([{
-          ...data,
-          monthly_rent: Number(data.monthly_rent),
-          security_deposit: Number(data.security_deposit),
-          status: 'active' // Explicitly set status
-        }]);
+        .insert([payload]);
 
       if (error) throw error;
 
@@ -249,11 +387,12 @@ const Leases = () => {
       reset();
       setDialogOpen(false);
       fetchLeases();
-    } catch (error) {
-      console.error("Error creating lease:", error);
+    } catch (error: any) {
+      const formatted = formatError(error);
+      console.error("Error creating lease:", formatted, error);
       toast({
         title: "Error",
-        description: "Failed to create lease",
+        description: formatted,
         variant: "destructive",
       });
     }
@@ -466,14 +605,48 @@ const Leases = () => {
 
         {/* Search Bar */}
         <Card className="bg-card p-6">
-          <div className="flex items-center space-x-2">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search leases by tenant, unit, or property..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="flex-1 border-border"
-            />
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex items-center gap-2 flex-1">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search leases by tenant, unit, or property..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="flex-1 border-border"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Expiring</span>
+              <Select
+                value={expiringWithinDays != null ? String(expiringWithinDays) : 'all'}
+                onValueChange={(val) => {
+                  const v = val === 'all' ? null : Number(val);
+                  setExpiringWithinDays(v);
+                  setPage(1);
+                  const params = new URLSearchParams(window.location.search);
+                  if (v == null) {
+                    params.delete('expiringWithinDays');
+                    params.delete('expiring');
+                  } else {
+                    params.set('expiringWithinDays', String(v));
+                  }
+                  const qs = params.toString();
+                  window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+                }}
+              >
+                <SelectTrigger className="w-48 border-border bg-card">
+                  <SelectValue placeholder="Any time" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="all">Any time</SelectItem>
+                  <SelectItem value="30">Next 30 days</SelectItem>
+                  <SelectItem value="60">Next 60 days</SelectItem>
+                  <SelectItem value="90">Next 90 days</SelectItem>
+                  <SelectItem value="180">Next 6 months</SelectItem>
+                  <SelectItem value="365">Next 1 year</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </Card>
 
@@ -531,7 +704,7 @@ const Leases = () => {
                         <div className="flex items-center space-x-1">
                           <Calendar className="h-4 w-4" />
                           <span className="text-sm">
-                            {format(new Date(lease.lease_start_date), 'MMM dd, yyyy')} - {format(new Date(lease.lease_end_date), 'MMM dd, yyyy')}
+                            {(lease.lease_start_date ? format(new Date(lease.lease_start_date), 'MMM dd, yyyy') : '—')} - {(lease.lease_end_date ? format(new Date(lease.lease_end_date), 'MMM dd, yyyy') : '—')}
                           </span>
                         </div>
                         <div className="flex items-center space-x-1 mt-1">

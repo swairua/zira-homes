@@ -74,38 +74,60 @@ export function LeaseExpiryManager({
     fetchLeaseData();
   }, [selectedTimeframe, user]);
 
+  // Ensure the status filter doesn't accidentally hide data after timeframe changes
+  useEffect(() => {
+    setStatusFilter('all');
+  }, [selectedTimeframe]);
+
   useEffect(() => {
     applyFilters();
   }, [leases, searchTerm, statusFilter]);
 
   const fetchLeaseData = async () => {
-    if (!user) return;
-    
     setLoading(true);
     try {
       const startDate = new Date().toISOString().split('T')[0];
       const endDate = new Date(Date.now() + selectedTimeframe * 24 * 60 * 60 * 1000)
         .toISOString().split('T')[0];
 
-      const { data, error } = await (supabase as any)
-        .rpc('get_lease_expiry_report', {
-          p_start_date: startDate,
-          p_end_date: endDate
-        });
+      // Align with dashboard behavior: when timeframe is 90 days, use RPC defaults (server-defined 90 days)
+      const rpcArgs = (selectedTimeframe === 90)
+        ? { p_start_date: null, p_end_date: null }
+        : { p_start_date: startDate, p_end_date: endDate };
 
-      if (error) throw error;
-
-      const reportData = data as any;
-      const leasesData = Array.isArray(reportData?.table) ? reportData.table : [];
+      let leasesData: any[] = [];
+      try {
+        const rpcRes = await (supabase as any)
+          .rpc('get_lease_expiry_report', rpcArgs)
+          .maybeSingle();
+        const { data, error } = rpcRes;
+        if (error) throw error;
+        const raw = data as any;
+        const reportData = Array.isArray(raw) ? raw[0] : raw;
+        leasesData = Array.isArray(reportData?.table) ? reportData.table : [];
+      } catch (rpcErr) {
+        try {
+          const url = '/api/leases/expiring';
+          const res = (selectedTimeframe === 90)
+            ? await fetch(url)
+            : await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ p_start_date: startDate, p_end_date: endDate }) });
+          const payload = await res.json();
+          const raw = Array.isArray(payload) ? payload[0] : payload;
+          leasesData = Array.isArray(raw?.table) ? raw.table : [];
+        } catch (srvErr) {
+          throw srvErr;
+        }
+      }
 
       const today = new Date();
       const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       let normalized = leasesData
         .map((l: any) => {
           const end = l?.lease_end_date ? new Date(l.lease_end_date) : null;
-          const days = end ? Math.max(0, differenceInDays(end, startOfToday)) : 0;
+          const computedDays = end ? Math.max(0, differenceInDays(end, startOfToday)) : 0;
+          const days = Number.isFinite(Number(l?.days_until_expiry)) ? Number(l.days_until_expiry) : computedDays;
           return {
-            id: l.id,
+            id: l.id || `${l.property_name || l.property || ''}-${l.unit_number || l.unit || ''}-${l.lease_end_date || ''}`,
             lease_end_date: l.lease_end_date,
             monthly_rent: Number(l.monthly_rent || 0),
             property_name: l.property_name || l.property || '',
@@ -118,18 +140,6 @@ export function LeaseExpiryManager({
         })
         .filter((l: LeaseData) => l.days_until_expiry >= 0 && l.days_until_expiry <= selectedTimeframe);
 
-      // Scope to user's properties if not admin
-      const isAdmin = await hasRole('Admin');
-      if (!isAdmin) {
-        const { data: props, error: propsErr } = await (supabase as any)
-          .from('properties')
-          .select('name')
-          .or(`owner_id.eq.${user.id},manager_id.eq.${user.id}`);
-        if (!propsErr && Array.isArray(props)) {
-          const allowedNames = new Set((props as any[]).map(p => p.name));
-          normalized = normalized.filter(l => allowedNames.has(l.property_name));
-        }
-      }
 
       normalized.sort((a: LeaseData, b: LeaseData) => a.days_until_expiry - b.days_until_expiry);
       setLeases(normalized);
@@ -164,7 +174,7 @@ export function LeaseExpiryManager({
           case "attention":
             return lease.days_until_expiry > 30 && lease.days_until_expiry <= 60;
           case "normal":
-            return lease.days_until_expiry > 60;
+            return lease.days_until_expiry > 60 && lease.days_until_expiry <= selectedTimeframe;
           default:
             return true;
         }
@@ -244,7 +254,7 @@ export function LeaseExpiryManager({
                 <SelectItem value="critical">Critical (≤15 days)</SelectItem>
                 <SelectItem value="urgent">Urgent (16-30 days)</SelectItem>
                 <SelectItem value="attention">Attention (31-60 days)</SelectItem>
-                <SelectItem value="normal">Normal (&gt;60 days)</SelectItem>
+                <SelectItem value="normal">{selectedTimeframe > 60 ? `Normal (61-${selectedTimeframe} days)` : 'Normal (>60 days)'}</SelectItem>
               </SelectContent>
             </Select>
           </div>
