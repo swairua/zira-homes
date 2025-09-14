@@ -92,15 +92,29 @@ export function LeaseExpiryManager({
         ? { p_start_date: null, p_end_date: null }
         : { p_start_date: startDate, p_end_date: endDate };
 
-      const rpcRes = await (supabase as any)
-        .rpc('get_lease_expiry_report', rpcArgs)
-        .maybeSingle();
-      const { data, error } = rpcRes;
-      if (error) throw error;
-
-      const raw = data as any;
-      const reportData = Array.isArray(raw) ? raw[0] : raw;
-      const leasesData = Array.isArray(reportData?.table) ? reportData.table : [];
+      let leasesData: any[] = [];
+      try {
+        const rpcRes = await (supabase as any)
+          .rpc('get_lease_expiry_report', rpcArgs)
+          .maybeSingle();
+        const { data, error } = rpcRes;
+        if (error) throw error;
+        const raw = data as any;
+        const reportData = Array.isArray(raw) ? raw[0] : raw;
+        leasesData = Array.isArray(reportData?.table) ? reportData.table : [];
+      } catch (rpcErr) {
+        try {
+          const url = '/api/leases/expiring';
+          const res = (selectedTimeframe === 90)
+            ? await fetch(url)
+            : await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ p_start_date: startDate, p_end_date: endDate }) });
+          const payload = await res.json();
+          const raw = Array.isArray(payload) ? payload[0] : payload;
+          leasesData = Array.isArray(raw?.table) ? raw.table : [];
+        } catch (srvErr) {
+          throw srvErr;
+        }
+      }
 
       const today = new Date();
       const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
