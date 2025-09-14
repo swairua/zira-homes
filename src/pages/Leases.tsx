@@ -68,6 +68,17 @@ const Leases = () => {
     defaultPage: 1
   });
 
+  const [expiringWithinDays, setExpiringWithinDays] = useState<number | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const d = params.get('expiringWithinDays') || params.get('expiring');
+    if (d) {
+      const n = Number(d);
+      if (Number.isFinite(n) && n > 0) setExpiringWithinDays(n);
+    }
+  }, []);
+
 
   const fetchLeases = async () => {
     try {
@@ -261,12 +272,27 @@ const Leases = () => {
     return <Badge variant="secondary">Upcoming</Badge>;
   };
 
-  const filteredLeases = leases.filter(lease =>
-    lease.tenants.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    lease.tenants.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    lease.units.unit_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    lease.units.properties.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredLeases = leases.filter(lease => {
+    const matchesSearch =
+      lease.tenants.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lease.tenants.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lease.units.unit_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lease.units.properties.name.toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    if (expiringWithinDays != null) {
+      const today = new Date();
+      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const end = lease.lease_end_date ? new Date(lease.lease_end_date) : null;
+      if (!end) return false;
+      const ms = end.getTime() - startOfToday.getTime();
+      const days = Math.ceil(ms / (1000 * 60 * 60 * 24));
+      return days >= 0 && days <= expiringWithinDays;
+    }
+
+    return true;
+  });
 
   // Pagination logic
   const totalPages = Math.ceil(filteredLeases.length / pageSize);
@@ -474,7 +500,7 @@ const Leases = () => {
         {/* Leases Content */}
         <Card className="bg-card">
           <CardHeader>
-            <CardTitle className="text-primary">All Leases</CardTitle>
+            <CardTitle className="text-primary">All Leases{expiringWithinDays != null ? ` — Expiring in ${expiringWithinDays} days` : ''}</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
