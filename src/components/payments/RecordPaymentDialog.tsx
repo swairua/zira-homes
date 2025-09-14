@@ -1,4 +1,5 @@
 import { useState } from "react";
+import React, { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -33,7 +34,12 @@ interface RecordPaymentDialogProps {
 export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentRecorded }: RecordPaymentDialogProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
-  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<PaymentFormData>();
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors, isSubmitting } } = useForm<PaymentFormData>({
+    defaultValues: {
+      payment_method: undefined,
+      payment_type: undefined,
+    }
+  });
 
   const selectedTenantId = watch("tenant_id");
   const selectedInvoiceId = watch("invoice_id");
@@ -42,14 +48,27 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
 
   const onSubmit = async (data: PaymentFormData) => {
     try {
+      // Basic validation safeguards
+      if (!data.tenant_id) throw new Error("Tenant is required");
+      if (!data.lease_id) throw new Error("Lease is required");
+      if (!data.payment_method) throw new Error("Payment method is required");
+      if (!data.payment_type) throw new Error("Payment type is required");
+      if (!data.amount || Number(data.amount) <= 0) throw new Error("Amount must be greater than 0");
+
       // Create the payment record
       const paymentData = {
-        ...data,
+        tenant_id: data.tenant_id,
+        lease_id: data.lease_id,
         amount: Number(data.amount),
+        payment_date: data.payment_date,
+        payment_method: data.payment_method,
+        payment_type: data.payment_type,
+        payment_reference: data.payment_reference,
+        notes: data.notes || null,
         status: 'completed',
         invoice_id: data.invoice_id || null
-      };
-      
+      } as const;
+
       const { data: payment, error: paymentError } = await supabase
         .from("payments")
         .insert([paymentData])
@@ -92,32 +111,41 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
       reset();
       setDialogOpen(false);
       onPaymentRecorded();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error recording payment:", error);
       toast({
         title: "Error",
-        description: "Failed to record payment",
+        description: error?.message || "Failed to record payment",
         variant: "destructive",
       });
     }
   };
 
   return (
-    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+    <Dialog open={dialogOpen} onOpenChange={(open) => {
+      setDialogOpen(open);
+      if (!open) reset();
+    }}>
       <DialogTrigger asChild>
         <Button className="bg-accent hover:bg-accent/90 text-accent-foreground">
           <Plus className="h-4 w-4 mr-2" />
           Record Payment
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Record New Payment</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {/* Hidden inputs to register non-native Select values */}
+          <input type="hidden" {...register("tenant_id", { required: "Tenant is required" })} />
+          <input type="hidden" {...register("lease_id", { required: "Lease is required" })} />
+          <input type="hidden" {...register("invoice_id")} />
+          <input type="hidden" {...register("payment_method", { required: "Payment method is required" })} />
+          <input type="hidden" {...register("payment_type", { required: "Payment type is required" })} />
           <div>
             <Label htmlFor="tenant_id">Tenant</Label>
-            <Select onValueChange={(value) => setValue("tenant_id", value)}>
+            <Select onValueChange={(value) => setValue("tenant_id", value, { shouldValidate: true, shouldDirty: true })}>
               <SelectTrigger>
                 <SelectValue placeholder="Select tenant" />
               </SelectTrigger>
@@ -134,7 +162,7 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
 
           <div>
             <Label htmlFor="lease_id">Lease</Label>
-            <Select onValueChange={(value) => setValue("lease_id", value)}>
+            <Select onValueChange={(value) => setValue("lease_id", value, { shouldValidate: true, shouldDirty: true })}>
               <SelectTrigger>
                 <SelectValue placeholder="Select lease" />
               </SelectTrigger>
@@ -151,7 +179,7 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
 
           <div>
             <Label htmlFor="invoice_id">Invoice (Optional)</Label>
-            <Select onValueChange={(value) => setValue("invoice_id", value)}>
+            <Select onValueChange={(value) => setValue("invoice_id", value, { shouldDirty: true })}>
               <SelectTrigger>
                 <SelectValue placeholder="Select invoice to allocate payment" />
               </SelectTrigger>
@@ -171,7 +199,10 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
               <Input
                 id="amount"
                 type="number"
-                {...register("amount", { required: "Amount is required" })}
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                {...register("amount", { required: "Amount is required", valueAsNumber: true, min: { value: 0.01, message: "Amount must be greater than 0" } })}
                 placeholder="25000"
               />
               {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
@@ -190,7 +221,7 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="payment_method">Payment Method</Label>
-              <Select onValueChange={(value) => setValue("payment_method", value)}>
+              <Select onValueChange={(value) => setValue("payment_method", value, { shouldValidate: true, shouldDirty: true })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select method" />
                 </SelectTrigger>
@@ -204,7 +235,7 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
             </div>
             <div>
               <Label htmlFor="payment_type">Payment Type</Label>
-              <Select onValueChange={(value) => setValue("payment_type", value)}>
+              <Select onValueChange={(value) => setValue("payment_type", value, { shouldValidate: true, shouldDirty: true })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
@@ -250,11 +281,11 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit">
-              Record Payment
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Recording..." : "Record Payment"}
             </Button>
           </div>
         </form>
