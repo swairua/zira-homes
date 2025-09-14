@@ -166,7 +166,7 @@ export function LeaseExpiryManager({
           case "attention":
             return lease.days_until_expiry > 30 && lease.days_until_expiry <= 60;
           case "normal":
-            return lease.days_until_expiry > 60;
+            return lease.days_until_expiry > 60 && lease.days_until_expiry <= selectedTimeframe;
           default:
             return true;
         }
@@ -246,7 +246,7 @@ export function LeaseExpiryManager({
                 <SelectItem value="critical">Critical (≤15 days)</SelectItem>
                 <SelectItem value="urgent">Urgent (16-30 days)</SelectItem>
                 <SelectItem value="attention">Attention (31-60 days)</SelectItem>
-                <SelectItem value="normal">Normal (&gt;60 days)</SelectItem>
+                <SelectItem value="normal">{selectedTimeframe > 60 ? `Normal (61-${selectedTimeframe} days)` : 'Normal (>60 days)'}</SelectItem>
               </SelectContent>
             </Select>
           </div>
