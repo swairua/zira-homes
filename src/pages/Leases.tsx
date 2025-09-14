@@ -466,14 +466,48 @@ const Leases = () => {
 
         {/* Search Bar */}
         <Card className="bg-card p-6">
-          <div className="flex items-center space-x-2">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search leases by tenant, unit, or property..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="flex-1 border-border"
-            />
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex items-center gap-2 flex-1">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search leases by tenant, unit, or property..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="flex-1 border-border"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Expiring</span>
+              <Select
+                value={expiringWithinDays != null ? String(expiringWithinDays) : 'all'}
+                onValueChange={(val) => {
+                  const v = val === 'all' ? null : Number(val);
+                  setExpiringWithinDays(v);
+                  setPage(1);
+                  const params = new URLSearchParams(window.location.search);
+                  if (v == null) {
+                    params.delete('expiringWithinDays');
+                    params.delete('expiring');
+                  } else {
+                    params.set('expiringWithinDays', String(v));
+                  }
+                  const qs = params.toString();
+                  window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+                }}
+              >
+                <SelectTrigger className="w-48 border-border bg-card">
+                  <SelectValue placeholder="Any time" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="all">Any time</SelectItem>
+                  <SelectItem value="30">Next 30 days</SelectItem>
+                  <SelectItem value="60">Next 60 days</SelectItem>
+                  <SelectItem value="90">Next 90 days</SelectItem>
+                  <SelectItem value="180">Next 6 months</SelectItem>
+                  <SelectItem value="365">Next 1 year</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </Card>
 
