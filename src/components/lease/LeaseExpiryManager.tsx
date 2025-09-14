@@ -80,18 +80,20 @@ export function LeaseExpiryManager({
 
   const fetchLeaseData = async () => {
     if (!user) return;
-    
+
     setLoading(true);
     try {
       const startDate = new Date().toISOString().split('T')[0];
       const endDate = new Date(Date.now() + selectedTimeframe * 24 * 60 * 60 * 1000)
         .toISOString().split('T')[0];
 
+      // Align with dashboard behavior: when timeframe is 90 days, use RPC defaults (server-defined 90 days)
+      const rpcArgs = (selectedTimeframe === 90)
+        ? { p_start_date: null, p_end_date: null }
+        : { p_start_date: startDate, p_end_date: endDate };
+
       const { data, error } = await (supabase as any)
-        .rpc('get_lease_expiry_report', {
-          p_start_date: startDate,
-          p_end_date: endDate
-        });
+        .rpc('get_lease_expiry_report', rpcArgs);
 
       if (error) throw error;
 
