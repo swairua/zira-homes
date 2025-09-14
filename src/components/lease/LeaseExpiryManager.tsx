@@ -92,12 +92,14 @@ export function LeaseExpiryManager({
         ? { p_start_date: null, p_end_date: null }
         : { p_start_date: startDate, p_end_date: endDate };
 
-      const { data, error } = await (supabase as any)
-        .rpc('get_lease_expiry_report', rpcArgs);
-
+      const rpcRes = await (supabase as any)
+        .rpc('get_lease_expiry_report', rpcArgs)
+        .maybeSingle();
+      const { data, error } = rpcRes;
       if (error) throw error;
 
-      const reportData = data as any;
+      const raw = data as any;
+      const reportData = Array.isArray(raw) ? raw[0] : raw;
       const leasesData = Array.isArray(reportData?.table) ? reportData.table : [];
 
       const today = new Date();
@@ -107,7 +109,7 @@ export function LeaseExpiryManager({
           const end = l?.lease_end_date ? new Date(l.lease_end_date) : null;
           const days = end ? Math.max(0, differenceInDays(end, startOfToday)) : 0;
           return {
-            id: l.id,
+            id: l.id || `${l.property_name || l.property || ''}-${l.unit_number || l.unit || ''}-${l.lease_end_date || ''}`,
             lease_end_date: l.lease_end_date,
             monthly_rent: Number(l.monthly_rent || 0),
             property_name: l.property_name || l.property || '',
