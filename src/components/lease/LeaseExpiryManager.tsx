@@ -74,6 +74,11 @@ export function LeaseExpiryManager({
     fetchLeaseData();
   }, [selectedTimeframe, user]);
 
+  // Ensure the status filter doesn't accidentally hide data after timeframe changes
+  useEffect(() => {
+    setStatusFilter('all');
+  }, [selectedTimeframe]);
+
   useEffect(() => {
     applyFilters();
   }, [leases, searchTerm, statusFilter]);
