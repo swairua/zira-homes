@@ -60,7 +60,7 @@ const Leases = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<LeaseFormData>();
   
   const { page, pageSize, setPage, setPageSize } = useUrlPageParam({
