@@ -80,9 +80,7 @@ const Leases = () => {
       }
 
       // Admins can see all leases with related data in a single query
-      const isAdmin = await (async () => {
-        try { return await (typeof (useAuth as any) === 'function' ? false : false); } catch { return false; }
-      })();
+      const isAdmin = await hasRole('Admin');
 
       if (isAdmin) {
         const { data, error } = await (supabase as any)
