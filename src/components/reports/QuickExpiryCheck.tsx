@@ -68,7 +68,7 @@ export function QuickExpiryCheck({ onViewDetails, hideWhenEmpty = false }: Quick
 
         const today = new Date();
         const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        const leases = rawLeases
+        let leases = rawLeases
           .map((l: any) => {
             const end = l?.lease_end_date ? new Date(l.lease_end_date) : null;
             const days = end ? Math.max(0, Math.ceil((end.getTime() - startOfToday.getTime()) / (1000*60*60*24))) : 0;
@@ -80,9 +80,21 @@ export function QuickExpiryCheck({ onViewDetails, hideWhenEmpty = false }: Quick
               days_until_expiry: days
             };
           })
-          .filter((l: any) => l.days_until_expiry >= 0 && l.days_until_expiry <= selectedTimeframe)
-          .sort((a: any, b: any) => a.days_until_expiry - b.days_until_expiry);
+          .filter((l: any) => l.days_until_expiry >= 0 && l.days_until_expiry <= selectedTimeframe);
 
+        const isAdmin = await hasRole('Admin');
+        if (!isAdmin) {
+          const { data: props } = await (supabase as any)
+            .from('properties')
+            .select('name')
+            .or(`owner_id.eq.${user.id},manager_id.eq.${user.id}`);
+          if (Array.isArray(props)) {
+            const allowed = new Set((props as any[]).map(p => p.name));
+            leases = leases.filter(l => allowed.has(l.property_name));
+          }
+        }
+
+        leases.sort((a: any, b: any) => a.days_until_expiry - b.days_until_expiry);
         const count = leases.length;
         setExpiryData({ count, leases });
       } catch (error) {
