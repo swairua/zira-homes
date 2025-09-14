@@ -31,8 +31,8 @@ export default function Index() {
     occupiedUnits: data.property_stats.occupied_units,
     vacantUnits: data.property_stats.total_units - data.property_stats.occupied_units,
     monthlyRevenue: data.property_stats.monthly_revenue,
-    occupancyRate: data.property_stats.total_units > 0 
-      ? (data.property_stats.occupied_units / data.property_stats.total_units) * 100 
+    occupancyRate: data.property_stats.total_units > 0
+      ? Math.round((data.property_stats.occupied_units / data.property_stats.total_units) * 100)
       : 0,
     totalExpenses: 0, // Will be fetched separately
     netIncome: data.property_stats.monthly_revenue,

@@ -84,7 +84,7 @@ export const reportConfigs: ReportConfig[] = [
     roles: ['admin', 'landlord'],
     queryId: 'occupancy_report',
     kpis: [
-      { key: 'occupancy_rate', label: 'Occupancy Rate', format: 'percent', decimals: 1 },
+      { key: 'occupancy_rate', label: 'Occupancy Rate', format: 'percent', decimals: 0 },
       { key: 'total_units', label: 'Total Units', format: 'number' },
       { key: 'occupied_units', label: 'Occupied Units', format: 'number' },
       { key: 'vacant_units', label: 'Vacant Units', format: 'number' }
@@ -110,7 +110,7 @@ export const reportConfigs: ReportConfig[] = [
         { key: 'property_name', label: 'Property', align: 'left' },
         { key: 'total_units', label: 'Total Units', align: 'right', format: 'number' },
         { key: 'occupied_units', label: 'Occupied', align: 'right', format: 'number' },
-        { key: 'occupancy_rate', label: 'Occupancy Rate', align: 'right', format: 'percent' }
+        { key: 'occupancy_rate', label: 'Occupancy Rate', align: 'right', format: 'percent', decimals: 0 }
       ]
     }
   },
@@ -426,7 +426,7 @@ export const reportConfigs: ReportConfig[] = [
       { key: 'total_properties', label: 'Total Properties', format: 'number' },
       { key: 'total_units', label: 'Total Units', format: 'number' },
       { key: 'collection_rate', label: 'Collection Rate', format: 'percent', decimals: 1 },
-      { key: 'occupancy_rate', label: 'Occupancy Rate', format: 'percent', decimals: 1 }
+      { key: 'occupancy_rate', label: 'Occupancy Rate', format: 'percent', decimals: 0 }
     ],
     charts: [
       { id: 'portfolio_overview', type: 'bar', xKey: 'month', yKeys: ['revenue', 'expenses'] },
@@ -438,7 +438,7 @@ export const reportConfigs: ReportConfig[] = [
         { key: 'property_name', label: 'Property', align: 'left' },
         { key: 'units', label: 'Units', format: 'number', align: 'center' },
         { key: 'revenue', label: 'Revenue', format: 'currency', align: 'right' },
-        { key: 'occupancy', label: 'Occupancy', format: 'percent', align: 'right' }
+        { key: 'occupancy', label: 'Occupancy', format: 'percent', decimals: 0, align: 'right' }
       ]
     }
   }
