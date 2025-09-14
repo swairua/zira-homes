@@ -136,18 +136,6 @@ export function LeaseExpiryManager({
         })
         .filter((l: LeaseData) => l.days_until_expiry >= 0 && l.days_until_expiry <= selectedTimeframe);
 
-      // Scope to user's properties if not admin
-      const isAdmin = await hasRole('Admin');
-      if (!isAdmin) {
-        const { data: props, error: propsErr } = await (supabase as any)
-          .from('properties')
-          .select('name')
-          .or(`owner_id.eq.${user.id},manager_id.eq.${user.id}`);
-        if (!propsErr && Array.isArray(props)) {
-          const allowedNames = new Set((props as any[]).map(p => p.name));
-          normalized = normalized.filter(l => allowedNames.has(l.property_name));
-        }
-      }
 
       normalized.sort((a: LeaseData, b: LeaseData) => a.days_until_expiry - b.days_until_expiry);
       setLeases(normalized);
