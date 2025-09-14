@@ -90,7 +90,45 @@ const Leases = () => {
         return;
       }
 
-      // Admins can see all leases with related data in a single query
+      // If an expiry window is requested, use the same RPC as the dashboard for parity
+      if (expiringWithinDays != null) {
+        const days = Number(expiringWithinDays);
+        const today = new Date();
+        const startDate = today.toISOString().slice(0, 10);
+        const endDate = new Date(today.getTime() + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const rpcArgs = days === 90 ? { p_start_date: null, p_end_date: null } : { p_start_date: startDate, p_end_date: endDate };
+
+        const { data, error } = await (supabase as any)
+          .rpc('get_lease_expiry_report', rpcArgs)
+          .maybeSingle();
+        if (error) throw error;
+
+        const raw = Array.isArray(data) ? data[0] : data;
+        const rows = Array.isArray(raw?.table) ? raw.table : [];
+        const mapped = rows.map((l: any) => {
+          const tn = (l.tenant_name || '').trim();
+          const parts = tn.split(' ');
+          const last = parts.length > 1 ? parts.pop() : '';
+          const first = parts.join(' ');
+          return {
+            id: l.id || `${l.property_name || ''}-${l.unit_number || ''}-${l.lease_end_date || ''}`,
+            tenant_id: l.tenant_id || '',
+            unit_id: l.unit_id || '',
+            lease_start_date: l.lease_start_date || null,
+            lease_end_date: l.lease_end_date || null,
+            monthly_rent: Number(l.monthly_rent || 0),
+            security_deposit: Number(l.security_deposit || 0),
+            status: l.status || 'active',
+            tenants: { first_name: first || tn, last_name: last || '' },
+            units: { unit_number: l.unit_number || '', properties: { name: l.property_name || '' } }
+          } as any;
+        });
+        setLeases(mapped);
+        console.log("✅ Loaded leases via RPC:", mapped.length);
+        return;
+      }
+
+      // Otherwise: original fetch for full list
       const isAdmin = await hasRole('Admin');
 
       if (isAdmin) {
