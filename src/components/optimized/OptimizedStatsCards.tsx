@@ -60,7 +60,7 @@ export const OptimizedStatsCards = memo(({ stats, isLoading }: OptimizedStatsCar
   const secondaryCards = [
     {
       title: "Occupancy Rate",
-      value: `${stats?.occupancyRate ?? 0}%`,
+      value: `${Math.round(Number(stats?.occupancyRate ?? 0))}%`,
       subtitle: `${stats?.totalUnits ?? 0} total units`,
       icon: Home,
       gradient: "card-gradient-green"

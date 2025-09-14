@@ -60,7 +60,7 @@ const Leases = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<LeaseFormData>();
   
   const { page, pageSize, setPage, setPageSize } = useUrlPageParam({
@@ -68,94 +68,106 @@ const Leases = () => {
     defaultPage: 1
   });
 
+  const [expiringWithinDays, setExpiringWithinDays] = useState<number | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const d = params.get('expiringWithinDays') || params.get('expiring');
+    if (d) {
+      const n = Number(d);
+      if (Number.isFinite(n) && n > 0) setExpiringWithinDays(n);
+    }
+  }, []);
+
 
   const fetchLeases = async () => {
     try {
       console.log("🔍 Starting leases fetch for user:", user?.id);
-      
+
       if (!user?.id) {
         console.log("❌ No authenticated user");
         setLoading(false);
         return;
       }
 
-      // First get leases data
+      // Admins can see all leases with related data in a single query
+      const isAdmin = await hasRole('Admin');
+
+      if (isAdmin) {
+        const { data, error } = await (supabase as any)
+          .from("leases")
+          .select(`*, tenants:tenants(id, first_name, last_name), units:units(id, unit_number, property_id, properties:properties(id, name))`)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        setLeases(data || []);
+        console.log("✅ Loaded leases for admin:", data?.length || 0);
+        return;
+      }
+
+      // For non-admins, load entities and filter to user's properties
       const { data: leasesData, error: leasesError } = await supabase
         .from("leases")
         .select("*")
         .order("created_at", { ascending: false });
+      if (leasesError) throw leasesError;
 
-      if (leasesError) {
-        console.error("❌ Leases query error:", leasesError);
-        throw leasesError;
-      }
-
-      // Get tenants separately
       const { data: tenantsData, error: tenantsError } = await supabase
         .from("tenants")
         .select("id, first_name, last_name");
+      if (tenantsError) throw tenantsError;
 
-      if (tenantsError) {
-        console.error("❌ Tenants query error:", tenantsError);
-        throw tenantsError;
-      }
-
-      // Get units with properties for user's properties only
       const { data: unitsData, error: unitsError } = await supabase
         .from("units")
         .select("id, unit_number, property_id");
+      if (unitsError) throw unitsError;
 
-      if (unitsError) {
-        console.error("❌ Units query error:", unitsError);
-        throw unitsError;
-      }
-
-      // Get properties that belong to the user
       const { data: propertiesData, error: propertiesError } = await supabase
         .from("properties")
         .select("id, name")
         .or(`owner_id.eq.${user.id},manager_id.eq.${user.id}`);
+      if (propertiesError) throw propertiesError;
 
-      if (propertiesError) {
-        console.error("❌ Properties query error:", propertiesError);
-        throw propertiesError;
-      }
-
-      // Create lookup maps
       const tenantMap = new Map(tenantsData?.map(t => [t.id, t]) || []);
       const unitMap = new Map(unitsData?.map(u => [u.id, u]) || []);
       const propertyMap = new Map(propertiesData?.map(p => [p.id, p]) || []);
 
-      // Join data manually and filter to user's properties only
-      const joinedLeases = leasesData?.filter(lease => {
-        const unit = unitMap.get(lease.unit_id);
-        return unit && propertyMap.has(unit.property_id);
-      }).map(lease => {
-        const tenant = tenantMap.get(lease.tenant_id);
-        const unit = unitMap.get(lease.unit_id);
-        const property = unit ? propertyMap.get(unit.property_id) : null;
-        
-        return {
-          ...lease,
-          tenants: tenant || { first_name: '', last_name: '' },
-          units: {
-            unit_number: unit?.unit_number || '',
-            properties: {
-              name: property?.name || ''
+      const joinedLeases = (leasesData || [])
+        .filter(lease => {
+          const unit = unitMap.get(lease.unit_id);
+          return unit && propertyMap.has(unit.property_id);
+        })
+        .map(lease => {
+          const tenant = tenantMap.get(lease.tenant_id);
+          const unit = unitMap.get(lease.unit_id);
+          const property = unit ? propertyMap.get(unit.property_id) : null;
+          return {
+            ...lease,
+            tenants: tenant || { first_name: '', last_name: '' },
+            units: {
+              unit_number: unit?.unit_number || '',
+              properties: { name: property?.name || '' }
             }
-          }
-        };
-      }) || [];
+          };
+        });
 
       console.log("🔗 Joined leases:", joinedLeases.length);
       setLeases(joinedLeases);
-    } catch (error) {
+    } catch (error: any) {
+      const msg = String(error?.message || error);
       console.error("💥 Error in fetchLeases:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load leases. Please check your permissions.",
-        variant: "destructive",
-      });
+      if (msg.toLowerCase().includes('failed to fetch')) {
+        toast({
+          title: "Network error",
+          description: "Could not reach database. Check your internet or Supabase CORS settings.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load leases. Please check your permissions.",
+          variant: "destructive",
+        });
+      }
       setLeases([]);
     } finally {
       setLoading(false);
@@ -165,37 +177,44 @@ const Leases = () => {
   const fetchTenantsAndUnits = async () => {
     try {
       if (!user?.id) return;
-      
-      // Get tenants separately
+
+      // Get tenants
       const { data: tenantsData, error: tenantsError } = await supabase
         .from("tenants")
         .select("id, first_name, last_name");
-
       if (tenantsError) throw tenantsError;
 
-      // Get ONLY vacant units for user's properties to prevent duplicate active leases
+      const isAdmin = await hasRole('Admin');
+
+      if (isAdmin) {
+        // Admin: all vacant units with property names
+        const { data: allUnits, error: unitsErr } = await (supabase as any)
+          .from("units")
+          .select("id, unit_number, status, properties:properties(id, name)")
+          .eq('status', 'vacant');
+        if (unitsErr) throw unitsErr;
+        setTenants(tenantsData || []);
+        setUnits(allUnits || []);
+        return;
+      }
+
+      // Non-admin: only user's properties
       const { data: unitsData, error: unitsError } = await supabase
         .from("units")
         .select("id, unit_number, property_id, status")
         .eq('status', 'vacant');
-
       if (unitsError) throw unitsError;
 
-      // Get user's properties
       const { data: propertiesData, error: propertiesError } = await supabase
         .from("properties")
         .select("id, name")
         .or(`owner_id.eq.${user.id},manager_id.eq.${user.id}`);
-
       if (propertiesError) throw propertiesError;
 
-      // Create property map and filter units to only those owned by user
       const propertyMap = new Map(propertiesData?.map(p => [p.id, p]) || []);
-      const userVacantUnits = unitsData?.filter(unit => propertyMap.has(unit.property_id))
-        .map(unit => ({
-          ...unit,
-          properties: propertyMap.get(unit.property_id)
-        })) || [];
+      const userVacantUnits = (unitsData || [])
+        .filter(unit => propertyMap.has(unit.property_id))
+        .map(unit => ({ ...unit, properties: propertyMap.get(unit.property_id) }));
 
       setTenants(tenantsData || []);
       setUnits(userVacantUnits);
@@ -253,12 +272,27 @@ const Leases = () => {
     return <Badge variant="secondary">Upcoming</Badge>;
   };
 
-  const filteredLeases = leases.filter(lease =>
-    lease.tenants.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    lease.tenants.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    lease.units.unit_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    lease.units.properties.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredLeases = leases.filter(lease => {
+    const matchesSearch =
+      lease.tenants.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lease.tenants.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lease.units.unit_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lease.units.properties.name.toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    if (expiringWithinDays != null) {
+      const today = new Date();
+      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const end = lease.lease_end_date ? new Date(lease.lease_end_date) : null;
+      if (!end) return false;
+      const ms = end.getTime() - startOfToday.getTime();
+      const days = Math.ceil(ms / (1000 * 60 * 60 * 24));
+      return days >= 0 && days <= expiringWithinDays;
+    }
+
+    return true;
+  });
 
   // Pagination logic
   const totalPages = Math.ceil(filteredLeases.length / pageSize);
@@ -466,7 +500,7 @@ const Leases = () => {
         {/* Leases Content */}
         <Card className="bg-card">
           <CardHeader>
-            <CardTitle className="text-primary">All Leases</CardTitle>
+            <CardTitle className="text-primary">All Leases{expiringWithinDays != null ? ` — Expiring in ${expiringWithinDays} days` : ''}</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (

@@ -383,7 +383,7 @@ const Reports = () => {
                             <div className="h-8 bg-muted animate-pulse rounded-lg"></div>
                           ) : (
                             <div className="text-2xl font-bold text-primary transition-transform group-hover:scale-105 duration-200">
-                              {(occupancyRate || 0).toFixed(1)}%
+                              {(occupancyRate || 0).toFixed(0)}%
                             </div>
                           )}
                         </div>

@@ -31,8 +31,8 @@ export default function Index() {
     occupiedUnits: data.property_stats.occupied_units,
     vacantUnits: data.property_stats.total_units - data.property_stats.occupied_units,
     monthlyRevenue: data.property_stats.monthly_revenue,
-    occupancyRate: data.property_stats.total_units > 0 
-      ? (data.property_stats.occupied_units / data.property_stats.total_units) * 100 
+    occupancyRate: data.property_stats.total_units > 0
+      ? Math.round((data.property_stats.occupied_units / data.property_stats.total_units) * 100)
       : 0,
     totalExpenses: 0, // Will be fetched separately
     netIncome: data.property_stats.monthly_revenue,
@@ -99,10 +99,10 @@ export default function Index() {
               <span>
                 <strong>{expiringCount}</strong> lease{expiringCount > 1 ? 's' : ''} expiring in the next 90 days
               </span>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
-                onClick={() => navigate('/leases')}
+                onClick={() => navigate('/leases?expiringWithinDays=90')}
                 className="ml-4"
               >
                 <Calendar className="h-3 w-3 mr-1" />

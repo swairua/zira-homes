@@ -75,18 +75,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const hasRole = useCallback(async (role: "Admin" | "Landlord" | "Manager" | "Agent" | "Tenant" | "System"): Promise<boolean> => {
     if (!user) return false;
-    
+
+    // Try secure RPC first, then fallback
     try {
-      const { data, error } = await supabase.rpc('has_role', {
+      const { data, error } = await supabase.rpc('has_role_safe', {
         _user_id: user.id,
-        _role: role
+        _role: role as any
       });
-      
       if (error) throw error;
-      return data || false;
-    } catch (error) {
-      console.error(`Error checking ${role} role:`, error);
-      return false;
+      return Boolean(data);
+    } catch (err1: any) {
+      const msg1 = err1?.message || JSON.stringify(err1);
+      console.warn(`has_role_safe failed for ${role}: ${msg1}`);
+      try {
+        const { data, error } = await supabase.rpc('has_role', {
+          _user_id: user.id,
+          _role: role as any
+        });
+        if (error) throw error;
+        return Boolean(data);
+      } catch (err2: any) {
+        const msg2 = err2?.message || JSON.stringify(err2);
+        console.error(`Error checking ${role} role: ${msg2}`);
+        return false;
+      }
     }
   }, [user]);
 
