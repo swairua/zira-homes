@@ -84,8 +84,6 @@ export function LeaseExpiryManager({
   }, [leases, searchTerm, statusFilter]);
 
   const fetchLeaseData = async () => {
-    if (!user) return;
-
     setLoading(true);
     try {
       const startDate = new Date().toISOString().split('T')[0];
