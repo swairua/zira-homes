@@ -9,7 +9,7 @@ export const getReportSummary = (data: any, reportType: string): string => {
       return `This report provides a comprehensive analysis of rent collection performance across all properties. Current collection rate stands at ${d?.collectionRate?.toFixed(1) || '0'}% with total collected amount of ${formatAmount(d?.totalCollected || 0)}.`;
     
     case 'occupancy':
-      return `Property occupancy analysis shows current occupancy rate of ${d?.occupancyRate?.toFixed(1) || '0'}% across ${d?.totalUnits || 0} units in ${d?.totalProperties || 0} properties.`;
+      return `Property occupancy analysis shows current occupancy rate of ${d?.occupancyRate?.toFixed(0) || '0'}% across ${d?.totalUnits || 0} units in ${d?.totalProperties || 0} properties.`;
     
     case 'outstanding-balances':
       return `Outstanding balances report reveals total overdue amount of ${formatAmount(d?.totalOutstanding || 0)} across ${d?.overdueCount || 0} accounts requiring attention.`;

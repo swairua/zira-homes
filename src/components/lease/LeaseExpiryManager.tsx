@@ -53,7 +53,7 @@ export function LeaseExpiryManager({
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedTimeframe, setSelectedTimeframe] = useState(timeframe);
   const [selectedLeases, setSelectedLeases] = useState<string[]>([]);
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
 
   const timeframes = [
     { days: 30, label: "30 days", urgent: true },
@@ -96,9 +96,43 @@ export function LeaseExpiryManager({
       if (error) throw error;
 
       const reportData = data as any;
-      const leasesData = reportData?.table || [];
-      
-      setLeases(leasesData);
+      const leasesData = Array.isArray(reportData?.table) ? reportData.table : [];
+
+      const today = new Date();
+      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      let normalized = leasesData
+        .map((l: any) => {
+          const end = l?.lease_end_date ? new Date(l.lease_end_date) : null;
+          const days = end ? Math.max(0, differenceInDays(end, startOfToday)) : 0;
+          return {
+            id: l.id,
+            lease_end_date: l.lease_end_date,
+            monthly_rent: Number(l.monthly_rent || 0),
+            property_name: l.property_name || l.property || '',
+            unit_number: l.unit_number || l.unit || '',
+            tenant_name: l.tenant_name || `${l.first_name || ''} ${l.last_name || ''}`.trim(),
+            tenant_email: l.tenant_email || l.email || undefined,
+            days_until_expiry: days,
+            status: l.status || 'active'
+          } as LeaseData;
+        })
+        .filter((l: LeaseData) => l.days_until_expiry >= 0 && l.days_until_expiry <= selectedTimeframe);
+
+      // Scope to user's properties if not admin
+      const isAdmin = await hasRole('Admin');
+      if (!isAdmin) {
+        const { data: props, error: propsErr } = await (supabase as any)
+          .from('properties')
+          .select('name')
+          .or(`owner_id.eq.${user.id},manager_id.eq.${user.id}`);
+        if (!propsErr && Array.isArray(props)) {
+          const allowedNames = new Set((props as any[]).map(p => p.name));
+          normalized = normalized.filter(l => allowedNames.has(l.property_name));
+        }
+      }
+
+      normalized.sort((a: LeaseData, b: LeaseData) => a.days_until_expiry - b.days_until_expiry);
+      setLeases(normalized);
     } catch (error) {
       console.error('Error fetching lease data:', error);
       setLeases([]);

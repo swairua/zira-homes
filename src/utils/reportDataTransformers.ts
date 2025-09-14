@@ -579,7 +579,7 @@ export const reportDataTransformers: Record<string, DataTransformer> = {
         month: m.month,
         occupiedUnits: m.occupied,
         vacantUnits: m.vacant,
-        occupancyRate: `${(Number(m.rate || 0)).toFixed(1)}%`
+        occupancyRate: `${Math.round(Number(m.rate || 0))}%`
       }))
   },
 
