@@ -229,15 +229,67 @@ const Leases = () => {
   }, []);
 
   const onSubmit = async (data: LeaseFormData) => {
+    const formatError = (e: any) => {
+      try {
+        if (!e) return 'Unknown error';
+        if (typeof e === 'string') return e;
+        const parts: string[] = [];
+        if (e.message) parts.push(e.message);
+        if (e.details) parts.push(e.details);
+        if (e.hint) parts.push(`hint: ${e.hint}`);
+        if (e.code) parts.push(`code: ${e.code}`);
+        if (e.status) parts.push(`status: ${e.status}`);
+        if (parts.length === 0) return JSON.stringify(e);
+        return parts.join(' | ');
+      } catch {
+        return String(e);
+      }
+    };
+
     try {
+      // Basic client-side validation for clearer errors
+      if (!data.tenant_id || !data.unit_id) {
+        toast({ title: 'Missing fields', description: 'Please select both a tenant and a unit.', variant: 'destructive' });
+        return;
+      }
+      if (!data.lease_start_date || !data.lease_end_date) {
+        toast({ title: 'Missing dates', description: 'Start and end dates are required.', variant: 'destructive' });
+        return;
+      }
+      const start = new Date(data.lease_start_date);
+      const end = new Date(data.lease_end_date);
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        toast({ title: 'Invalid dates', description: 'Please provide valid start and end dates.', variant: 'destructive' });
+        return;
+      }
+      if (end < start) {
+        toast({ title: 'Date range error', description: 'End date must be after start date.', variant: 'destructive' });
+        return;
+      }
+      const monthly = Number(data.monthly_rent);
+      const deposit = Number(data.security_deposit);
+      if (!Number.isFinite(monthly) || monthly <= 0) {
+        toast({ title: 'Invalid amount', description: 'Monthly rent must be greater than 0.', variant: 'destructive' });
+        return;
+      }
+      if (!Number.isFinite(deposit) || deposit < 0) {
+        toast({ title: 'Invalid amount', description: 'Security deposit cannot be negative.', variant: 'destructive' });
+        return;
+      }
+
+      const payload = {
+        tenant_id: data.tenant_id,
+        unit_id: data.unit_id,
+        lease_start_date: start.toISOString().slice(0, 10),
+        lease_end_date: end.toISOString().slice(0, 10),
+        monthly_rent: monthly,
+        security_deposit: deposit,
+        status: 'active'
+      } as const;
+
       const { error } = await supabase
         .from("leases")
-        .insert([{
-          ...data,
-          monthly_rent: Number(data.monthly_rent),
-          security_deposit: Number(data.security_deposit),
-          status: 'active' // Explicitly set status
-        }]);
+        .insert([payload]);
 
       if (error) throw error;
 
@@ -249,11 +301,12 @@ const Leases = () => {
       reset();
       setDialogOpen(false);
       fetchLeases();
-    } catch (error) {
-      console.error("Error creating lease:", error);
+    } catch (error: any) {
+      const formatted = formatError(error);
+      console.error("Error creating lease:", formatted, error);
       toast({
         title: "Error",
-        description: "Failed to create lease",
+        description: formatted,
         variant: "destructive",
       });
     }
