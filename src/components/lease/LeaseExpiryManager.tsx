@@ -53,7 +53,7 @@ export function LeaseExpiryManager({
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedTimeframe, setSelectedTimeframe] = useState(timeframe);
   const [selectedLeases, setSelectedLeases] = useState<string[]>([]);
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
 
   const timeframes = [
     { days: 30, label: "30 days", urgent: true },
@@ -100,7 +100,7 @@ export function LeaseExpiryManager({
 
       const today = new Date();
       const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const normalized = leasesData
+      let normalized = leasesData
         .map((l: any) => {
           const end = l?.lease_end_date ? new Date(l.lease_end_date) : null;
           const days = end ? Math.max(0, differenceInDays(end, startOfToday)) : 0;
@@ -116,9 +116,22 @@ export function LeaseExpiryManager({
             status: l.status || 'active'
           } as LeaseData;
         })
-        .filter((l: LeaseData) => l.days_until_expiry >= 0 && l.days_until_expiry <= selectedTimeframe)
-        .sort((a: LeaseData, b: LeaseData) => a.days_until_expiry - b.days_until_expiry);
+        .filter((l: LeaseData) => l.days_until_expiry >= 0 && l.days_until_expiry <= selectedTimeframe);
 
+      // Scope to user's properties if not admin
+      const isAdmin = await hasRole('Admin');
+      if (!isAdmin) {
+        const { data: props, error: propsErr } = await (supabase as any)
+          .from('properties')
+          .select('name')
+          .or(`owner_id.eq.${user.id},manager_id.eq.${user.id}`);
+        if (!propsErr && Array.isArray(props)) {
+          const allowedNames = new Set((props as any[]).map(p => p.name));
+          normalized = normalized.filter(l => allowedNames.has(l.property_name));
+        }
+      }
+
+      normalized.sort((a: LeaseData, b: LeaseData) => a.days_until_expiry - b.days_until_expiry);
       setLeases(normalized);
     } catch (error) {
       console.error('Error fetching lease data:', error);
