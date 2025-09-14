@@ -102,9 +102,12 @@ const Tenants = () => {
         rent_amount: t.rent_amount
       }));
 
-      console.log("✅ Tenants (RPC) loaded:", transformedTenants.length, "of", total);
+      // Deduplicate by id to avoid duplicate keys in React lists
+      const uniqueTenants = Array.from(new Map((transformedTenants || []).map((t: any) => [t.id, t])).values());
 
-      setTenants(transformedTenants as Tenant[]);
+      console.log("✅ Tenants (RPC) loaded:", uniqueTenants.length, "of", total);
+
+      setTenants(uniqueTenants as Tenant[]);
       setTotalCount(total);
     } catch (error) {
       console.error('Error fetching tenants via RPC:', error);
