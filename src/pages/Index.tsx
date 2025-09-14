@@ -99,10 +99,10 @@ export default function Index() {
               <span>
                 <strong>{expiringCount}</strong> lease{expiringCount > 1 ? 's' : ''} expiring in the next 90 days
               </span>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
-                onClick={() => navigate('/leases')}
+                onClick={() => navigate('/leases?expiringWithinDays=90')}
                 className="ml-4"
               >
                 <Calendar className="h-3 w-3 mr-1" />
