@@ -64,9 +64,26 @@ export function QuickExpiryCheck({ onViewDetails, hideWhenEmpty = false }: Quick
 
         // Safely parse the JSON response
         const reportData = data as any;
-        const count = reportData?.kpis?.expiring_leases || 0;
-        const leases = reportData?.table || [];
+        const rawLeases = Array.isArray(reportData?.table) ? reportData.table : [];
 
+        const today = new Date();
+        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const leases = rawLeases
+          .map((l: any) => {
+            const end = l?.lease_end_date ? new Date(l.lease_end_date) : null;
+            const days = end ? Math.max(0, Math.ceil((end.getTime() - startOfToday.getTime()) / (1000*60*60*24))) : 0;
+            return {
+              property_name: l.property_name || l.property || '',
+              unit_number: l.unit_number || l.unit || '',
+              tenant_name: l.tenant_name || `${l.first_name || ''} ${l.last_name || ''}`.trim(),
+              lease_end_date: l.lease_end_date,
+              days_until_expiry: days
+            };
+          })
+          .filter((l: any) => l.days_until_expiry >= 0 && l.days_until_expiry <= selectedTimeframe)
+          .sort((a: any, b: any) => a.days_until_expiry - b.days_until_expiry);
+
+        const count = leases.length;
         setExpiryData({ count, leases });
       } catch (error) {
         console.error('Error fetching expiry data:', error);
