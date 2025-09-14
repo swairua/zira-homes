@@ -72,90 +72,93 @@ const Leases = () => {
   const fetchLeases = async () => {
     try {
       console.log("🔍 Starting leases fetch for user:", user?.id);
-      
+
       if (!user?.id) {
         console.log("❌ No authenticated user");
         setLoading(false);
         return;
       }
 
-      // First get leases data
+      // Admins can see all leases with related data in a single query
+      const isAdmin = await (async () => {
+        try { return await (typeof (useAuth as any) === 'function' ? false : false); } catch { return false; }
+      })();
+
+      if (isAdmin) {
+        const { data, error } = await (supabase as any)
+          .from("leases")
+          .select(`*, tenants:tenants(id, first_name, last_name), units:units(id, unit_number, property_id, properties:properties(id, name))`)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        setLeases(data || []);
+        console.log("✅ Loaded leases for admin:", data?.length || 0);
+        return;
+      }
+
+      // For non-admins, load entities and filter to user's properties
       const { data: leasesData, error: leasesError } = await supabase
         .from("leases")
         .select("*")
         .order("created_at", { ascending: false });
+      if (leasesError) throw leasesError;
 
-      if (leasesError) {
-        console.error("❌ Leases query error:", leasesError);
-        throw leasesError;
-      }
-
-      // Get tenants separately
       const { data: tenantsData, error: tenantsError } = await supabase
         .from("tenants")
         .select("id, first_name, last_name");
+      if (tenantsError) throw tenantsError;
 
-      if (tenantsError) {
-        console.error("❌ Tenants query error:", tenantsError);
-        throw tenantsError;
-      }
-
-      // Get units with properties for user's properties only
       const { data: unitsData, error: unitsError } = await supabase
         .from("units")
         .select("id, unit_number, property_id");
+      if (unitsError) throw unitsError;
 
-      if (unitsError) {
-        console.error("❌ Units query error:", unitsError);
-        throw unitsError;
-      }
-
-      // Get properties that belong to the user
       const { data: propertiesData, error: propertiesError } = await supabase
         .from("properties")
         .select("id, name")
         .or(`owner_id.eq.${user.id},manager_id.eq.${user.id}`);
+      if (propertiesError) throw propertiesError;
 
-      if (propertiesError) {
-        console.error("❌ Properties query error:", propertiesError);
-        throw propertiesError;
-      }
-
-      // Create lookup maps
       const tenantMap = new Map(tenantsData?.map(t => [t.id, t]) || []);
       const unitMap = new Map(unitsData?.map(u => [u.id, u]) || []);
       const propertyMap = new Map(propertiesData?.map(p => [p.id, p]) || []);
 
-      // Join data manually and filter to user's properties only
-      const joinedLeases = leasesData?.filter(lease => {
-        const unit = unitMap.get(lease.unit_id);
-        return unit && propertyMap.has(unit.property_id);
-      }).map(lease => {
-        const tenant = tenantMap.get(lease.tenant_id);
-        const unit = unitMap.get(lease.unit_id);
-        const property = unit ? propertyMap.get(unit.property_id) : null;
-        
-        return {
-          ...lease,
-          tenants: tenant || { first_name: '', last_name: '' },
-          units: {
-            unit_number: unit?.unit_number || '',
-            properties: {
-              name: property?.name || ''
+      const joinedLeases = (leasesData || [])
+        .filter(lease => {
+          const unit = unitMap.get(lease.unit_id);
+          return unit && propertyMap.has(unit.property_id);
+        })
+        .map(lease => {
+          const tenant = tenantMap.get(lease.tenant_id);
+          const unit = unitMap.get(lease.unit_id);
+          const property = unit ? propertyMap.get(unit.property_id) : null;
+          return {
+            ...lease,
+            tenants: tenant || { first_name: '', last_name: '' },
+            units: {
+              unit_number: unit?.unit_number || '',
+              properties: { name: property?.name || '' }
             }
-          }
-        };
-      }) || [];
+          };
+        });
 
       console.log("🔗 Joined leases:", joinedLeases.length);
       setLeases(joinedLeases);
-    } catch (error) {
+    } catch (error: any) {
+      const msg = String(error?.message || error);
       console.error("💥 Error in fetchLeases:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load leases. Please check your permissions.",
-        variant: "destructive",
-      });
+      if (msg.toLowerCase().includes('failed to fetch')) {
+        toast({
+          title: "Network error",
+          description: "Could not reach database. Check your internet or Supabase CORS settings.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load leases. Please check your permissions.",
+          variant: "destructive",
+        });
+      }
       setLeases([]);
     } finally {
       setLoading(false);
