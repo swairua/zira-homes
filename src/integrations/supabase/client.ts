@@ -16,77 +16,84 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
   }
 });
 
-// Enhance functions.invoke with multi-fallback and detailed error reporting
+// Enhance functions.invoke with reliable routing to avoid FunctionsFetchError
 try {
   const originalInvoke = (supabase.functions as any).invoke.bind(supabase.functions);
   (supabase.functions as any).invoke = async (name: string, options?: any) => {
+    const body = options?.body ?? {};
+
+    // Prepare headers: prefer caller headers; add user JWT if available; fallback to anon; add origin
+    const extraHeaders: Record<string, string> = { ...(options?.headers || {}) };
     try {
-      const result = await originalInvoke(name, options);
-      if (result?.error) throw result.error;
-      return result;
-    } catch (err: any) {
-      const body = options?.body ?? {};
-
-      // Prepare headers: prefer caller headers; add user JWT if available; otherwise allow force header for specific functions
-      const extraHeaders: Record<string, string> = { ...(options?.headers || {}) };
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const access = sessionData?.session?.access_token;
-        if (access) {
-          extraHeaders['Authorization'] = `Bearer ${access}`;
-        } else if (body?.force || name === 'create-tenant-account' || name === 'create-user-with-role') {
-          extraHeaders['x-force-create'] = 'true';
-        }
-      } catch {}
-
-      // 1) Try server proxy fallback using service role (if configured)
-      let proxyFailedDetails: any = null;
-      try {
-        const res = await fetch(`/api/edge/${name}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...extraHeaders },
-          body: JSON.stringify(body)
-        });
-        const text = await res.text();
-        let data: any; try { data = JSON.parse(text); } catch { data = text; }
-        if (res.ok) {
-          return { data, error: null } as any;
-        } else {
-          proxyFailedDetails = { status: res.status, details: data };
-        }
-      } catch (fallbackErr: any) {
-        proxyFailedDetails = fallbackErr?.message || String(fallbackErr);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const access = sessionData?.session?.access_token;
+      if (access) {
+        extraHeaders['Authorization'] = `Bearer ${access}`;
+      } else if (body?.force || name === 'create-tenant-account' || name === 'create-user-with-role') {
+        extraHeaders['x-force-create'] = 'true';
       }
+    } catch {}
+    if (typeof window !== 'undefined' && !extraHeaders['origin']) extraHeaders['origin'] = window.location.origin;
 
-      // 2) Direct call to Supabase Edge Function with publishable key
+    // 1) Try server proxy first (uses service role on server)
+    let proxyFailedDetails: any = null;
+    try {
+      const res = await fetch(`/api/edge/${name}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...extraHeaders },
+        body: JSON.stringify(body)
+      });
+      const text = await res.text();
+      let data: any; try { data = JSON.parse(text); } catch { data = text; }
+      if (res.ok) return { data, error: null } as any;
+      proxyFailedDetails = { status: res.status, details: data };
+    } catch (fallbackErr: any) {
+      proxyFailedDetails = fallbackErr?.message || String(fallbackErr);
+    }
+
+    // 2) Direct call to Supabase Edge Function
+    try {
+      const fnUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/${name}`;
+      const res = await fetch(fnUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_PUBLISHABLE_KEY,
+          'Authorization': extraHeaders['Authorization'] || `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+          ...extraHeaders,
+        },
+        body: JSON.stringify(body)
+      });
+      const text = await res.text();
+      let data: any; try { data = JSON.parse(text); } catch { data = text; }
+      if (res.ok) return { data, error: null } as any;
+      // If direct fetch says unauthorized and we had a JWT, keep details
+      const directFailedDetails = { status: res.status, details: data };
+
+      // 3) As a last resort, call original invoke (may throw FunctionsFetchError)
       try {
-        const fnUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/${name}`;
-        const res = await fetch(fnUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': SUPABASE_PUBLISHABLE_KEY,
-            // Prefer user JWT if available; else use anon
-            'Authorization': extraHeaders['Authorization'] || `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
-            ...extraHeaders,
-          },
-          body: JSON.stringify(body)
-        });
-        const text = await res.text();
-        let data: any; try { data = JSON.parse(text); } catch { data = text; }
-        if (res.ok) {
-          return { data, error: null } as any;
-        } else {
-          return { data: null as any, error: { message: 'Edge function fetch failed', status: res.status, details: data, proxyFailedDetails } };
-        }
-      } catch (directErr: any) {
+        const result = await originalInvoke(name, options);
+        if (result?.error) throw result.error;
+        return result;
+      } catch (err: any) {
         const parts: string[] = [];
-        const e = directErr || err;
-        if (e?.message) parts.push(e.message);
-        if (e?.details) parts.push(e.details);
-        if (e?.hint) parts.push(`hint: ${e.hint}`);
+        if (err?.message) parts.push(err.message);
         if (proxyFailedDetails) parts.push(`proxy: ${typeof proxyFailedDetails === 'string' ? proxyFailedDetails : JSON.stringify(proxyFailedDetails)}`);
-        return { data: null as any, error: { message: parts.join(' | ') || String(e) } };
+        parts.push(`direct: ${JSON.stringify(directFailedDetails)}`);
+        return { data: null as any, error: { message: parts.join(' | ') } };
+      }
+    } catch (directErr: any) {
+      // 3) Original invoke if even fetch failed to construct
+      try {
+        const result = await originalInvoke(name, options);
+        if (result?.error) throw result.error;
+        return result;
+      } catch (err: any) {
+        const parts: string[] = [];
+        if (err?.message) parts.push(err.message);
+        if (directErr?.message) parts.push(`direct: ${directErr.message}`);
+        if (proxyFailedDetails) parts.push(`proxy: ${typeof proxyFailedDetails === 'string' ? proxyFailedDetails : JSON.stringify(proxyFailedDetails)}`);
+        return { data: null as any, error: { message: parts.join(' | ') } };
       }
     }
   };
