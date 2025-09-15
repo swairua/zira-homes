@@ -189,6 +189,16 @@ const Payments = () => {
 
       setTenants(tenantsResult.data || []);
       setLeases(joinedLeases);
+
+      // Audit: record tenants list access from Payments context. Non-blocking.
+      try {
+        await supabase.rpc('log_sensitive_data_access', {
+          _table_name: 'tenants',
+          _operation: 'list'
+        });
+      } catch (e) {
+        console.warn('Audit log (data access) failed', e);
+      }
     } catch (error) {
       console.error("Error fetching tenants and leases:", error);
     }

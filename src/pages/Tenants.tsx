@@ -109,6 +109,37 @@ const Tenants = () => {
 
       setTenants(uniqueTenants as Tenant[]);
       setTotalCount(total);
+
+      // Audit: log that tenants were fetched (list access) and user activity. Non-blocking.
+      try {
+        await supabase.rpc('log_sensitive_data_access', {
+          _table_name: 'tenants',
+          _operation: 'list'
+        });
+      } catch (e) {
+        console.warn('Audit log (data access) failed', e);
+      }
+      try {
+        const { data: auth } = await supabase.auth.getUser();
+        const uid = auth?.user?.id;
+        if (uid) {
+          await supabase.rpc('log_user_activity', {
+            _user_id: uid,
+            _action: 'view_tenants',
+            _entity_type: 'tenant',
+            _entity_id: null as any,
+            _details: {
+              page,
+              pageSize,
+              search: searchTerm || null,
+              employmentFilter: filterEmployment || null,
+              propertyFilter: filterProperty || null
+            } as any
+          } as any);
+        }
+      } catch (e) {
+        console.warn('Audit log (user activity) failed', e);
+      }
     } catch (error) {
       console.error('Error fetching tenants via RPC:', error);
       toast({
