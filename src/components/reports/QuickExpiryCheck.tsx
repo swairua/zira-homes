@@ -63,8 +63,18 @@ export function QuickExpiryCheck({ onViewDetails, hideWhenEmpty = false }: Quick
         if (error) throw error;
 
         // Safely parse the JSON response
-        const reportData = data as any;
-        const rawLeases = Array.isArray(reportData?.table) ? reportData.table : [];
+        let reportData = data as any;
+        let rawLeases = Array.isArray(reportData?.table) ? reportData.table : [];
+
+        // Fallback via server endpoint if RPC returned empty due to RLS
+        if (!Array.isArray(rawLeases) || rawLeases.length === 0) {
+          const url = '/api/leases/expiring';
+          const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ p_start_date: startDate, p_end_date: endDate }) });
+          const payload = await res.json();
+          const raw = Array.isArray(payload) ? payload[0] : payload;
+          const table = Array.isArray(raw?.table) ? raw.table : [];
+          if (Array.isArray(table) && table.length > 0) rawLeases = table;
+        }
 
         const today = new Date();
         const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
