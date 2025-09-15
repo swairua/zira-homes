@@ -85,27 +85,30 @@ const onSubmit = async (data: PaymentFormData) => {
         if (!isNoReturn) throw insertError;
       }
 
-      // If invoice is selected, create allocation
-      if (data.invoice_id && payment) {
-        const { error: allocationError } = await supabase
-          .from("payment_allocations" as any)
-          .insert([{
-            payment_id: payment.id,
-            invoice_id: data.invoice_id,
-            amount: Number(data.amount)
-          }]) as { error: any };
-
-        if (allocationError) {
-          console.warn("Payment created but allocation failed:", allocationError);
+      // If invoice is selected, try to create allocation using last payment id if retrievable
+      if (data.invoice_id) {
+        try {
+          const { data: lastPayment } = await supabase
+            .from("payments")
+            .select("id")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .single();
+          if (lastPayment?.id) {
+            const { error: allocationError } = await supabase
+              .from("payment_allocations" as any)
+              .insert([{ payment_id: lastPayment.id, invoice_id: data.invoice_id, amount: Number(data.amount) }]) as { error: any };
+            if (allocationError) console.warn("Payment created but allocation failed:", allocationError);
+          }
+        } catch (e) {
+          console.warn("Skipped allocation fetch/insert:", e);
         }
       }
 
       // Auto-reconcile for the tenant to allocate any remaining amount
       if (data.tenant_id) {
         try {
-          await supabase.rpc('reconcile_unallocated_payments_for_tenant' as any, {
-            p_tenant_id: data.tenant_id
-          }) as { data: any, error: any };
+          await supabase.rpc('reconcile_unallocated_payments_for_tenant' as any, { p_tenant_id: data.tenant_id }) as { data: any, error: any };
         } catch (reconcileError) {
           console.warn("Payment created but reconciliation failed:", reconcileError);
         }
@@ -113,7 +116,7 @@ const onSubmit = async (data: PaymentFormData) => {
 
       toast({
         title: "Success",
-        description: "Payment recorded and allocated successfully",
+        description: "Payment recorded successfully",
       });
 
       reset();
