@@ -16,12 +16,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { checkBackendReady } from "@/utils/backendHealth";
 
-const tenantFormSchema = z.object({
-  first_name: z.string().min(1, "First name is required"),
-  last_name: z.string().min(1, "Last name is required"),
-  email: z.string().email("Invalid email address"),
-  phone: z.string().min(1, "Phone number is required"),
-  national_id: z.string().min(1, "National ID or Passport is required"),
+const tenantFormSchemaBase = z.object({
+  first_name: z.string().min(1, "First name is required").transform((s) => s.trim()),
+  last_name: z.string().min(1, "Last name is required").transform((s) => s.trim()),
+  email: z.string().email("Invalid email address").transform((s) => s.trim()),
+  phone: z.string().min(1, "Phone number is required").transform((s) => s.trim()),
+  national_id: z.string().min(1, "National ID or Passport is required").transform((s) => s.trim()),
   profession: z.string().optional(),
   employment_status: z.string().optional(),
   employer_name: z.string().optional(),
@@ -29,12 +29,26 @@ const tenantFormSchema = z.object({
   emergency_contact_name: z.string().optional(),
   emergency_contact_phone: z.string().optional(),
   previous_address: z.string().optional(),
-  property_id: z.string().optional().default(""),
-  unit_id: z.string().optional().default(""),
-  lease_start_date: z.string().min(1, "Lease start date is required"),
-  lease_end_date: z.string().min(1, "Lease end date is required"),
-  monthly_rent: z.coerce.number().min(1, "Monthly rent is required"),
+  property_id: z.string().min(1, "Property is required"),
+  unit_id: z.string().min(1, "Unit is required"),
+  lease_start_date: z.string().optional(),
+  lease_end_date: z.string().optional(),
+  monthly_rent: z.coerce.number().optional(),
   security_deposit: z.coerce.number().optional(),
+});
+
+const tenantFormSchema = tenantFormSchemaBase.superRefine((val, ctx) => {
+  const hasUnit = Boolean(val.unit_id);
+  if (hasUnit) {
+    if (!val.lease_start_date) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Lease start date is required", path: ["lease_start_date"] });
+    if (!val.lease_end_date) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Lease end date is required", path: ["lease_end_date"] });
+    if (val.monthly_rent == null || isNaN(Number(val.monthly_rent)) || Number(val.monthly_rent) <= 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Monthly rent is required", path: ["monthly_rent"] });
+    }
+    if (val.security_deposit != null && isNaN(Number(val.security_deposit))) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Security deposit must be a number", path: ["security_deposit"] });
+    }
+  }
 });
 
 type TenantFormData = z.infer<typeof tenantFormSchema>;
@@ -63,7 +77,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
       profession: "",
       employment_status: "",
       employer_name: "",
-      monthly_income: 0,
+      monthly_income: undefined,
       emergency_contact_name: "",
       emergency_contact_phone: "",
       previous_address: "",
@@ -71,8 +85,8 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
       unit_id: "",
       lease_start_date: "",
       lease_end_date: "",
-      monthly_rent: 0,
-      security_deposit: 0,
+      monthly_rent: undefined as any,
+      security_deposit: undefined as any,
     }
   });
   
@@ -169,8 +183,8 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
       leaseData: data.unit_id ? {
         lease_start_date: data.lease_start_date,
         lease_end_date: data.lease_end_date,
-        monthly_rent: data.monthly_rent ? parseFloat(data.monthly_rent.toString()) : undefined,
-        security_deposit: data.security_deposit ? parseFloat(data.security_deposit.toString()) : undefined
+        monthly_rent: data.monthly_rent != null ? parseFloat(data.monthly_rent.toString()) : undefined,
+        security_deposit: data.security_deposit != null ? parseFloat(data.security_deposit.toString()) : undefined
       } : undefined,
       force: true
     };
