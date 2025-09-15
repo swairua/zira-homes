@@ -15,6 +15,7 @@ import { format } from "date-fns";
 import { KpiGrid } from "@/components/kpi/KpiGrid";
 import { KpiStatCard } from "@/components/kpi/KpiStatCard";
 import { RecordPaymentDialog } from "@/components/payments/RecordPaymentDialog";
+import { TestPaymentButton } from "@/components/payments/TestPaymentButton";
 import { TablePaginator } from "@/components/ui/table-paginator";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 
@@ -275,11 +276,14 @@ const Payments = () => {
             </p>
           </div>
           
-          <RecordPaymentDialog 
-            tenants={tenants} 
-            leases={leases} 
-            onPaymentRecorded={fetchPayments} 
-          />
+          <div className="flex items-center gap-2">
+            <RecordPaymentDialog
+              tenants={tenants}
+              leases={leases}
+              onPaymentRecorded={fetchPayments}
+            />
+            <TestPaymentButton tenantNameQuery="David" onPaymentRecorded={fetchPayments} />
+          </div>
         </div>
 
         {/* Period Filter & KPI Summary */}

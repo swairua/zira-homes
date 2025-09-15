@@ -60,8 +60,12 @@ if (isProduction) {
     window.addEventListener('error', (event: ErrorEvent) => {
       try {
         const msg = event?.message || (event.error && event.error.message) || '';
-        if (typeof msg === 'string' && msg.includes('Support for defaultProps') && /\b(XAxis|YAxis)\b/.test(msg)) {
-          // swallow this noisy Recharts warning
+        const isRechartsDefaultProps = typeof msg === 'string' && msg.includes('Support for defaultProps') && /\b(XAxis|YAxis)\b/.test(msg);
+        const isResizeObserverNoise = typeof msg === 'string' && (
+          msg.includes('ResizeObserver loop completed with undelivered notifications') ||
+          msg.includes('ResizeObserver loop limit exceeded')
+        );
+        if (isRechartsDefaultProps || isResizeObserverNoise) {
           try { event.preventDefault(); } catch (_e) { /* noop */ }
           return;
         }
@@ -75,7 +79,12 @@ if (isProduction) {
       try {
         const reason = event?.reason;
         const msg = typeof reason === 'string' ? reason : (reason && reason.message) ? reason.message : '';
-        if (typeof msg === 'string' && msg.includes('Support for defaultProps') && /\b(XAxis|YAxis)\b/.test(msg)) {
+        const isRechartsDefaultProps = typeof msg === 'string' && msg.includes('Support for defaultProps') && /\b(XAxis|YAxis)\b/.test(msg);
+        const isResizeObserverNoise = typeof msg === 'string' && (
+          msg.includes('ResizeObserver loop completed with undelivered notifications') ||
+          msg.includes('ResizeObserver loop limit exceeded')
+        );
+        if (isRechartsDefaultProps || isResizeObserverNoise) {
           try { event.preventDefault(); } catch (_e) { /* noop */ }
           return;
         }
