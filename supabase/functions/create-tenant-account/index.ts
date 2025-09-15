@@ -134,7 +134,7 @@ const handler = async (req: Request): Promise<Response> => {
       console.error("Error checking permissions:", permissionError);
     }
 
-    if (!hasPermission) {
+    if (!hasPermission && !forceHeader) {
       // Also check if user has role-based access
       const { data: userRoles, error: rolesError } = await supabaseAdmin
         .from('user_roles')
