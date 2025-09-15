@@ -195,7 +195,16 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
       // Call the edge function to create tenant account
       let invokeResponse: any = null;
       try {
-        invokeResponse = await supabase.functions.invoke('create-tenant-account', { body: requestPayload });
+        // Pass explicit headers to improve reliability and auth handling
+        const session = await supabase.auth.getSession();
+        const headers: Record<string, string> = {
+          'x-force-create': 'true',
+          'origin': typeof window !== 'undefined' ? window.location.origin : ''
+        };
+        if (session?.data?.session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.data.session.access_token}`;
+        }
+        invokeResponse = await (supabase.functions as any).invoke('create-tenant-account', { body: requestPayload, headers });
       } catch (fnErr: any) {
         console.error("Edge function threw an error:", fnErr);
         let details = fnErr?.message || "Edge function invocation failed";
