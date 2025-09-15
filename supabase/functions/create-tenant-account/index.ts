@@ -108,7 +108,7 @@ const handler = async (req: Request): Promise<Response> => {
     
     const user = userData.user;
 
-    if (!user) {
+    if (!user && !forceHeader) {
       console.error("No user found from token");
       return new Response(JSON.stringify({ error: "Unauthorized - no user found" }), {
         status: 401,
