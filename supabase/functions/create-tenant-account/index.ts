@@ -210,14 +210,31 @@ const handler = async (req: Request): Promise<Response> => {
     let userId: string;
     let isNewUser = false;
     let existingAuthUser: any = null;
+    // Try getUserByEmail if available, otherwise fallback to listing users and matching by email
     try {
-      const { data: userLookup, error: lookupError } = await supabaseAdmin.auth.admin.getUserByEmail(tenantData.email);
-      if (lookupError) {
-        console.warn("getUserByEmail failed, proceeding as new user:", lookupError);
+      if (supabaseAdmin.auth && supabaseAdmin.auth.admin && typeof supabaseAdmin.auth.admin.getUserByEmail === 'function') {
+        const { data: userLookup, error: lookupError } = await supabaseAdmin.auth.admin.getUserByEmail(tenantData.email);
+        if (!lookupError && userLookup?.user) {
+          existingAuthUser = userLookup.user;
+        } else if (lookupError) {
+          console.warn("getUserByEmail returned error, will fallback to listUsers:", lookupError);
+        }
       }
-      existingAuthUser = userLookup?.user || null;
     } catch (e) {
-      console.warn("getUserByEmail threw, proceeding as new user:", e);
+      console.warn("getUserByEmail threw, proceeding to fallback:", e);
+    }
+
+    if (!existingAuthUser) {
+      try {
+        const { data: allUsers, error: listErr } = await supabaseAdmin.auth.admin.listUsers();
+        if (!listErr && Array.isArray(allUsers?.users)) {
+          existingAuthUser = allUsers.users.find((u: any) => u.email === tenantData.email) || null;
+        } else if (listErr) {
+          console.warn("listUsers returned error:", listErr);
+        }
+      } catch (e) {
+        console.warn("listUsers threw, treating as new user:", e);
+      }
     }
 
     if (existingAuthUser) {
@@ -345,7 +362,8 @@ const handler = async (req: Request): Promise<Response> => {
       if (tenantError) {
         console.error("Error creating tenant record:", tenantError);
         // Handle unique constraint (e.g., duplicate email/national_id) explicitly
-        if ((tenantError as any).code === '23505') {
+        const code = (tenantError as any)?.code || (tenantError as any)?.status || null;
+        if (code === '23505' || code === '409') {
           return new Response(JSON.stringify({ error: "Tenant already exists", details: tenantError.message }), {
             status: 409,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
