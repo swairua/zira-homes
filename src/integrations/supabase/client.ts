@@ -27,12 +27,24 @@ try {
     } catch (err: any) {
       const body = options?.body ?? {};
 
+      // Prepare headers: prefer caller headers; add user JWT if available; otherwise allow force header for specific functions
+      const extraHeaders: Record<string, string> = { ...(options?.headers || {}) };
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const access = sessionData?.session?.access_token;
+        if (access) {
+          extraHeaders['Authorization'] = `Bearer ${access}`;
+        } else if (body?.force || name === 'create-tenant-account' || name === 'create-user-with-role') {
+          extraHeaders['x-force-create'] = 'true';
+        }
+      } catch {}
+
       // 1) Try server proxy fallback using service role (if configured)
       let proxyFailedDetails: any = null;
       try {
         const res = await fetch(`/api/edge/${name}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...extraHeaders },
           body: JSON.stringify(body)
         });
         const text = await res.text();
@@ -54,7 +66,9 @@ try {
           headers: {
             'Content-Type': 'application/json',
             'apikey': SUPABASE_PUBLISHABLE_KEY,
-            'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+            // Prefer user JWT if available; else use anon
+            'Authorization': extraHeaders['Authorization'] || `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+            ...extraHeaders,
           },
           body: JSON.stringify(body)
         });
