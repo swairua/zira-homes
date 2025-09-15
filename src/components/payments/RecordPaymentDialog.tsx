@@ -47,12 +47,22 @@ const selectedTenantId = watch("tenant_id");
   const filteredInvoices = invoices.filter(invoice => invoice.tenant_id === selectedTenantId && (invoice.outstanding_amount || 0) > 0);
 
   const getErrorMessage = (e: any): string => {
-  if (!e) return "Unknown error";
-  if (typeof e === "string") return e;
-  if (e.message) return e.message;
-  if (e.error?.message) return e.error.message;
-  if (e.details) return e.details;
-  try { return JSON.stringify(e); } catch { return String(e); }
+  try {
+    if (!e) return "Unknown error";
+    if (typeof e === "string") return e;
+    // Supabase/Postgrest
+    if (e.message) return e.message;
+    if (e.error?.message) return e.error.message;
+    if (e.details) return e.details;
+    if (e.code && e.hint) return `${e.code}: ${e.hint}`;
+    // Response-like
+    if (e.status && e.statusText) return `${e.status} ${e.statusText}`;
+    // Fallback stringify without throwing on cycles
+    try { return JSON.stringify(e); } catch {}
+    return String(e);
+  } catch {
+    return String(e);
+  }
 };
 const onSubmit = async (data: PaymentFormData) => {
     try {
@@ -63,36 +73,42 @@ const onSubmit = async (data: PaymentFormData) => {
         status: 'completed',
         invoice_id: data.invoice_id || null
       };
-      
-      const { data: payment, error: paymentError } = await supabase
+
+      // RLS-safe insert: do not require returning row
+      const { error: insertError } = await supabase
         .from("payments")
-        .insert([paymentData])
-        .select()
-        .single();
+        .insert([paymentData]);
 
-      if (paymentError) throw paymentError;
+      if (insertError) {
+        const msg = getErrorMessage(insertError);
+        const isNoReturn = msg.includes("PGRST116") || msg.includes("Results contain 0");
+        if (!isNoReturn) throw insertError;
+      }
 
-      // If invoice is selected, create allocation
-      if (data.invoice_id && payment) {
-        const { error: allocationError } = await supabase
-          .from("payment_allocations" as any)
-          .insert([{
-            payment_id: payment.id,
-            invoice_id: data.invoice_id,
-            amount: Number(data.amount)
-          }]) as { error: any };
-
-        if (allocationError) {
-          console.warn("Payment created but allocation failed:", allocationError);
+      // If invoice is selected, try to create allocation using last payment id if retrievable
+      if (data.invoice_id) {
+        try {
+          const { data: lastPayment } = await supabase
+            .from("payments")
+            .select("id")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .single();
+          if (lastPayment?.id) {
+            const { error: allocationError } = await supabase
+              .from("payment_allocations" as any)
+              .insert([{ payment_id: lastPayment.id, invoice_id: data.invoice_id, amount: Number(data.amount) }]) as { error: any };
+            if (allocationError) console.warn("Payment created but allocation failed:", allocationError);
+          }
+        } catch (e) {
+          console.warn("Skipped allocation fetch/insert:", e);
         }
       }
 
       // Auto-reconcile for the tenant to allocate any remaining amount
       if (data.tenant_id) {
         try {
-          await supabase.rpc('reconcile_unallocated_payments_for_tenant' as any, {
-            p_tenant_id: data.tenant_id
-          }) as { data: any, error: any };
+          await supabase.rpc('reconcile_unallocated_payments_for_tenant' as any, { p_tenant_id: data.tenant_id }) as { data: any, error: any };
         } catch (reconcileError) {
           console.warn("Payment created but reconciliation failed:", reconcileError);
         }
@@ -100,17 +116,18 @@ const onSubmit = async (data: PaymentFormData) => {
 
       toast({
         title: "Success",
-        description: "Payment recorded and allocated successfully",
+        description: "Payment recorded successfully",
       });
 
       reset();
       setDialogOpen(false);
       onPaymentRecorded();
     } catch (error) {
-      console.error("Error recording payment:", error);
+      const msg = getErrorMessage(error);
+      console.error("Error recording payment:", msg, error);
       toast({
         title: "Error",
-        description: getErrorMessage(error),
+        description: msg,
         variant: "destructive",
       });
     }
