@@ -123,10 +123,11 @@ const onSubmit = async (data: PaymentFormData) => {
       setDialogOpen(false);
       onPaymentRecorded();
     } catch (error) {
-      console.error("Error recording payment:", error);
+      const msg = getErrorMessage(error);
+      console.error("Error recording payment:", msg, error);
       toast({
         title: "Error",
-        description: getErrorMessage(error),
+        description: msg,
         variant: "destructive",
       });
     }
