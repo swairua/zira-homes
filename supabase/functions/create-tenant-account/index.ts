@@ -552,7 +552,7 @@ const handler = async (req: Request): Promise<Response> => {
         try {
           console.log(`Sending welcome SMS to: ${tenantData.phone}`);
           const loginUrl = `${req.headers.get("origin")}/auth`;
-          
+
           // Enhanced SMS message template
           const smsMessage = `Welcome to Zira Homes!\n\nYour login details:\nEmail: ${tenantData.email}\nPassword: ${temporaryPassword}\nLogin: ${loginUrl}\n\nPlease change your password after first login.\n\nSupport: +254 757 878 023`;
 
@@ -577,7 +577,7 @@ const handler = async (req: Request): Promise<Response> => {
           if (smsError) {
             console.error("Error sending welcome SMS:", smsError);
             communicationErrors.push(`SMS delivery failed: ${smsError.message}`);
-            
+
             // Retry logic for failed SMS
             console.log("Attempting SMS retry...");
             try {
@@ -599,7 +599,7 @@ const handler = async (req: Request): Promise<Response> => {
                   }
                 }
               });
-              
+
               if (!retryResult.error) {
                 console.log("SMS retry successful");
                 smsSent = true;
@@ -618,6 +618,37 @@ const handler = async (req: Request): Promise<Response> => {
         }
       }
 
+      // Audit: record tenant creation and optional lease
+      try {
+        const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
+        const ua = req.headers.get('user-agent') || undefined;
+
+        await supabaseAdmin.rpc('log_user_audit', {
+          _user_id: userId,
+          _action: 'tenant_created',
+          _entity_id: tenant.id,
+          _entity_type: 'tenant',
+          _performed_by: user?.id || null,
+          _ip_address: ip,
+          _user_agent: ua,
+          _details: {
+            email: tenantData.email,
+            propertyId: propertyId || null,
+            unitId: unitId || null,
+            isNewUser,
+            leaseId: lease?.id || null
+          }
+        });
+
+        await supabaseAdmin.rpc('log_sensitive_data_access', {
+          _table_name: 'tenants',
+          _operation: 'create',
+          _record_id: tenant.id
+        });
+      } catch (auditErr) {
+        console.error('Audit logging failed for tenant creation:', auditErr);
+      }
+
       return new Response(JSON.stringify({
         success: true,
         tenant,
@@ -629,16 +660,16 @@ const handler = async (req: Request): Promise<Response> => {
           smsSent,
           errors: communicationErrors
         },
-        // Include login details with appropriate messaging  
+        // Include login details with appropriate messaging
         loginDetails: {
           email: tenantData.email,
           temporaryPassword: isNewUser ? temporaryPassword : null,
           loginUrl: `${req.headers.get("origin")}/auth`,
-          instructions: isNewUser 
+          instructions: isNewUser
             ? "Share these credentials with the tenant and ask them to change their password on first login."
             : "The tenant can use their existing credentials to log in."
         },
-        message: isNewUser 
+        message: isNewUser
           ? "Tenant account created successfully with new login credentials."
           : "Tenant account created successfully. User already had an account."
       }), {
