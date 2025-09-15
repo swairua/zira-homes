@@ -404,7 +404,7 @@ const handler = async (req: Request): Promise<Response> => {
           monthly_rent: leaseData.monthly_rent,
           lease_start_date: leaseData.lease_start_date,
           lease_end_date: leaseData.lease_end_date,
-          security_deposit: leaseData.security_deposit || leaseData.monthly_rent * 2,
+          security_deposit: (leaseData.security_deposit !== undefined ? leaseData.security_deposit : leaseData.monthly_rent * 2),
           status: 'active'
         };
         
