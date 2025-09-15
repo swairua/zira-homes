@@ -29,8 +29,8 @@ const tenantFormSchema = z.object({
   emergency_contact_name: z.string().optional(),
   emergency_contact_phone: z.string().optional(),
   previous_address: z.string().optional(),
-  property_id: z.string().min(1, "Please select a property"),
-  unit_id: z.string().min(1, "Please select a unit"),
+  property_id: z.string().optional().default(""),
+  unit_id: z.string().optional().default(""),
   lease_start_date: z.string().min(1, "Lease start date is required"),
   lease_end_date: z.string().min(1, "Lease end date is required"),
   monthly_rent: z.coerce.number().min(1, "Monthly rent is required"),
@@ -271,7 +271,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
 
         // Enhanced communication status reporting
         const commStatus = result.communicationStatus;
-        let statusMessage = "✅ Tenant account created successfully!";
+        let statusMessage = "�� Tenant account created successfully!";
         let communicationDetails = [];
         
         if (commStatus?.emailSent && commStatus?.smsSent) {
