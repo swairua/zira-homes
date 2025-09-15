@@ -175,6 +175,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const { tenantData, unitId, propertyId, leaseData }: CreateTenantAccountRequest = requestBody;
+    const forceCreate = forceHeader || Boolean((requestBody as any)?.force);
 
     // Validate required fields
     if (!tenantData || !tenantData.first_name || !tenantData.last_name || !tenantData.email) {
