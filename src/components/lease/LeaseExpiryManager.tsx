@@ -105,6 +105,17 @@ export function LeaseExpiryManager({
         const raw = data as any;
         const reportData = Array.isArray(raw) ? raw[0] : raw;
         leasesData = Array.isArray(reportData?.table) ? reportData.table : [];
+        // Fallback if RLS returned an empty set despite likely data existing
+        if (!Array.isArray(leasesData) || leasesData.length === 0) {
+          const url = '/api/leases/expiring';
+          const res = (selectedTimeframe === 90)
+            ? await fetch(url)
+            : await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ p_start_date: startDate, p_end_date: endDate }) });
+          const payload = await res.json();
+          const raw2 = Array.isArray(payload) ? payload[0] : payload;
+          const table2 = Array.isArray(raw2?.table) ? raw2.table : [];
+          if (Array.isArray(table2) && table2.length > 0) leasesData = table2;
+        }
       } catch (rpcErr) {
         try {
           const url = '/api/leases/expiring';
