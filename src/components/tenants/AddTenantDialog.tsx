@@ -149,17 +149,6 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
       return;
     }
 
-    // Verify backend availability before proceeding
-    const health = await checkBackendReady();
-    if (!health.ok) {
-      toast({
-        title: "Backend not available",
-        description: "Supabase functions are not reachable. Please configure environment or try again later.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setLoading(true);
 
     // Prepare request payload
@@ -192,43 +181,48 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
     console.log("Submitting tenant creation request:", requestPayload);
     
     try {
-      // Call the edge function to create tenant account
+      // First try Edge Function path
       let invokeResponse: any = null;
+      let edgeFailedDetails: string | null = null;
       try {
-        // Pass explicit headers to improve reliability and auth handling
         const session = await supabase.auth.getSession();
         const headers: Record<string, string> = {
           'x-force-create': 'true',
           'origin': typeof window !== 'undefined' ? window.location.origin : ''
         };
-        if (session?.data?.session?.access_token) {
-          headers['Authorization'] = `Bearer ${session.data.session.access_token}`;
-        }
+        if (session?.data?.session?.access_token) headers['Authorization'] = `Bearer ${session.data.session.access_token}`;
         invokeResponse = await (supabase.functions as any).invoke('create-tenant-account', { body: requestPayload, headers });
       } catch (fnErr: any) {
         console.error("Edge function threw an error:", fnErr);
-        let details = fnErr?.message || "Edge function invocation failed";
-        try {
-          if (fnErr?.response && typeof fnErr.response.text === 'function') {
-            const txt = await fnErr.response.text();
-            try {
-              const parsed = JSON.parse(txt);
-              details = parsed.error || parsed.message || parsed.details || JSON.stringify(parsed);
-            } catch (e) {
-              details = txt;
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to extract error response body', e);
-        }
+        edgeFailedDetails = fnErr?.message || "Edge function invocation failed";
+      }
 
-        toast({
-          title: "Tenant Creation Failed",
-          description: details,
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
+      // If direct invoke failed, try direct fetch to function endpoint (anon key)
+      if (!invokeResponse && edgeFailedDetails) {
+        try {
+          const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } = await import("@/integrations/supabase/client");
+          const fnUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/create-tenant-account`;
+          const res = await fetch(fnUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_PUBLISHABLE_KEY,
+              'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+              'x-force-create': 'true',
+              'origin': typeof window !== 'undefined' ? window.location.origin : ''
+            },
+            body: JSON.stringify(requestPayload)
+          });
+          const text = await res.text();
+          let parsed: any; try { parsed = JSON.parse(text); } catch { parsed = text; }
+          if (res.ok) {
+            invokeResponse = { data: parsed };
+          } else {
+            edgeFailedDetails = `Edge function fetch failed: ${res.status} ${res.statusText}`;
+          }
+        } catch (e: any) {
+          edgeFailedDetails = e?.message || String(e);
+        }
       }
 
       const result = invokeResponse?.data ?? invokeResponse;
@@ -254,25 +248,145 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
 
         console.error("Processed error message:", errorMessage + errorDetails);
 
-        toast({
-          title: "Tenant Creation Failed",
-          description: errorMessage + errorDetails,
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
+        // Attempt last-resort fallback: create tenant directly without auth user
+        try {
+          const { data: inserted, error: insertError } = await supabase
+            .from('tenants')
+            .insert({
+              first_name: data.first_name,
+              last_name: data.last_name,
+              email: data.email,
+              phone: data.phone,
+              national_id: data.national_id,
+              employment_status: data.employment_status,
+              profession: data.profession,
+              employer_name: data.employer_name,
+              monthly_income: data.monthly_income != null ? Number(data.monthly_income) : null,
+              emergency_contact_name: data.emergency_contact_name || null,
+              emergency_contact_phone: data.emergency_contact_phone || null,
+              previous_address: data.previous_address || null
+            })
+            .select()
+            .single();
+
+          if (insertError) throw insertError;
+
+          let leaseCreated = null;
+          if (data.unit_id && data.lease_start_date && data.lease_end_date && data.monthly_rent) {
+            const { data: leaseRes, error: leaseErr } = await supabase
+              .from('leases')
+              .insert({
+                tenant_id: inserted.id,
+                unit_id: data.unit_id,
+                monthly_rent: Number(data.monthly_rent),
+                lease_start_date: data.lease_start_date,
+                lease_end_date: data.lease_end_date,
+                security_deposit: data.security_deposit != null ? Number(data.security_deposit) : null,
+                status: 'active'
+              })
+              .select()
+              .single();
+            if (!leaseErr) leaseCreated = leaseRes;
+            await supabase.from('units').update({ status: 'occupied' }).eq('id', data.unit_id);
+          }
+
+          await logActivity('tenant_created_fallback','tenant', inserted.id, {
+            tenant_name: `${data.first_name} ${data.last_name}`,
+            fallback: true,
+            unit_id: data.unit_id || null,
+            lease_id: leaseCreated?.id || null
+          });
+
+          toast({
+            title: 'Tenant Created (Fallback)',
+            description: 'Edge Functions unreachable. Tenant saved without login account. You can resend credentials later after connectivity is restored.',
+            variant: 'default'
+          });
+
+          reset();
+          setOpen(false);
+          onTenantAdded();
+          setLoading(false);
+          return;
+        } catch (fallbackErr: any) {
+          toast({
+            title: 'Tenant Creation Failed',
+            description: errorMessage + errorDetails + ` | Fallback failed: ${fallbackErr?.message || String(fallbackErr)}`,
+            variant: 'destructive',
+          });
+          setLoading(false);
+          return;
+        }
       }
 
       // Check if we have a valid result
       if (!result) {
         console.error("No result data received from edge function");
-        toast({
-          title: "Tenant Creation Failed",
-          description: "No response received from server",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
+        // Try same fallback path as above
+        try {
+          const { data: inserted, error: insertError } = await supabase
+            .from('tenants')
+            .insert({
+              first_name: data.first_name,
+              last_name: data.last_name,
+              email: data.email,
+              phone: data.phone,
+              national_id: data.national_id,
+              employment_status: data.employment_status,
+              profession: data.profession,
+              employer_name: data.employer_name,
+              monthly_income: data.monthly_income != null ? Number(data.monthly_income) : null,
+              emergency_contact_name: data.emergency_contact_name || null,
+              emergency_contact_phone: data.emergency_contact_phone || null,
+              previous_address: data.previous_address || null
+            })
+            .select()
+            .single();
+
+          if (insertError) throw insertError;
+
+          let leaseCreated = null;
+          if (data.unit_id && data.lease_start_date && data.lease_end_date && data.monthly_rent) {
+            const { data: leaseRes } = await supabase
+              .from('leases')
+              .insert({
+                tenant_id: inserted.id,
+                unit_id: data.unit_id,
+                monthly_rent: Number(data.monthly_rent),
+                lease_start_date: data.lease_start_date,
+                lease_end_date: data.lease_end_date,
+                security_deposit: data.security_deposit != null ? Number(data.security_deposit) : null,
+                status: 'active'
+              })
+              .select()
+              .single();
+            leaseCreated = leaseRes;
+            await supabase.from('units').update({ status: 'occupied' }).eq('id', data.unit_id);
+          }
+
+          await logActivity('tenant_created_fallback','tenant', inserted.id, {
+            tenant_name: `${data.first_name} ${data.last_name}`,
+            fallback: true,
+            unit_id: data.unit_id || null,
+            lease_id: leaseCreated?.id || null
+          });
+
+          toast({
+            title: 'Tenant Created (Fallback)',
+            description: 'Edge Functions unreachable. Tenant saved without login account.',
+            variant: 'default'
+          });
+
+          reset();
+          setOpen(false);
+          onTenantAdded();
+          setLoading(false);
+          return;
+        } catch (fbErr: any) {
+          toast({ title: 'Tenant Creation Failed', description: `No response from server and fallback failed: ${fbErr?.message || String(fbErr)}`, variant: 'destructive' });
+          setLoading(false);
+          return;
+        }
       }
 
       console.log("Processing successful response:", result);
