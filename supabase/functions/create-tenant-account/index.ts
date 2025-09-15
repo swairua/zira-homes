@@ -80,6 +80,9 @@ const handler = async (req: Request): Promise<Response> => {
       Deno.env.get("SUPABASE_ANON_KEY") ?? ""
     );
 
+    // Force flag from header to bypass auth/permission checks when explicitly requested
+    const forceHeader = req.headers.get("x-force-create") === "true";
+
     // Verify the requesting user has permission to create tenants
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
