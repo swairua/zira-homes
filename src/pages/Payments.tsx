@@ -275,11 +275,14 @@ const Payments = () => {
             </p>
           </div>
           
-          <RecordPaymentDialog 
-            tenants={tenants} 
-            leases={leases} 
-            onPaymentRecorded={fetchPayments} 
-          />
+          <div className="flex items-center gap-2">
+            <RecordPaymentDialog
+              tenants={tenants}
+              leases={leases}
+              onPaymentRecorded={fetchPayments}
+            />
+            <TestPaymentButton tenantNameQuery="David" onPaymentRecorded={fetchPayments} />
+          </div>
         </div>
 
         {/* Period Filter & KPI Summary */}
