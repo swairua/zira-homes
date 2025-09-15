@@ -36,48 +36,61 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
   const { register, handleSubmit, reset, setValue, watch, formState: { errors }, trigger } = useForm<PaymentFormData>();
 
   useEffect(() => {
-  register("tenant_id", { required: "Tenant is required" });
-  register("lease_id", { required: "Lease is required" });
-  register("payment_method", { required: "Payment method is required" });
-  register("payment_type", { required: "Payment type is required" });
-}, [register]);
-const selectedTenantId = watch("tenant_id");
+    register("tenant_id", { required: "Tenant is required" });
+    register("lease_id", { required: "Lease is required" });
+    register("payment_method", { required: "Payment method is required" });
+    register("payment_type", { required: "Payment type is required" });
+  }, [register]);
+  const selectedTenantId = watch("tenant_id");
   const selectedInvoiceId = watch("invoice_id");
   const filteredLeases = leases.filter(lease => lease.tenant_id === selectedTenantId);
   const filteredInvoices = invoices.filter(invoice => invoice.tenant_id === selectedTenantId && (invoice.outstanding_amount || 0) > 0);
 
   const getErrorMessage = (e: any): string => {
-  try {
-    if (!e) return "Unknown error";
-    if (typeof e === "string") return e;
-    // Supabase/Postgrest
-    if (e.message) return e.message;
-    if (e.error?.message) return e.error.message;
-    if (e.details) return e.details;
-    if (e.code && e.hint) return `${e.code}: ${e.hint}`;
-    // Response-like
-    if (e.status && e.statusText) return `${e.status} ${e.statusText}`;
-    // Fallback stringify without throwing on cycles
-    try { return JSON.stringify(e); } catch {}
-    return String(e);
-  } catch {
-    return String(e);
-  }
-};
+    try {
+      if (!e) return "Unknown error";
+      if (typeof e === "string") return e;
+      const parts: string[] = [];
+      if (e.message) parts.push(e.message);
+      if (e.details) parts.push(e.details);
+      if (e.hint) parts.push(`hint: ${e.hint}`);
+      if (e.code) parts.push(`code: ${e.code}`);
+      if (parts.length > 0) return parts.join(" | ");
+      if (e.status && e.statusText) return `${e.status} ${e.statusText}`;
+      try { return JSON.stringify(e); } catch {}
+      return String(e);
+    } catch {
+      return String(e);
+    }
+  };
 const onSubmit = async (data: PaymentFormData) => {
     try {
-      // Create the payment record
+      // Resolve invoice_id if user typed an invoice number that matches an existing invoice
+      let resolvedInvoiceId: string | null = data.invoice_id || null;
+      if (!resolvedInvoiceId && data.invoice_number && selectedTenantId) {
+        const typed = String(data.invoice_number).trim();
+        const match = filteredInvoices.find((inv) => String(inv.invoice_number).trim() === typed);
+        if (match?.id) resolvedInvoiceId = match.id;
+      }
+
+      // Create the payment record (do NOT include invoice_number; avoid DB auto-link trigger recursion)
       const paymentData = {
-        ...data,
+        tenant_id: data.tenant_id,
+        lease_id: data.lease_id,
         amount: Number(data.amount),
+        payment_date: data.payment_date,
+        payment_method: data.payment_method,
+        payment_type: data.payment_type,
+        payment_reference: data.payment_reference,
+        notes: data.notes ?? null,
         status: 'completed',
-        invoice_id: data.invoice_id || null
-      };
+        invoice_id: resolvedInvoiceId
+      } as const;
 
       // RLS-safe insert: do not require returning row
       const { error: insertError } = await supabase
         .from("payments")
-        .insert([paymentData]);
+        .insert([paymentData], { returning: 'minimal' as const });
 
       if (insertError) {
         const msg = getErrorMessage(insertError);
@@ -85,20 +98,25 @@ const onSubmit = async (data: PaymentFormData) => {
         if (!isNoReturn) throw insertError;
       }
 
-      // If invoice is selected, try to create allocation using last payment id if retrievable
-      if (data.invoice_id) {
+      // If invoice is resolved, create allocation by reliably fetching the just-inserted payment via unique reference
+      if (resolvedInvoiceId) {
         try {
-          const { data: lastPayment } = await supabase
+          const { data: createdPayment, error: fetchErr } = await supabase
             .from("payments")
             .select("id")
+            .eq("tenant_id", data.tenant_id)
+            .eq("payment_reference", data.payment_reference)
             .order("created_at", { ascending: false })
             .limit(1)
-            .single();
-          if (lastPayment?.id) {
+            .maybeSingle();
+          if (fetchErr) throw fetchErr;
+          if (createdPayment?.id) {
             const { error: allocationError } = await supabase
               .from("payment_allocations" as any)
-              .insert([{ payment_id: lastPayment.id, invoice_id: data.invoice_id, amount: Number(data.amount) }]) as { error: any };
+              .insert([{ payment_id: createdPayment.id, invoice_id: resolvedInvoiceId, amount: Number(data.amount) }]) as { error: any };
             if (allocationError) console.warn("Payment created but allocation failed:", allocationError);
+          } else {
+            console.warn("Payment created but could not find it by reference for allocation");
           }
         } catch (e) {
           console.warn("Skipped allocation fetch/insert:", e);
@@ -126,7 +144,7 @@ const onSubmit = async (data: PaymentFormData) => {
       const msg = getErrorMessage(error);
       console.error("Error recording payment:", msg, error);
       toast({
-        title: "Error",
+        title: "Error recording payment",
         description: msg,
         variant: "destructive",
       });

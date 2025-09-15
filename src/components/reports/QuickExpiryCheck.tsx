@@ -63,8 +63,51 @@ export function QuickExpiryCheck({ onViewDetails, hideWhenEmpty = false }: Quick
         if (error) throw error;
 
         // Safely parse the JSON response
-        const reportData = data as any;
-        const rawLeases = Array.isArray(reportData?.table) ? reportData.table : [];
+        let reportData = data as any;
+        let rawLeases = Array.isArray(reportData?.table) ? reportData.table : [];
+
+        // Fallback via client-side queries if RPC returned empty due to RLS
+        if (!Array.isArray(rawLeases) || rawLeases.length === 0) {
+          const isAdmin = await hasRole('Admin');
+          if (isAdmin) {
+            const { data, error } = await (supabase as any)
+              .from('leases')
+              .select('lease_end_date, tenants(first_name,last_name), units(unit_number, properties(name))')
+              .gte('lease_end_date', startDate)
+              .lte('lease_end_date', endDate);
+            if (!error && Array.isArray(data)) {
+              rawLeases = data.map((l: any) => ({
+                property_name: l.units?.properties?.name,
+                unit_number: l.units?.unit_number,
+                tenant_name: `${l.tenants?.first_name || ''} ${l.tenants?.last_name || ''}`.trim(),
+                lease_end_date: l.lease_end_date
+              }));
+            }
+          } else {
+            const { data: leasesRows } = await (supabase as any)
+              .from('leases')
+              .select('tenant_id, unit_id, lease_end_date')
+              .gte('lease_end_date', startDate)
+              .lte('lease_end_date', endDate);
+            const { data: units } = await (supabase as any).from('units').select('id, unit_number, property_id');
+            const { data: props } = await (supabase as any).from('properties').select('id, name');
+            const { data: tenants } = await (supabase as any).from('tenants').select('id, first_name, last_name');
+            const unitMap = new Map((units || []).map((u: any) => [u.id, u]));
+            const propMap = new Map((props || []).map((p: any) => [p.id, p]));
+            const tenantMap = new Map((tenants || []).map((t: any) => [t.id, t]));
+            rawLeases = (leasesRows || []).map((l: any) => {
+              const u = unitMap.get(l.unit_id);
+              const p = u ? propMap.get(u.property_id) : null;
+              const t = tenantMap.get(l.tenant_id);
+              return {
+                property_name: p?.name,
+                unit_number: u?.unit_number,
+                tenant_name: `${t?.first_name || ''} ${t?.last_name || ''}`.trim(),
+                lease_end_date: l.lease_end_date
+              };
+            });
+          }
+        }
 
         const today = new Date();
         const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
