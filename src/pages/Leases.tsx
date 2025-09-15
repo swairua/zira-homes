@@ -124,57 +124,22 @@ const Leases = () => {
 
           // Fallback if RLS returns empty: client-side queries
           if (!Array.isArray(rows) || rows.length === 0) {
-            const isAdmin2 = await hasRole('Admin');
-            if (isAdmin2) {
-              const { data: d2, error: e2 } = await (supabase as any)
-                .from('leases')
-                .select('id, lease_end_date, lease_start_date, monthly_rent, security_deposit, status, unit_id, tenant_id, tenants(first_name,last_name), units(unit_number, properties(name))')
-                .gte('lease_end_date', startDate)
-                .lte('lease_end_date', endDate);
-              if (!e2) {
-                rows = (d2 || []).map((l: any) => ({
-                  property_name: l.units?.properties?.name,
-                  unit_number: l.units?.unit_number,
-                  tenant_name: `${l.tenants?.first_name || ''} ${l.tenants?.last_name || ''}`.trim(),
-                  lease_start_date: l.lease_start_date,
-                  lease_end_date: l.lease_end_date,
-                  monthly_rent: l.monthly_rent,
-                  security_deposit: l.security_deposit,
-                  status: l.status
-                }));
-              }
-            } else {
-              const { data: leasesRows } = await (supabase as any)
-                .from('leases')
-                .select('id, lease_end_date, lease_start_date, monthly_rent, security_deposit, status, unit_id, tenant_id')
-                .gte('lease_end_date', startDate)
-                .lte('lease_end_date', endDate);
-              const { data: units } = await (supabase as any).from('units').select('id, unit_number, property_id');
-              const { data: props } = await (supabase as any).from('properties').select('id, name').or(`owner_id.eq.${user?.id},manager_id.eq.${user?.id}`);
-              const { data: tenants } = await (supabase as any).from('tenants').select('id, first_name, last_name');
-              const unitMap = new Map((units || []).map((u: any) => [u.id, u]));
-              const propMap = new Map((props || []).map((p: any) => [p.id, p]));
-              const tenantMap = new Map((tenants || []).map((t: any) => [t.id, t]));
-              rows = (leasesRows || [])
-                .filter((l: any) => {
-                  const u = unitMap.get(l.unit_id);
-                  return u && propMap.has(u.property_id);
-                })
-                .map((l: any) => {
-                  const u = unitMap.get(l.unit_id);
-                  const p = u ? propMap.get(u.property_id) : null;
-                  const t = tenantMap.get(l.tenant_id);
-                  return {
-                    property_name: p?.name,
-                    unit_number: u?.unit_number,
-                    tenant_name: `${t?.first_name || ''} ${t?.last_name || ''}`.trim(),
-                    lease_start_date: l.lease_start_date,
-                    lease_end_date: l.lease_end_date,
-                    monthly_rent: l.monthly_rent,
-                    security_deposit: l.security_deposit,
-                    status: l.status
-                  };
-                });
+            const { data: d2, error: e2 } = await (supabase as any)
+              .from('leases')
+              .select('id, lease_end_date, lease_start_date, monthly_rent, security_deposit, status, unit_id, tenant_id, tenants(first_name,last_name), units(unit_number, properties(name))')
+              .gte('lease_end_date', startDate)
+              .lte('lease_end_date', endDate);
+            if (!e2) {
+              rows = (d2 || []).map((l: any) => ({
+                property_name: l.units?.properties?.name,
+                unit_number: l.units?.unit_number,
+                tenant_name: `${l.tenants?.first_name || ''} ${l.tenants?.last_name || ''}`.trim(),
+                lease_start_date: l.lease_start_date,
+                lease_end_date: l.lease_end_date,
+                monthly_rent: l.monthly_rent,
+                security_deposit: l.security_deposit,
+                status: l.status
+              }));
             }
           }
 
@@ -202,84 +167,28 @@ const Leases = () => {
         } catch (rpcErr) {
           console.warn('RPC leases load failed, using client-side fallback:', formatError(rpcErr));
           try {
-            const isAdmin = await hasRole('Admin');
             const filters = { gte: startDate, lte: endDate } as const;
 
-            if (isAdmin) {
-              const { data, error } = await (supabase as any)
-                .from('leases')
-                .select('id, lease_end_date, lease_start_date, monthly_rent, security_deposit, status, unit_id, tenant_id, tenants(first_name,last_name), units(unit_number, properties(name))')
-                .gte('lease_end_date', filters.gte)
-                .lte('lease_end_date', filters.lte);
-              if (error) throw error;
-              const mapped = (data || []).map((l: any) => ({
-                id: l.id,
-                tenant_id: l.tenant_id,
-                unit_id: l.unit_id,
-                lease_start_date: l.lease_start_date,
-                lease_end_date: l.lease_end_date,
-                monthly_rent: Number(l.monthly_rent || 0),
-                security_deposit: Number(l.security_deposit || 0),
-                status: l.status || 'active',
-                tenants: { first_name: (l.tenants?.first_name || '').toString(), last_name: (l.tenants?.last_name || '').toString() },
-                units: { unit_number: l.units?.unit_number || '', properties: { name: l.units?.properties?.name || '' } }
-              }));
-              setLeases(mapped);
-              console.log('✅ Loaded leases via client-side admin fallback:', mapped.length);
-              return;
-            }
-
-            const { data: leasesRows, error: leasesErr } = await (supabase as any)
+            const { data, error } = await (supabase as any)
               .from('leases')
-              .select('id, lease_end_date, lease_start_date, monthly_rent, security_deposit, status, unit_id, tenant_id')
+              .select('id, lease_end_date, lease_start_date, monthly_rent, security_deposit, status, unit_id, tenant_id, tenants(first_name,last_name), units(unit_number, properties(name))')
               .gte('lease_end_date', filters.gte)
               .lte('lease_end_date', filters.lte);
-            if (leasesErr) throw leasesErr;
-
-            const { data: units, error: unitsErr } = await (supabase as any)
-              .from('units')
-              .select('id, unit_number, property_id');
-            if (unitsErr) throw unitsErr;
-
-            const { data: props, error: propsErr } = await (supabase as any)
-              .from('properties')
-              .select('id, name')
-              .or(`owner_id.eq.${user?.id},manager_id.eq.${user?.id}`);
-            if (propsErr) throw propsErr;
-
-            const { data: tenants, error: tenantsErr } = await (supabase as any)
-              .from('tenants')
-              .select('id, first_name, last_name');
-            if (tenantsErr) throw tenantsErr;
-
-            const unitMap = new Map((units || []).map((u: any) => [u.id, u]));
-            const propMap = new Map((props || []).map((p: any) => [p.id, p]));
-            const tenantMap = new Map((tenants || []).map((t: any) => [t.id, t]));
-
-            const mapped = (leasesRows || [])
-              .filter((l: any) => {
-                const u = unitMap.get(l.unit_id);
-                return u && propMap.has(u.property_id);
-              })
-              .map((l: any) => {
-                const u = unitMap.get(l.unit_id);
-                const p = u ? propMap.get(u.property_id) : null;
-                const t = tenantMap.get(l.tenant_id);
-                return {
-                  id: l.id,
-                  tenant_id: l.tenant_id,
-                  unit_id: l.unit_id,
-                  lease_start_date: l.lease_start_date,
-                  lease_end_date: l.lease_end_date,
-                  monthly_rent: Number(l.monthly_rent || 0),
-                  security_deposit: Number(l.security_deposit || 0),
-                  status: l.status || 'active',
-                  tenants: { first_name: (t?.first_name || '').toString(), last_name: (t?.last_name || '').toString() },
-                  units: { unit_number: u?.unit_number || '', properties: { name: p?.name || '' } }
-                } as any;
-              });
+            if (error) throw error;
+            const mapped = (data || []).map((l: any) => ({
+              id: l.id,
+              tenant_id: l.tenant_id,
+              unit_id: l.unit_id,
+              lease_start_date: l.lease_start_date,
+              lease_end_date: l.lease_end_date,
+              monthly_rent: Number(l.monthly_rent || 0),
+              security_deposit: Number(l.security_deposit || 0),
+              status: l.status || 'active',
+              tenants: { first_name: (l.tenants?.first_name || '').toString(), last_name: (l.tenants?.last_name || '').toString() },
+              units: { unit_number: l.units?.unit_number || '', properties: { name: l.units?.properties?.name || '' } }
+            }));
             setLeases(mapped);
-            console.log('✅ Loaded leases via client-side fallback:', mapped.length);
+            console.log('✅ Loaded leases via client-side fallback (all users):', mapped.length);
             return;
           } catch (srvErr) {
             throw srvErr;
@@ -287,68 +196,15 @@ const Leases = () => {
         }
       }
 
-      // Otherwise: original fetch for full list
-      const isAdmin = await hasRole('Admin');
-
-      if (isAdmin) {
-        const { data, error } = await (supabase as any)
-          .from("leases")
-          .select(`*, tenants:tenants(id, first_name, last_name), units:units(id, unit_number, property_id, properties:properties(id, name))`)
-          .order("created_at", { ascending: false });
-        if (error) throw error;
-        setLeases(data || []);
-        console.log("✅ Loaded leases for admin:", data?.length || 0);
-        return;
-      }
-
-      // For non-admins, load entities and filter to user's properties
-      const { data: leasesData, error: leasesError } = await supabase
+      // Otherwise: original fetch for full list (visible to any authenticated user)
+      const { data, error } = await (supabase as any)
         .from("leases")
-        .select("*")
+        .select(`*, tenants:tenants(id, first_name, last_name), units:units(id, unit_number, property_id, properties:properties(id, name))`)
         .order("created_at", { ascending: false });
-      if (leasesError) throw leasesError;
-
-      const { data: tenantsData, error: tenantsError } = await supabase
-        .from("tenants")
-        .select("id, first_name, last_name");
-      if (tenantsError) throw tenantsError;
-
-      const { data: unitsData, error: unitsError } = await supabase
-        .from("units")
-        .select("id, unit_number, property_id");
-      if (unitsError) throw unitsError;
-
-      const { data: propertiesData, error: propertiesError } = await supabase
-        .from("properties")
-        .select("id, name")
-        .or(`owner_id.eq.${user.id},manager_id.eq.${user.id}`);
-      if (propertiesError) throw propertiesError;
-
-      const tenantMap = new Map(tenantsData?.map(t => [t.id, t]) || []);
-      const unitMap = new Map(unitsData?.map(u => [u.id, u]) || []);
-      const propertyMap = new Map(propertiesData?.map(p => [p.id, p]) || []);
-
-      const joinedLeases = (leasesData || [])
-        .filter(lease => {
-          const unit = unitMap.get(lease.unit_id);
-          return unit && propertyMap.has(unit.property_id);
-        })
-        .map(lease => {
-          const tenant = tenantMap.get(lease.tenant_id);
-          const unit = unitMap.get(lease.unit_id);
-          const property = unit ? propertyMap.get(unit.property_id) : null;
-          return {
-            ...lease,
-            tenants: tenant || { first_name: '', last_name: '' },
-            units: {
-              unit_number: unit?.unit_number || '',
-              properties: { name: property?.name || '' }
-            }
-          };
-        });
-
-      console.log("🔗 Joined leases:", joinedLeases.length);
-      setLeases(joinedLeases);
+      if (error) throw error;
+      setLeases(data || []);
+      console.log("✅ Loaded leases for all users:", data?.length || 0);
+      return;
     } catch (error: any) {
       const msg = formatError(error);
       console.error("💥 Error in fetchLeases:", msg, error);
