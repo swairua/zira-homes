@@ -73,7 +73,37 @@ export async function createSampleTenantNoLease() {
       return data;
     } catch (fetchErr: any) {
       console.error('Direct fetch to edge function also failed:', fetchErr);
-      throw new Error(fetchErr?.message || String(fetchErr) || 'Failed to send a request to the Edge Function');
+
+      // Last-resort fallback: insert tenant directly (no auth user, no lease)
+      try {
+        const { data: inserted, error: insertError } = await supabase
+          .from('tenants')
+          .insert({
+            first_name: tenantData.first_name,
+            last_name: tenantData.last_name,
+            email: tenantData.email,
+            phone: tenantData.phone,
+            national_id: tenantData.national_id,
+            employment_status: tenantData.employment_status,
+            profession: tenantData.profession,
+            employer_name: tenantData.employer_name,
+            monthly_income: tenantData.monthly_income,
+            emergency_contact_name: tenantData.emergency_contact_name,
+            emergency_contact_phone: tenantData.emergency_contact_phone,
+            previous_address: tenantData.previous_address
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          throw insertError;
+        }
+
+        return { success: true, tenant: inserted, isNewUser: false, communicationStatus: { emailSent: false, smsSent: false, errors: [ 'Created without auth account (fallback)' ] } } as any;
+      } catch (dbErr: any) {
+        const msg = dbErr?.message || String(dbErr);
+        throw new Error(`Failed to send a request to the Edge Function; fallback DB insert also failed: ${msg}`);
+      }
     }
   }
 }
