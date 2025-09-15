@@ -1,5 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
+import { supabase } from "@/integrations/supabase/client";
+
 export async function createSampleTenantNoLease() {
   // Generate a mostly-unique email to avoid conflicts across retries
   const ts = Date.now();
