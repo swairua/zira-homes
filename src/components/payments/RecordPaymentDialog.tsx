@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -33,14 +34,28 @@ interface RecordPaymentDialogProps {
 export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentRecorded }: RecordPaymentDialogProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
-  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<PaymentFormData>();
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors }, trigger } = useForm<PaymentFormData>();
 
-  const selectedTenantId = watch("tenant_id");
+  useEffect(() => {
+  register("tenant_id", { required: "Tenant is required" });
+  register("lease_id", { required: "Lease is required" });
+  register("payment_method", { required: "Payment method is required" });
+  register("payment_type", { required: "Payment type is required" });
+}, [register]);
+const selectedTenantId = watch("tenant_id");
   const selectedInvoiceId = watch("invoice_id");
   const filteredLeases = leases.filter(lease => lease.tenant_id === selectedTenantId);
   const filteredInvoices = invoices.filter(invoice => invoice.tenant_id === selectedTenantId && (invoice.outstanding_amount || 0) > 0);
 
-  const onSubmit = async (data: PaymentFormData) => {
+  const getErrorMessage = (e: any): string => {
+  if (!e) return "Unknown error";
+  if (typeof e === "string") return e;
+  if (e.message) return e.message;
+  if (e.error?.message) return e.error.message;
+  if (e.details) return e.details;
+  try { return JSON.stringify(e); } catch { return String(e); }
+};
+const onSubmit = async (data: PaymentFormData) => {
     try {
       // Create the payment record
       const paymentData = {
@@ -96,7 +111,7 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
       console.error("Error recording payment:", error);
       toast({
         title: "Error",
-        description: "Failed to record payment",
+        description: getErrorMessage(error),
         variant: "destructive",
       });
     }
@@ -117,7 +132,7 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
             <Label htmlFor="tenant_id">Tenant</Label>
-            <Select onValueChange={(value) => setValue("tenant_id", value)}>
+            <Select onValueChange={(value) => { setValue("tenant_id", value); trigger("tenant_id"); }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select tenant" />
               </SelectTrigger>
@@ -134,7 +149,7 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
 
           <div>
             <Label htmlFor="lease_id">Lease</Label>
-            <Select onValueChange={(value) => setValue("lease_id", value)}>
+            <Select onValueChange={(value) => { setValue("lease_id", value); trigger("lease_id"); }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select lease" />
               </SelectTrigger>
@@ -171,7 +186,7 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
               <Input
                 id="amount"
                 type="number"
-                {...register("amount", { required: "Amount is required" })}
+                {...register("amount", { required: "Amount is required", min: { value: 0.01, message: "Amount must be greater than 0" } })}
                 placeholder="25000"
               />
               {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
@@ -190,7 +205,7 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="payment_method">Payment Method</Label>
-              <Select onValueChange={(value) => setValue("payment_method", value)}>
+              <Select onValueChange={(value) => { setValue("payment_method", value); trigger("payment_method"); }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select method" />
                 </SelectTrigger>
@@ -204,7 +219,7 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
             </div>
             <div>
               <Label htmlFor="payment_type">Payment Type</Label>
-              <Select onValueChange={(value) => setValue("payment_type", value)}>
+              <Select onValueChange={(value) => { setValue("payment_type", value); trigger("payment_type"); }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
