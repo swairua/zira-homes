@@ -247,8 +247,16 @@ const Leases = () => {
           .eq('status', 'vacant');
         if (unitsErr) throw unitsErr;
         setTenants(tenantsData || []);
-        setUnits(allUnits || []);
-        return;
+      setUnits(allUnits || []);
+      try {
+        await supabase.rpc('log_sensitive_data_access', {
+          _table_name: 'tenants',
+          _operation: 'list'
+        });
+      } catch (e) {
+        console.warn('Audit log (data access) failed', e);
+      }
+      return;
       }
 
       // Non-admin: only user's properties
