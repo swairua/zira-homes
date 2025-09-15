@@ -171,7 +171,8 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
         lease_end_date: data.lease_end_date,
         monthly_rent: data.monthly_rent ? parseFloat(data.monthly_rent.toString()) : undefined,
         security_deposit: data.security_deposit ? parseFloat(data.security_deposit.toString()) : undefined
-      } : undefined
+      } : undefined,
+      force: true
     };
     
     console.log("Submitting tenant creation request:", requestPayload);
