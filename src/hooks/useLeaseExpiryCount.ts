@@ -21,7 +21,7 @@ export function useLeaseExpiryCount() {
           .maybeSingle();
 
         if (rpcError) {
-          // Log RPC error and attempt server endpoint fallback
+          // Log RPC error and attempt client-side fallback
           const formatted = (() => {
             try {
               if (!rpcError) return 'Unknown RPC error';
@@ -37,31 +37,29 @@ export function useLeaseExpiryCount() {
             }
           })();
 
-          console.warn('RPC failed, attempting server endpoint fallback:', formatted);
+          console.warn('RPC failed, attempting client-side fallback:', formatted);
           console.debug('Full RPC error object:', rpcError);
 
-          // Fallback to server endpoint which uses service_role internally
           try {
-            const url = '/api/leases/expiring';
-            const res = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
-            const payload = await res.json();
-
-            // normalize payload: either { kpis: { expiring_leases: N } } or [{ expiring_leases: N }]
-            let count = 0;
-            if (payload == null) {
-              count = 0;
-            } else if (Array.isArray(payload) && payload.length > 0 && payload[0].expiring_leases != null) {
-              count = Number(payload[0].expiring_leases) || 0;
-            } else if (payload.kpis && payload.kpis.expiring_leases != null) {
-              count = Number(payload.kpis.expiring_leases) || 0;
-            } else if (payload.expiring_leases != null) {
-              count = Number(payload.expiring_leases) || 0;
-            }
-
+            const startDate = new Date().toISOString().slice(0, 10);
+            const endDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+            const { data, error } = await (supabase as any)
+              .from('leases')
+              .select('lease_end_date')
+              .gte('lease_end_date', startDate)
+              .lte('lease_end_date', endDate);
+            if (error) throw error;
+            const today = new Date();
+            const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const count = (data || []).filter((l: any) => {
+              const end = l?.lease_end_date ? new Date(l.lease_end_date) : null;
+              if (!end) return false;
+              const days = Math.max(0, Math.ceil((end.getTime() - startOfToday.getTime()) / (1000 * 60 * 60 * 24)));
+              return days >= 0 && days <= 90;
+            }).length;
             setExpiringCount(count);
           } catch (fallbackErr) {
-            console.error('Fallback server endpoint failed:', fallbackErr);
-            console.debug('Full fallback error object:', fallbackErr);
+            console.error('Client-side fallback failed:', fallbackErr);
             setExpiringCount(0);
           }
         } else {
