@@ -16,7 +16,7 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
   }
 });
 
-// Enhance functions.invoke with server fallback and detailed error reporting
+// Enhance functions.invoke with multi-fallback and detailed error reporting
 try {
   const originalInvoke = (supabase.functions as any).invoke.bind(supabase.functions);
   (supabase.functions as any).invoke = async (name: string, options?: any) => {
@@ -25,9 +25,11 @@ try {
       if (result?.error) throw result.error;
       return result;
     } catch (err: any) {
-      // Try server proxy fallback using service role
+      const body = options?.body ?? {};
+
+      // 1) Try server proxy fallback using service role (if configured)
+      let proxyFailedDetails: any = null;
       try {
-        const body = options?.body ?? {};
         const res = await fetch(`/api/edge/${name}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -35,16 +37,41 @@ try {
         });
         const text = await res.text();
         let data: any; try { data = JSON.parse(text); } catch { data = text; }
-        if (!res.ok) {
-          return { data: null as any, error: { message: 'Edge function proxy error', status: res.status, details: data } };
+        if (res.ok) {
+          return { data, error: null } as any;
+        } else {
+          proxyFailedDetails = { status: res.status, details: data };
         }
-        return { data, error: null } as any;
       } catch (fallbackErr: any) {
+        proxyFailedDetails = fallbackErr?.message || String(fallbackErr);
+      }
+
+      // 2) Direct call to Supabase Edge Function with publishable key
+      try {
+        const fnUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/${name}`;
+        const res = await fetch(fnUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_PUBLISHABLE_KEY,
+            'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify(body)
+        });
+        const text = await res.text();
+        let data: any; try { data = JSON.parse(text); } catch { data = text; }
+        if (res.ok) {
+          return { data, error: null } as any;
+        } else {
+          return { data: null as any, error: { message: 'Edge function fetch failed', status: res.status, details: data, proxyFailedDetails } };
+        }
+      } catch (directErr: any) {
         const parts: string[] = [];
-        const e = fallbackErr || err;
+        const e = directErr || err;
         if (e?.message) parts.push(e.message);
         if (e?.details) parts.push(e.details);
         if (e?.hint) parts.push(`hint: ${e.hint}`);
+        if (proxyFailedDetails) parts.push(`proxy: ${typeof proxyFailedDetails === 'string' ? proxyFailedDetails : JSON.stringify(proxyFailedDetails)}`);
         return { data: null as any, error: { message: parts.join(' | ') || String(e) } };
       }
     }
