@@ -156,7 +156,7 @@ const onSubmit = async (data: PaymentFormData) => {
               <SelectContent>
                 {filteredLeases.map(lease => (
                   <SelectItem key={lease.id} value={lease.id}>
-                    {lease.units.properties.name} - Unit {lease.units.unit_number} ({formatAmount(lease.monthly_rent)}/month)
+                    {lease.units?.properties?.name} - Unit {lease.units?.unit_number} ({formatAmount(lease.monthly_rent)}/month)
                   </SelectItem>
                 ))}
               </SelectContent>
