@@ -93,8 +93,10 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
+    const token = authHeader ? authHeader.replace("Bearer ", "") : "";
+    const { data: userData, error: userError } = token
+      ? await supabaseClient.auth.getUser(token)
+      : ({ data: { user: null }, error: null } as any);
     
     if (userError) {
       console.error("Error getting user:", userError);
