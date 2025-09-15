@@ -116,7 +116,7 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    console.log("Authenticated user:", user.id, user.email);
+    if (user) { console.log("Authenticated user:", user.id, user.email); } else { console.log("Force create enabled: bypassing auth checks"); }
 
     // Check if user has permission to create tenants
     const { data: hasPermission, error: permissionError } = await supabaseAdmin.rpc('has_permission', {
