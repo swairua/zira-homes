@@ -14,6 +14,7 @@ import { Plus } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { checkBackendReady } from "@/utils/backendHealth";
 
 const tenantFormSchema = z.object({
   first_name: z.string().min(1, "First name is required"),
@@ -134,8 +135,19 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
       return;
     }
 
+    // Verify backend availability before proceeding
+    const health = await checkBackendReady();
+    if (!health.ok) {
+      toast({
+        title: "Backend not available",
+        description: "Supabase functions are not reachable. Please configure environment or try again later.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
-    
+
     // Prepare request payload
     const requestPayload = {
       tenantData: {
