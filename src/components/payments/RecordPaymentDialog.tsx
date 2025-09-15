@@ -65,13 +65,27 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
   };
 const onSubmit = async (data: PaymentFormData) => {
     try {
-      // Create the payment record
+      // Resolve invoice_id if user typed an invoice number that matches an existing invoice
+      let resolvedInvoiceId: string | null = data.invoice_id || null;
+      if (!resolvedInvoiceId && data.invoice_number && selectedTenantId) {
+        const typed = String(data.invoice_number).trim();
+        const match = filteredInvoices.find((inv) => String(inv.invoice_number).trim() === typed);
+        if (match?.id) resolvedInvoiceId = match.id;
+      }
+
+      // Create the payment record (do NOT include invoice_number; avoid DB auto-link trigger recursion)
       const paymentData = {
-        ...data,
+        tenant_id: data.tenant_id,
+        lease_id: data.lease_id,
         amount: Number(data.amount),
+        payment_date: data.payment_date,
+        payment_method: data.payment_method,
+        payment_type: data.payment_type,
+        payment_reference: data.payment_reference,
+        notes: data.notes ?? null,
         status: 'completed',
-        invoice_id: data.invoice_id || null
-      };
+        invoice_id: resolvedInvoiceId
+      } as const;
 
       // RLS-safe insert: do not require returning row
       const { error: insertError } = await supabase
@@ -84,8 +98,8 @@ const onSubmit = async (data: PaymentFormData) => {
         if (!isNoReturn) throw insertError;
       }
 
-      // If invoice is selected, create allocation by reliably fetching the just-inserted payment via unique reference
-      if (data.invoice_id) {
+      // If invoice is resolved, create allocation by reliably fetching the just-inserted payment via unique reference
+      if (resolvedInvoiceId) {
         try {
           const { data: createdPayment, error: fetchErr } = await supabase
             .from("payments")
@@ -99,7 +113,7 @@ const onSubmit = async (data: PaymentFormData) => {
           if (createdPayment?.id) {
             const { error: allocationError } = await supabase
               .from("payment_allocations" as any)
-              .insert([{ payment_id: createdPayment.id, invoice_id: data.invoice_id, amount: Number(data.amount) }]) as { error: any };
+              .insert([{ payment_id: createdPayment.id, invoice_id: resolvedInvoiceId, amount: Number(data.amount) }]) as { error: any };
             if (allocationError) console.warn("Payment created but allocation failed:", allocationError);
           } else {
             console.warn("Payment created but could not find it by reference for allocation");
