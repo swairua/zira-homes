@@ -17,7 +17,8 @@ function App() {
   React.useEffect(() => {
     const key = "autoTenantCreated_v1";
     const already = typeof window !== 'undefined' && window.localStorage?.getItem(key);
-    if (already) return;
+    const autoSeed = import.meta.env.VITE_AUTO_SEED_SAMPLE === 'true';
+    if (already || !autoSeed) return;
 
     createSampleTenantNoLease()
       .then((data) => {

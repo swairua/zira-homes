@@ -14,6 +14,7 @@ import { Plus } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { checkBackendReady } from "@/utils/backendHealth";
 
 const tenantFormSchema = z.object({
   first_name: z.string().min(1, "First name is required"),
@@ -28,8 +29,8 @@ const tenantFormSchema = z.object({
   emergency_contact_name: z.string().optional(),
   emergency_contact_phone: z.string().optional(),
   previous_address: z.string().optional(),
-  property_id: z.string().min(1, "Please select a property"),
-  unit_id: z.string().min(1, "Please select a unit"),
+  property_id: z.string().optional().default(""),
+  unit_id: z.string().optional().default(""),
   lease_start_date: z.string().min(1, "Lease start date is required"),
   lease_end_date: z.string().min(1, "Lease end date is required"),
   monthly_rent: z.coerce.number().min(1, "Monthly rent is required"),
@@ -134,8 +135,19 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
       return;
     }
 
+    // Verify backend availability before proceeding
+    const health = await checkBackendReady();
+    if (!health.ok) {
+      toast({
+        title: "Backend not available",
+        description: "Supabase functions are not reachable. Please configure environment or try again later.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
-    
+
     // Prepare request payload
     const requestPayload = {
       tenantData: {
@@ -159,7 +171,8 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
         lease_end_date: data.lease_end_date,
         monthly_rent: data.monthly_rent ? parseFloat(data.monthly_rent.toString()) : undefined,
         security_deposit: data.security_deposit ? parseFloat(data.security_deposit.toString()) : undefined
-      } : undefined
+      } : undefined,
+      force: true
     };
     
     console.log("Submitting tenant creation request:", requestPayload);
@@ -258,7 +271,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
 
         // Enhanced communication status reporting
         const commStatus = result.communicationStatus;
-        let statusMessage = "✅ Tenant account created successfully!";
+        let statusMessage = "�� Tenant account created successfully!";
         let communicationDetails = [];
         
         if (commStatus?.emailSent && commStatus?.smsSent) {

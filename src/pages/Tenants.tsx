@@ -17,6 +17,7 @@ import { KpiGrid } from "@/components/kpi/KpiGrid";
 import { KpiStatCard } from "@/components/kpi/KpiStatCard";
 import { TablePaginator } from "@/components/ui/table-paginator";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
+import { checkBackendReady } from "@/utils/backendHealth";
 
 interface Tenant {
   id: string;
@@ -55,10 +56,21 @@ const Tenants = () => {
   const [filterRentRange, setFilterRentRange] = useState("all");
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ pageSize: 10 });
+  const [backendReady, setBackendReady] = useState<boolean>(true);
+  const [backendReason, setBackendReason] = useState<string>("");
 
   useEffect(() => {
-    fetchTenants();
-    fetchProperties();
+    (async () => {
+      const health = await checkBackendReady();
+      setBackendReady(health.ok);
+      setBackendReason(health.reason || "");
+      if (health.ok) {
+        fetchTenants();
+        fetchProperties();
+      } else {
+        setLoading(false);
+      }
+    })();
   }, [page, pageSize, searchTerm, filterEmployment, filterProperty]);
 
   const fetchTenants = async () => {
@@ -260,6 +272,14 @@ const Tenants = () => {
                 <AddTenantDialog onTenantAdded={fetchTenants} />
               </div>
             </div>
+
+            {!backendReady && (
+              <Card className="bg-card border-destructive">
+                <CardContent className="pt-6">
+                  <p className="text-destructive">Backend is not available. Tenant data cannot be loaded. {backendReason && `( ${backendReason} )`}</p>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Filters */}
             <Card className="bg-card">
