@@ -206,16 +206,23 @@ const handler = async (req: Request): Promise<Response> => {
     // Generate temporary password
     const temporaryPassword = generateTemporaryPassword();
 
-    // Check if user already exists
-    const { data: existingUser } = await supabaseAdmin.auth.admin.listUsers();
-    const userExists = existingUser.users?.find(u => u.email === tenantData.email);
-    
+    // Check if user already exists (use direct lookup for efficiency and reliability)
     let userId: string;
     let isNewUser = false;
+    let existingAuthUser: any = null;
+    try {
+      const { data: userLookup, error: lookupError } = await supabaseAdmin.auth.admin.getUserByEmail(tenantData.email);
+      if (lookupError) {
+        console.warn("getUserByEmail failed, proceeding as new user:", lookupError);
+      }
+      existingAuthUser = userLookup?.user || null;
+    } catch (e) {
+      console.warn("getUserByEmail threw, proceeding as new user:", e);
+    }
 
-    if (userExists) {
+    if (existingAuthUser) {
       console.log("User already exists with email:", tenantData.email);
-      userId = userExists.id;
+      userId = existingAuthUser.id;
       
       // Check if this user is already a tenant
       const { data: existingTenant } = await supabaseAdmin
@@ -226,7 +233,7 @@ const handler = async (req: Request): Promise<Response> => {
       
       if (existingTenant) {
         return new Response(JSON.stringify({ error: "This email is already associated with a tenant account" }), {
-          status: 400,
+          status: 409,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -337,6 +344,13 @@ const handler = async (req: Request): Promise<Response> => {
 
       if (tenantError) {
         console.error("Error creating tenant record:", tenantError);
+        // Handle unique constraint (e.g., duplicate email/national_id) explicitly
+        if ((tenantError as any).code === '23505') {
+          return new Response(JSON.stringify({ error: "Tenant already exists", details: tenantError.message }), {
+            status: 409,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
         throw new Error(`Failed to create tenant record: ${tenantError.message}`);
       }
       
