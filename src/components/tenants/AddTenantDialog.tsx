@@ -166,20 +166,45 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
     
     try {
       // Call the edge function to create tenant account
-      const { data: result, error } = await supabase.functions.invoke('create-tenant-account', {
-        body: requestPayload
-      });
+      let invokeResponse: any = null;
+      try {
+        invokeResponse = await supabase.functions.invoke('create-tenant-account', { body: requestPayload });
+      } catch (fnErr: any) {
+        console.error("Edge function threw an error:", fnErr);
+        let details = fnErr?.message || "Edge function invocation failed";
+        try {
+          if (fnErr?.response && typeof fnErr.response.text === 'function') {
+            const txt = await fnErr.response.text();
+            try {
+              const parsed = JSON.parse(txt);
+              details = parsed.error || parsed.message || parsed.details || JSON.stringify(parsed);
+            } catch (e) {
+              details = txt;
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to extract error response body', e);
+        }
+
+        toast({
+          title: "Tenant Creation Failed",
+          description: details,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      const result = invokeResponse?.data ?? invokeResponse;
+      const error = invokeResponse?.error ?? null;
 
       console.log("Response from create-tenant-account function:", { result, error });
 
       if (error) {
         console.error("Edge function returned error:", error);
-        
-        // Extract detailed error information
         let errorMessage = "Failed to create tenant account";
         let errorDetails = "";
-        
-        // Handle different error response structures
+
         if (typeof error === 'string') {
           errorMessage = error;
         } else if (error.message) {
@@ -190,20 +215,15 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
         } else if (error.details) {
           errorMessage = error.details;
         }
-        
-        // Check if it's a FunctionsError with more details
-        if (error.context) {
-          console.error("Function error context:", error.context);
-          errorDetails += ` (Status: ${error.context.status || 'unknown'})`;
-        }
-        
+
         console.error("Processed error message:", errorMessage + errorDetails);
-        
+
         toast({
           title: "Tenant Creation Failed",
           description: errorMessage + errorDetails,
           variant: "destructive",
         });
+        setLoading(false);
         return;
       }
 
@@ -215,6 +235,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
           description: "No response received from server",
           variant: "destructive",
         });
+        setLoading(false);
         return;
       }
 
