@@ -66,14 +66,47 @@ export function QuickExpiryCheck({ onViewDetails, hideWhenEmpty = false }: Quick
         let reportData = data as any;
         let rawLeases = Array.isArray(reportData?.table) ? reportData.table : [];
 
-        // Fallback via server endpoint if RPC returned empty due to RLS
+        // Fallback via client-side queries if RPC returned empty due to RLS
         if (!Array.isArray(rawLeases) || rawLeases.length === 0) {
-          const url = '/api/leases/expiring';
-          const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ p_start_date: startDate, p_end_date: endDate }) });
-          const payload = await res.json();
-          const raw = Array.isArray(payload) ? payload[0] : payload;
-          const table = Array.isArray(raw?.table) ? raw.table : [];
-          if (Array.isArray(table) && table.length > 0) rawLeases = table;
+          const isAdmin = await hasRole('Admin');
+          if (isAdmin) {
+            const { data, error } = await (supabase as any)
+              .from('leases')
+              .select('lease_end_date, tenants(first_name,last_name), units(unit_number, properties(name))')
+              .gte('lease_end_date', startDate)
+              .lte('lease_end_date', endDate);
+            if (!error && Array.isArray(data)) {
+              rawLeases = data.map((l: any) => ({
+                property_name: l.units?.properties?.name,
+                unit_number: l.units?.unit_number,
+                tenant_name: `${l.tenants?.first_name || ''} ${l.tenants?.last_name || ''}`.trim(),
+                lease_end_date: l.lease_end_date
+              }));
+            }
+          } else {
+            const { data: leasesRows } = await (supabase as any)
+              .from('leases')
+              .select('tenant_id, unit_id, lease_end_date')
+              .gte('lease_end_date', startDate)
+              .lte('lease_end_date', endDate);
+            const { data: units } = await (supabase as any).from('units').select('id, unit_number, property_id');
+            const { data: props } = await (supabase as any).from('properties').select('id, name');
+            const { data: tenants } = await (supabase as any).from('tenants').select('id, first_name, last_name');
+            const unitMap = new Map((units || []).map((u: any) => [u.id, u]));
+            const propMap = new Map((props || []).map((p: any) => [p.id, p]));
+            const tenantMap = new Map((tenants || []).map((t: any) => [t.id, t]));
+            rawLeases = (leasesRows || []).map((l: any) => {
+              const u = unitMap.get(l.unit_id);
+              const p = u ? propMap.get(u.property_id) : null;
+              const t = tenantMap.get(l.tenant_id);
+              return {
+                property_name: p?.name,
+                unit_number: u?.unit_number,
+                tenant_name: `${t?.first_name || ''} ${t?.last_name || ''}`.trim(),
+                lease_end_date: l.lease_end_date
+              };
+            });
+          }
         }
 
         const today = new Date();
