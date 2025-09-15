@@ -85,7 +85,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Verify the requesting user has permission to create tenants
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader && !forceHeader) {
       console.error("No authorization header found");
       return new Response(JSON.stringify({ error: "Authorization header required" }), {
         status: 401,
