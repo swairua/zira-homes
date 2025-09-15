@@ -20,19 +20,59 @@ export async function createSampleTenantNoLease() {
 
   const body = { tenantData, force: true } as const;
 
-  // Invoke edge function with force header to bypass user auth (approved)
-  const { data, error } = await (supabase.functions as any).invoke('create-tenant-account', {
-    body,
-    headers: { 'x-force-create': 'true' }
-  });
+  // Try using supabase client's functions.invoke first
+  try {
+    const { data, error } = await (supabase.functions as any).invoke('create-tenant-account', {
+      body,
+      headers: { 'x-force-create': 'true' }
+    });
 
-  if (error) {
-    throw new Error(typeof error === 'string' ? error : (error.message || 'Failed to create tenant'));
-  }
-  if (!data?.success) {
-    const msg = (data && (data.error || data.message)) || 'Unknown error creating tenant';
-    throw new Error(msg);
-  }
+    if (error) {
+      throw error;
+    }
 
-  return data;
+    if (!data?.success) {
+      const msg = (data && (data.error || data.message)) || 'Unknown error creating tenant';
+      throw new Error(msg);
+    }
+
+    return data;
+  } catch (err) {
+    console.warn('supabase.functions.invoke failed, attempting direct fetch to Supabase Functions endpoint:', err);
+
+    // Fallback: call Supabase Functions endpoint directly using publishable key
+    try {
+      // Import constants dynamically to avoid circular import problems
+      const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } = await import("@/integrations/supabase/client");
+      const fnUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/create-tenant-account`;
+      const res = await fetch(fnUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_PUBLISHABLE_KEY,
+          'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`
+        },
+        body: JSON.stringify(body)
+      });
+
+      const text = await res.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch { data = text; }
+
+      if (!res.ok) {
+        const details = typeof data === 'string' ? data : JSON.stringify(data);
+        throw new Error(`Edge function fetch failed: ${res.status} ${res.statusText} - ${details}`);
+      }
+
+      if (!data?.success) {
+        const msg = (data && (data.error || data.message)) || 'Unknown error creating tenant';
+        throw new Error(msg);
+      }
+
+      return data;
+    } catch (fetchErr: any) {
+      console.error('Direct fetch to edge function also failed:', fetchErr);
+      throw new Error(fetchErr?.message || String(fetchErr) || 'Failed to send a request to the Edge Function');
+    }
+  }
 }
