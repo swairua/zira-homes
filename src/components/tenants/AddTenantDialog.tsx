@@ -181,6 +181,54 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
     console.log("Submitting tenant creation request:", requestPayload);
     
     try {
+      // Try SQL RPC first (removes Edge dependency for DB writes)
+      try {
+        const rpcArgs: any = {
+          p_first_name: data.first_name,
+          p_last_name: data.last_name,
+          p_email: data.email,
+          p_phone: data.phone || null,
+          p_national_id: data.national_id || null,
+          p_employment_status: data.employment_status || null,
+          p_profession: data.profession || null,
+          p_employer_name: data.employer_name || null,
+          p_monthly_income: data.monthly_income != null ? Number(data.monthly_income) : null,
+          p_emergency_contact_name: data.emergency_contact_name || null,
+          p_emergency_contact_phone: data.emergency_contact_phone || null,
+          p_previous_address: data.previous_address || null,
+          p_property_id: data.property_id || null,
+          p_unit_id: data.unit_id || null,
+          p_lease_start_date: data.unit_id ? data.lease_start_date : null,
+          p_lease_end_date: data.unit_id ? data.lease_end_date : null,
+          p_monthly_rent: data.unit_id && data.monthly_rent != null ? Number(data.monthly_rent) : null,
+          p_security_deposit: data.unit_id && data.security_deposit != null ? Number(data.security_deposit) : null,
+        };
+        const rpcRes = await supabase.rpc('create_tenant_and_optional_lease', rpcArgs);
+        if (!rpcRes.error && rpcRes.data?.success) {
+          await logActivity('tenant_created','tenant', rpcRes.data.tenant?.id, {
+            tenant_name: `${data.first_name} ${data.last_name}`,
+            tenant_email: data.email,
+            unit_id: data.unit_id || null,
+            property_id: data.property_id || null,
+            via: 'rpc'
+          });
+          toast({
+            title: 'Tenant Created (DB)',
+            description: 'Created via SQL RPC. Login credentials were not sent.',
+            variant: 'default'
+          });
+          reset();
+          setOpen(false);
+          onTenantAdded();
+          setLoading(false);
+          return;
+        } else if (rpcRes.error) {
+          console.error('RPC Error:', rpcRes.error);
+        }
+      } catch (rpcErr: any) {
+        console.error('RPC threw:', rpcErr);
+      }
+
       // First try Edge Function path
       let invokeResponse: any = null;
       let edgeFailedDetails: string | null = null;
