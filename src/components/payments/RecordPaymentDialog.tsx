@@ -47,12 +47,22 @@ const selectedTenantId = watch("tenant_id");
   const filteredInvoices = invoices.filter(invoice => invoice.tenant_id === selectedTenantId && (invoice.outstanding_amount || 0) > 0);
 
   const getErrorMessage = (e: any): string => {
-  if (!e) return "Unknown error";
-  if (typeof e === "string") return e;
-  if (e.message) return e.message;
-  if (e.error?.message) return e.error.message;
-  if (e.details) return e.details;
-  try { return JSON.stringify(e); } catch { return String(e); }
+  try {
+    if (!e) return "Unknown error";
+    if (typeof e === "string") return e;
+    // Supabase/Postgrest
+    if (e.message) return e.message;
+    if (e.error?.message) return e.error.message;
+    if (e.details) return e.details;
+    if (e.code && e.hint) return `${e.code}: ${e.hint}`;
+    // Response-like
+    if (e.status && e.statusText) return `${e.status} ${e.statusText}`;
+    // Fallback stringify without throwing on cycles
+    try { return JSON.stringify(e); } catch {}
+    return String(e);
+  } catch {
+    return String(e);
+  }
 };
 const onSubmit = async (data: PaymentFormData) => {
     try {
@@ -63,14 +73,17 @@ const onSubmit = async (data: PaymentFormData) => {
         status: 'completed',
         invoice_id: data.invoice_id || null
       };
-      
-      const { data: payment, error: paymentError } = await supabase
-        .from("payments")
-        .insert([paymentData])
-        .select()
-        .single();
 
-      if (paymentError) throw paymentError;
+      // RLS-safe insert: do not require returning row
+      const { error: insertError } = await supabase
+        .from("payments")
+        .insert([paymentData]);
+
+      if (insertError) {
+        const msg = getErrorMessage(insertError);
+        const isNoReturn = msg.includes("PGRST116") || msg.includes("Results contain 0");
+        if (!isNoReturn) throw insertError;
+      }
 
       // If invoice is selected, create allocation
       if (data.invoice_id && payment) {
