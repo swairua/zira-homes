@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -11,8 +10,25 @@ import { RoleProvider } from "@/context/RoleContext";
 import { ImpersonationBanner } from "@/components/security/ImpersonationBanner";
 import { queryClient } from "@/config/queryClient";
 import "./App.css";
+import React from "react";
+import { createSampleTenantNoLease } from "@/utils/createSampleTenant";
 
 function App() {
+  React.useEffect(() => {
+    const key = "autoTenantCreated_v1";
+    const already = typeof window !== 'undefined' && window.localStorage?.getItem(key);
+    if (already) return;
+
+    createSampleTenantNoLease()
+      .then((data) => {
+        try { window.localStorage?.setItem(key, "1"); } catch {}
+        console.log("Sample tenant created:", data?.tenant?.id || data);
+      })
+      .catch((e) => {
+        console.error("Auto-create sample tenant failed:", e);
+      });
+  }, []);
+
   return (
     <ErrorBoundary>
       <ThemeProvider
