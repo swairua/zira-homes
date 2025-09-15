@@ -120,7 +120,20 @@ const Leases = () => {
           if (error) throw error;
 
           const raw = Array.isArray(data) ? data[0] : data;
-          const rows = Array.isArray(raw?.table) ? raw.table : [];
+          let rows = Array.isArray(raw?.table) ? raw.table : [];
+
+          // Fallback if RLS returns empty but server-side can fetch
+          if (!Array.isArray(rows) || rows.length === 0) {
+            const url = '/api/leases/expiring';
+            const res = days === 90
+              ? await fetch(url, { method: 'GET' })
+              : await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ p_start_date: startDate, p_end_date: endDate }) });
+            const payload = await res.json();
+            const raw2 = Array.isArray(payload) ? payload[0] : payload;
+            const rows2 = Array.isArray(raw2?.table) ? raw2.table : [];
+            if (Array.isArray(rows2) && rows2.length > 0) rows = rows2;
+          }
+
           const mapped = rows.map((l: any) => {
             const tn = (l.tenant_name || '').trim();
             const parts = tn.split(' ');
@@ -140,7 +153,7 @@ const Leases = () => {
             } as any;
           });
           setLeases(mapped);
-          console.log("✅ Loaded leases via RPC:", mapped.length);
+          console.log("✅ Loaded leases via RPC/fallback:", mapped.length);
           return;
         } catch (rpcErr) {
           console.warn('RPC leases load failed, trying server fallback:', formatError(rpcErr));
