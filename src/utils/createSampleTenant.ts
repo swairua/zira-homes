@@ -52,7 +52,8 @@ export async function createSampleTenantNoLease() {
         headers: {
           'Content-Type': 'application/json',
           'apikey': SUPABASE_PUBLISHABLE_KEY,
-          'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`
+          'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+          'x-force-create': 'true'
         },
         body: JSON.stringify(body)
       });
