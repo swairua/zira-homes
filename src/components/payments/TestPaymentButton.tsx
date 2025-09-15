@@ -32,41 +32,47 @@ export const TestPaymentButton: React.FC<Props> = ({ tenantNameQuery = "David", 
   const handleTestPayment = async () => {
     setLoading(true);
     try {
-      // 1) Find tenant by name (first or last name matches query)
-      const { data: tenants, error: tenantsError } = await supabase
+      // 0) Ensure user is authenticated (RLS usually blocks anonymous inserts)
+      const { data: session } = await supabase.auth.getSession();
+      const authed = Boolean(session?.session?.user?.id);
+      if (!authed) {
+        throw new Error("You must be signed in to record payments (RLS)");
+      }
+
+      // 1) Find tenant by name (first or last name or full name match)
+      const { data: t1, error: e1 } = await supabase
         .from("tenants")
         .select("id, first_name, last_name")
         .ilike("first_name", `%${tenantNameQuery}%`);
+      if (e1) throw e1;
 
-      if (tenantsError) throw tenantsError;
-
-      let tenant = tenants?.[0];
+      let tenant = t1?.[0];
       if (!tenant) {
-        // try last_name match if first_name didn't match
-        const { data: tenants2, error: tenantsError2 } = await supabase
+        const { data: t2, error: e2 } = await supabase
           .from("tenants")
-          .select("id, first_name, last_name")
-          .ilike("last_name", `%${tenantNameQuery}%`);
-        if (tenantsError2) throw tenantsError2;
-        tenant = tenants2?.[0];
+          .select("id, first_name, last_name");
+        if (e2) throw e2;
+        tenant = (t2 || []).find(
+          (x) => `${x.first_name} ${x.last_name}`.toLowerCase().includes(String(tenantNameQuery).toLowerCase())
+        );
       }
 
       if (!tenant) {
         throw new Error(`No tenant found matching \"${tenantNameQuery}\"`);
       }
 
-      // 2) Get an active lease for tenant and infer rent amount
+      // 2) Get a lease for tenant and infer rent amount (avoid relying on non-existent columns)
       const { data: leases, error: leasesError } = await supabase
         .from("leases")
         .select("id, monthly_rent")
         .eq("tenant_id", tenant.id)
-        .order("created_at", { ascending: false });
+        .limit(1);
 
       if (leasesError) throw leasesError;
       const lease = leases?.[0];
       if (!lease) throw new Error("Tenant has no lease");
 
-      const amount = Number(lease.monthly_rent || 1);
+      const amount = Math.max(1, Number(lease.monthly_rent || 0));
 
       // 3) Insert payment
       const now = new Date();
@@ -93,8 +99,6 @@ export const TestPaymentButton: React.FC<Props> = ({ tenantNameQuery = "David", 
       try {
         await supabase.rpc("reconcile_unallocated_payments_for_tenant" as any, { p_tenant_id: tenant.id });
       } catch (e) {
-        // soft-fail; reconciliation is optional
-        // eslint-disable-next-line no-console
         console.warn("Reconciliation skipped:", e);
       }
 
@@ -104,8 +108,9 @@ export const TestPaymentButton: React.FC<Props> = ({ tenantNameQuery = "David", 
       });
 
       onPaymentRecorded?.();
-    } catch (e) {
-      toast({ title: "Payment failed", description: getErr(e), variant: "destructive" });
+    } catch (e: any) {
+      const msg = getErr(e);
+      toast({ title: "Payment failed", description: msg, variant: "destructive" });
     } finally {
       setLoading(false);
     }
