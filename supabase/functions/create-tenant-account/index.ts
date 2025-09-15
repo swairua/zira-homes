@@ -98,7 +98,7 @@ const handler = async (req: Request): Promise<Response> => {
       ? await supabaseClient.auth.getUser(token)
       : ({ data: { user: null }, error: null } as any);
     
-    if (userError) {
+    if (userError && !forceHeader) {
       console.error("Error getting user:", userError);
       return new Response(JSON.stringify({ error: "Invalid authentication token" }), {
         status: 401,
