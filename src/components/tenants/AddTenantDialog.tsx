@@ -85,7 +85,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       profession: "",
       employment_status: "",
       employer_name: "",
-      monthly_income: "" as any,
+      monthly_income: 0,
       emergency_contact_name: "",
       emergency_contact_phone: "",
       previous_address: "",
@@ -93,8 +93,8 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       unit_id: "",
       lease_start_date: "",
       lease_end_date: "",
-      monthly_rent: "" as any,
-      security_deposit: "" as any,
+      monthly_rent: 0,
+      security_deposit: 0,
     }
   });
   
@@ -335,7 +335,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
         // Enhanced communication status reporting
         const commStatus = result.communicationStatus;
-        let statusMessage = "Tenant account created successfully!";
+        let statusMessage = "✅ Tenant account created successfully!";
         let communicationDetails = [];
         
         if (commStatus?.emailSent && commStatus?.smsSent) {

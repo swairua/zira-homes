@@ -41,9 +41,9 @@ try {
       if (result?.error) throw result.error;
       return result;
     } catch (err: any) {
-      // 1) Try server proxy fallback using service role (if configured)
-      let proxyFailedDetails: any = null;
+      // Try server proxy fallback using service role
       try {
+        const body = options?.body ?? {};
         const res = await fetch(`/api/edge/${name}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...extraHeaders },
