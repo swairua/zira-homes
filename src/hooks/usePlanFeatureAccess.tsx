@@ -116,8 +116,25 @@ export function usePlanFeatureAccess(
       }
       console.error('❌ Error checking feature access:', serialized);
 
-      // If it's a typical network error, provide guidance
+      // If it's a typical network error, try server proxy, then provide guidance
       if (typeof (error as any)?.message === 'string' && (error as any).message.toLowerCase().includes('failed to fetch')) {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData?.session?.access_token;
+          const res = await fetch('/api/rpc/check_plan_feature_access', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ _user_id: user!.id, _feature: feature, _current_count: count })
+          });
+          const text = await res.text();
+          let data; try { data = JSON.parse(text); } catch { data = text; }
+          if (res.ok) return (data as any) as FeatureAccessResult;
+        } catch (fallbackErr) {
+          console.error('RPC proxy fallback failed:', fallbackErr);
+        }
         console.error('👉 Suggestion: verify NEXT_PUBLIC_SUPABASE_URL, internet connectivity, and CORS settings for your Supabase project');
       }
 
