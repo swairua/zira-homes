@@ -157,15 +157,14 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       return;
     }
 
-    // Verify backend availability before proceeding
-    const health = await checkBackendReady();
-    if (!health.ok) {
-      toast({
-        title: "Backend not available",
-        description: "Supabase functions are not reachable. Please configure environment or try again later.",
-        variant: "destructive",
-      });
-      return;
+    // Non-blocking backend health probe; proceed regardless, fallbacks will handle connectivity
+    try {
+      const health = await checkBackendReady();
+      if (!health.ok) {
+        console.warn("Backend health check failed, proceeding with fallback paths:", health.reason);
+      }
+    } catch (e) {
+      console.warn("Backend health probe error, proceeding:", e);
     }
 
     setLoading(true);
@@ -196,7 +195,9 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       } : undefined,
       force: true
     };
-    
+
+    try { await logActivity('tenant_create_attempt', 'tenant', undefined, { property_id: data.property_id, unit_id: data.unit_id, has_lease: !!data.unit_id }); } catch {}
+
     console.log("Submitting tenant creation request:", requestPayload);
     
     try {
@@ -389,6 +390,8 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
         errorMessage = error.error;
       }
       
+      try { await logActivity('tenant_create_failed', 'tenant', undefined, { message: errorMessage }); } catch {}
+
       toast({
         title: "Tenant Creation Failed",
         description: errorMessage,
