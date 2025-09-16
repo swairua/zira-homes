@@ -55,10 +55,18 @@ type TenantFormData = z.infer<typeof tenantFormSchema>;
 
 interface AddTenantDialogProps {
   onTenantAdded: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  showTrigger?: boolean;
 }
 
-export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
+export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenChange, showTrigger = true }: AddTenantDialogProps) {
   const [open, setOpen] = useState(false);
+  const isOpen = controlledOpen ?? open;
+  const handleOpenChange = (next: boolean) => {
+    if (onOpenChange) onOpenChange(next);
+    else setOpen(next);
+  };
   const [loading, setLoading] = useState(false);
   const [properties, setProperties] = useState<any[]>([]);
   const [units, setUnits] = useState<any[]>([]);
@@ -77,7 +85,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
       profession: "",
       employment_status: "",
       employer_name: "",
-      monthly_income: undefined,
+      monthly_income: "" as any,
       emergency_contact_name: "",
       emergency_contact_phone: "",
       previous_address: "",
@@ -85,8 +93,8 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
       unit_id: "",
       lease_start_date: "",
       lease_end_date: "",
-      monthly_rent: undefined as any,
-      security_deposit: undefined as any,
+      monthly_rent: "" as any,
+      security_deposit: "" as any,
     }
   });
   
@@ -193,33 +201,75 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
     
     try {
       // Call the edge function to create tenant account
+      // Prefer same-origin server proxy to avoid browser CORS
       let invokeResponse: any = null;
       try {
-        invokeResponse = await supabase.functions.invoke('create-tenant-account', { body: requestPayload });
-      } catch (fnErr: any) {
-        console.error("Edge function threw an error:", fnErr);
-        let details = fnErr?.message || "Edge function invocation failed";
-        try {
-          if (fnErr?.response && typeof fnErr.response.text === 'function') {
-            const txt = await fnErr.response.text();
-            try {
-              const parsed = JSON.parse(txt);
-              details = parsed.error || parsed.message || parsed.details || JSON.stringify(parsed);
-            } catch (e) {
-              details = txt;
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to extract error response body', e);
-        }
-
-        toast({
-          title: "Tenant Creation Failed",
-          description: details,
-          variant: "destructive",
+        const res = await fetch('/api/edge/create-tenant-account', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...requestPayload, force: true })
         });
-        setLoading(false);
-        return;
+        const text = await res.text();
+        let data: any; try { data = JSON.parse(text); } catch { data = text; }
+        if (res.ok) {
+          invokeResponse = { data, error: null };
+        } else {
+          invokeResponse = { data: null, error: { message: 'Proxy call failed', status: res.status, details: data } };
+        }
+      } catch (proxyErr: any) {
+        console.warn('Server proxy failed, attempting direct fetch:', proxyErr);
+        try {
+          const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } = await import("@/integrations/supabase/client");
+          const fnUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/create-tenant-account`;
+          const res = await fetch(fnUrl, {
+            method: 'POST',
+            mode: 'cors',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_PUBLISHABLE_KEY,
+              'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+              'x-force-create': 'true',
+              'x-requested-with': 'XMLHttpRequest',
+            },
+            body: JSON.stringify(requestPayload)
+          });
+          const text = await res.text();
+          let data: any; try { data = JSON.parse(text); } catch { data = text; }
+          if (res.ok) {
+            invokeResponse = { data, error: null };
+          } else {
+            invokeResponse = { data: null, error: { message: 'Edge function fetch failed', status: res.status, details: data } };
+          }
+        } catch (directErr: any) {
+          console.warn('Direct function fetch failed, falling back to supabase-js invoke:', directErr);
+          try {
+            invokeResponse = await supabase.functions.invoke('create-tenant-account', { body: requestPayload, headers: { 'x-force-create': 'true' } });
+          } catch (fnErr: any) {
+            console.error("Edge function threw an error:", fnErr);
+            let details = fnErr?.message || "Edge function invocation failed";
+            try {
+              if (fnErr?.response && typeof fnErr.response.text === 'function') {
+                const txt = await fnErr.response.text();
+                try {
+                  const parsed = JSON.parse(txt);
+                  details = parsed.error || parsed.message || parsed.details || JSON.stringify(parsed);
+                } catch (e) {
+                  details = txt;
+                }
+              }
+            } catch (e) {
+              console.warn('Failed to extract error response body', e);
+            }
+
+            toast({
+              title: "Tenant Creation Failed",
+              description: details,
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
+          }
+        }
       }
 
       const result = invokeResponse?.data ?? invokeResponse;
@@ -285,7 +335,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
 
         // Enhanced communication status reporting
         const commStatus = result.communicationStatus;
-        let statusMessage = "�� Tenant account created successfully!";
+        let statusMessage = "Tenant account created successfully!";
         let communicationDetails = [];
         
         if (commStatus?.emailSent && commStatus?.smsSent) {
@@ -320,7 +370,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
         });
         
         reset();
-        setOpen(false);
+        handleOpenChange(false);
         onTenantAdded();
       } else {
         throw new Error(result?.error || "Failed to create tenant account");
@@ -350,13 +400,15 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className="bg-primary hover:bg-primary/90">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Tenant
-        </Button>
-      </DialogTrigger>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      {showTrigger && (
+        <DialogTrigger asChild>
+          <Button className="bg-primary hover:bg-primary/90">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Tenant
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto bg-tint-gray">
         <DialogHeader className="pb-4">
           <DialogTitle className="text-xl font-semibold text-primary">Add New Tenant</DialogTitle>
@@ -382,6 +434,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="John"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -401,6 +454,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="Doe"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -430,6 +484,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="john@example.com"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -449,6 +504,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="+254 700 000 000"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -477,6 +533,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="12345678"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -496,6 +553,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="Software Engineer"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -512,7 +570,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                       <FormLabel className="text-sm font-medium text-primary">
                         Employment Status <span className="text-muted-foreground">(Optional)</span>
                       </FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={(field.value as any) ?? ""}>
                         <FormControl>
                           <SelectTrigger className="bg-card border-border focus:border-accent focus:ring-accent">
                             <SelectValue placeholder="Select status" />
@@ -543,6 +601,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="ABC Company Ltd"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -564,6 +623,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                         className="bg-card border-border focus:border-accent focus:ring-accent"
                         placeholder="50000"
                         {...field}
+                        value={field.value ?? ""}
                       />
                     </FormControl>
                     <FormMessage />
@@ -591,6 +651,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="Jane Doe"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -610,6 +671,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="+254 700 000 001"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -633,12 +695,12 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                       <FormLabel className="text-sm font-medium text-primary">
                         Property <span className="text-destructive">*</span>
                       </FormLabel>
-                      <Select 
+                      <Select
                         onValueChange={(value) => {
                           field.onChange(value);
                           setValue("unit_id", ""); // Reset unit when property changes
                         }}
-                        defaultValue={field.value}
+                        value={(field.value as any) ?? ""}
                       >
                         <FormControl>
                           <SelectTrigger className="bg-card border-border focus:border-accent focus:ring-accent">
@@ -665,16 +727,16 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                       <FormLabel className="text-sm font-medium text-primary">
                         Unit <span className="text-destructive">*</span>
                       </FormLabel>
-                      <Select 
+                      <Select
                         onValueChange={(value) => {
                           field.onChange(value);
                           // Auto-fill rent amount when unit is selected
                           const selectedUnit = units.find(u => u.id === value);
                           if (selectedUnit) {
-                            setValue("monthly_rent", selectedUnit.rent_amount);
+                            setValue("monthly_rent", String(selectedUnit.rent_amount ?? ""));
                           }
                         }}
-                        defaultValue={field.value}
+                        value={(field.value as any) ?? ""}
                         disabled={!watchPropertyId}
                       >
                         <FormControl>
@@ -717,6 +779,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                             type="date"
                             className="bg-card border-border focus:border-accent focus:ring-accent"
                             {...field}
+                            value={field.value ?? ""}
                           />
                         </FormControl>
                         <FormMessage />
@@ -736,6 +799,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                             type="date"
                             className="bg-card border-border focus:border-accent focus:ring-accent"
                             {...field}
+                            value={field.value ?? ""}
                           />
                         </FormControl>
                         <FormMessage />
@@ -754,11 +818,12 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                         </FormLabel>
                         <FormControl>
                           <Input
-                            type="number"
-                            className="bg-card border-border focus:border-accent focus:ring-accent"
-                            placeholder="50000"
-                            {...field}
-                          />
+                        type="number"
+                        className="bg-card border-border focus:border-accent focus:ring-accent"
+                        placeholder="50000"
+                        {...field}
+                        value={field.value ?? ""}
+                      />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -774,11 +839,12 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                         </FormLabel>
                         <FormControl>
                           <Input
-                            type="number"
-                            className="bg-card border-border focus:border-accent focus:ring-accent"
-                            placeholder="50000"
-                            {...field}
-                          />
+                        type="number"
+                        className="bg-card border-border focus:border-accent focus:ring-accent"
+                        placeholder="50000"
+                        {...field}
+                        value={field.value ?? ""}
+                      />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -807,6 +873,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
                         placeholder="Previous residential address"
                         rows={3}
                         {...field}
+                        value={field.value ?? ""}
                       />
                     </FormControl>
                     <FormMessage />
@@ -816,7 +883,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
             </div>
 
             <div className="flex justify-end gap-3 pt-6 border-t border-border">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)} className="border-primary text-primary hover:bg-primary hover:text-primary-foreground">
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} className="border-primary text-primary hover:bg-primary hover:text-primary-foreground">
                 Cancel
               </Button>
               <Button type="submit" disabled={loading} className="bg-accent hover:bg-accent/90">

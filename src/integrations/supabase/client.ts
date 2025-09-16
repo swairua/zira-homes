@@ -20,25 +20,27 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
 try {
   const originalInvoke = (supabase.functions as any).invoke.bind(supabase.functions);
   (supabase.functions as any).invoke = async (name: string, options?: any) => {
+    const body = options?.body ?? {};
+
+    // Prepare headers BEFORE first attempt so the function receives correct auth/force flags
+    const extraHeaders: Record<string, string> = { ...(options?.headers || {}) };
     try {
-      const result = await originalInvoke(name, options);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const access = sessionData?.session?.access_token;
+      if (access) {
+        extraHeaders['Authorization'] = `Bearer ${access}`;
+      }
+      if (body?.force || name === 'create-tenant-account' || name === 'create-user-with-role') {
+        // Always include force header for these flows to avoid anon-key-as-JWT issues
+        extraHeaders['x-force-create'] = 'true';
+      }
+    } catch {}
+
+    try {
+      const result = await originalInvoke(name, { ...(options || {}), headers: { ...(options?.headers || {}), ...extraHeaders } });
       if (result?.error) throw result.error;
       return result;
     } catch (err: any) {
-      const body = options?.body ?? {};
-
-      // Prepare headers: prefer caller headers; add user JWT if available; otherwise allow force header for specific functions
-      const extraHeaders: Record<string, string> = { ...(options?.headers || {}) };
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const access = sessionData?.session?.access_token;
-        if (access) {
-          extraHeaders['Authorization'] = `Bearer ${access}`;
-        } else if (body?.force || name === 'create-tenant-account' || name === 'create-user-with-role') {
-          extraHeaders['x-force-create'] = 'true';
-        }
-      } catch {}
-
       // 1) Try server proxy fallback using service role (if configured)
       let proxyFailedDetails: any = null;
       try {

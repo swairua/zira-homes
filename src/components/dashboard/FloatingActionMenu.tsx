@@ -159,8 +159,11 @@ export function FloatingActionMenu() {
 
       {/* Dialogs */}
       {tenantDialogOpen && (
-        <AddTenantDialog 
+        <AddTenantDialog
           onTenantAdded={() => setTenantDialogOpen(false)}
+          open={tenantDialogOpen}
+          onOpenChange={setTenantDialogOpen}
+          showTrigger={false}
         />
       )}
       

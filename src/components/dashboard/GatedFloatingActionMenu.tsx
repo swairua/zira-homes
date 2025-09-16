@@ -151,7 +151,12 @@ export function GatedFloatingActionMenu() {
       </div>
 
       {tenantDialogOpen && (
-        <AddTenantDialog onTenantAdded={() => setTenantDialogOpen(false)} />
+        <AddTenantDialog
+          onTenantAdded={() => setTenantDialogOpen(false)}
+          open={tenantDialogOpen}
+          onOpenChange={setTenantDialogOpen}
+          showTrigger={false}
+        />
       )}
       
       {invoiceDialogOpen && (
