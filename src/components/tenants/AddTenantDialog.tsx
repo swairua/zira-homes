@@ -201,33 +201,59 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
     
     try {
       // Call the edge function to create tenant account
+      // Prefer direct fetch to Supabase Edge Function to avoid SDK CORS issues
       let invokeResponse: any = null;
       try {
-        invokeResponse = await supabase.functions.invoke('create-tenant-account', { body: requestPayload, headers: { 'x-force-create': 'true' } });
-      } catch (fnErr: any) {
-        console.error("Edge function threw an error:", fnErr);
-        let details = fnErr?.message || "Edge function invocation failed";
-        try {
-          if (fnErr?.response && typeof fnErr.response.text === 'function') {
-            const txt = await fnErr.response.text();
-            try {
-              const parsed = JSON.parse(txt);
-              details = parsed.error || parsed.message || parsed.details || JSON.stringify(parsed);
-            } catch (e) {
-              details = txt;
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to extract error response body', e);
-        }
-
-        toast({
-          title: "Tenant Creation Failed",
-          description: details,
-          variant: "destructive",
+        const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } = await import("@/integrations/supabase/client");
+        const fnUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/create-tenant-account`;
+        const res = await fetch(fnUrl, {
+          method: 'POST',
+          mode: 'cors',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_PUBLISHABLE_KEY,
+            'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+            'x-force-create': 'true',
+            'x-requested-with': 'XMLHttpRequest',
+          },
+          body: JSON.stringify(requestPayload)
         });
-        setLoading(false);
-        return;
+        const text = await res.text();
+        let data: any; try { data = JSON.parse(text); } catch { data = text; }
+        if (res.ok) {
+          invokeResponse = { data, error: null };
+        } else {
+          invokeResponse = { data: null, error: { message: 'Edge function fetch failed', status: res.status, details: data } };
+        }
+      } catch (directErr: any) {
+        console.warn('Direct function fetch failed, falling back to supabase-js invoke:', directErr);
+        try {
+          invokeResponse = await supabase.functions.invoke('create-tenant-account', { body: requestPayload, headers: { 'x-force-create': 'true' } });
+        } catch (fnErr: any) {
+          console.error("Edge function threw an error:", fnErr);
+          let details = fnErr?.message || "Edge function invocation failed";
+          try {
+            if (fnErr?.response && typeof fnErr.response.text === 'function') {
+              const txt = await fnErr.response.text();
+              try {
+                const parsed = JSON.parse(txt);
+                details = parsed.error || parsed.message || parsed.details || JSON.stringify(parsed);
+              } catch (e) {
+                details = txt;
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to extract error response body', e);
+          }
+
+          toast({
+            title: "Tenant Creation Failed",
+            description: details,
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
       }
 
       const result = invokeResponse?.data ?? invokeResponse;
