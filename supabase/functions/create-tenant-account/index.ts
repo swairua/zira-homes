@@ -97,46 +97,18 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (user) { console.log("Authenticated user:", user.id, user.email); } else { console.log("Anonymous tenant creation permitted"); }
 
-    // Check if user has permission to create tenants (unless forced)
-    let hasPermission: any = true;
-    let permissionError: any = null;
-    if (!forceHeader) {
-      const { data, error } = await supabaseAdmin.rpc('has_permission', {
-        _user_id: user.id,
-        _permission: 'tenant_management'
-      });
-      hasPermission = data;
-      permissionError = error;
-    }
-
-    if (permissionError) {
-      console.error("Error checking permissions:", permissionError);
-    }
-
-    if (!hasPermission && !forceHeader) {
-      // Also check if user has role-based access
-      const { data: userRoles, error: rolesError } = await supabaseAdmin
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id);
-
-      if (rolesError) {
-        console.error("Error fetching user roles:", rolesError);
-        return new Response(JSON.stringify({ error: "Error checking user permissions" }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Permission checks skipped for anonymous access; if user present, attempt soft validation but never block
+    if (user && !forceHeader) {
+      try {
+        const { data } = await supabaseAdmin.rpc('has_permission', {
+          _user_id: user.id,
+          _permission: 'tenant_management'
         });
-      }
-
-      const allowedRoles = ['Admin', 'Landlord', 'Manager', 'Agent'];
-      const hasRoleAccess = userRoles?.some(r => allowedRoles.includes(r.role));
-
-      if (!hasRoleAccess && !forceHeader) {
-        console.error("User lacks required permissions. User roles:", userRoles);
-        return new Response(JSON.stringify({ error: "Insufficient permissions to create tenants" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        if (!data) {
+          console.warn('User lacks tenant_management permission; proceeding due to anonymous allowance');
+        }
+      } catch (e) {
+        console.warn('Permission check failed; proceeding due to anonymous allowance');
       }
     }
 
