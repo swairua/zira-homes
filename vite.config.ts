@@ -9,6 +9,12 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    hmr: false,
+    strictPort: true,
+  },
+  preview: {
+    port: 8080,
+    strictPort: true,
   },
   plugins: [
     react(),
