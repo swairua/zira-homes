@@ -436,7 +436,8 @@ const handler = async (req: Request): Promise<Response> => {
       if (commPrefs.email_enabled) {
         try {
           console.log("Sending welcome email...");
-          const loginUrl = `${req.headers.get("origin")}/auth`;
+          const origin = req.headers.get("origin") || "";
+          const loginUrl = `${origin}/auth`;
           
           const emailBody = isNewUser ? {
             tenantEmail: tenantData.email,
@@ -502,7 +503,8 @@ const handler = async (req: Request): Promise<Response> => {
       if (commPrefs.sms_enabled && tenantData.phone && smsConfig) {
         try {
           console.log(`Sending welcome SMS to: ${tenantData.phone}`);
-          const loginUrl = `${req.headers.get("origin")}/auth`;
+          const origin = req.headers.get("origin") || "";
+          const loginUrl = `${origin}/auth`;
 
           // Enhanced SMS message template
           const smsMessage = `Welcome to Zira Homes!\n\nYour login details:\nEmail: ${tenantData.email}\nPassword: ${temporaryPassword}\nLogin: ${loginUrl}\n\nPlease change your password after first login.\n\nSupport: +254 757 878 023`;
