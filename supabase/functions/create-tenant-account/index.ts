@@ -84,40 +84,18 @@ const handler = async (req: Request): Promise<Response> => {
     // Force flag from header to bypass auth/permission checks when explicitly requested
     const forceHeader = req.headers.get("x-force-create") === "true";
 
-    // Verify the requesting user has permission to create tenants
+    // Optional auth: allow anonymous creation
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader && !forceHeader) {
-      console.error("No authorization header found");
-      return new Response(JSON.stringify({ error: "Authorization header required" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let user: any = null;
+    if (authHeader) {
+      const token = authHeader.replace("Bearer ", "");
+      try {
+        const { data: userData } = await supabaseClient.auth.getUser(token);
+        user = userData?.user ?? null;
+      } catch {}
     }
 
-    const token = authHeader ? authHeader.replace("Bearer ", "") : "";
-    const { data: userData, error: userError } = token
-      ? await supabaseClient.auth.getUser(token)
-      : ({ data: { user: null }, error: null } as any);
-    
-    if (userError && !forceHeader) {
-      console.error("Error getting user:", userError);
-      return new Response(JSON.stringify({ error: "Invalid authentication token" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    
-    const user = userData.user;
-
-    if (!user && !forceHeader) {
-      console.error("No user found from token");
-      return new Response(JSON.stringify({ error: "Unauthorized - no user found" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (user) { console.log("Authenticated user:", user.id, user.email); } else { console.log("Force create enabled: bypassing auth checks"); }
+    if (user) { console.log("Authenticated user:", user.id, user.email); } else { console.log("Anonymous tenant creation permitted"); }
 
     // Check if user has permission to create tenants (unless forced)
     let hasPermission: any = true;
