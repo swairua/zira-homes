@@ -68,8 +68,37 @@ export function useNotifications() {
         serialized = String(error);
       }
 
+      // Network/CORS fallback via server REST proxy
       if (typeof (error as any)?.message === 'string' && (error as any).message.toLowerCase().includes('failed to fetch')) {
-        console.error('Error fetching notifications: network/fetch failed. Check Supabase URL, CORS, and connectivity.', serialized);
+        console.error('Error fetching notifications: network/fetch failed. Falling back to server proxy.', serialized);
+        try {
+          const params = new URLSearchParams();
+          params.set('select', '*');
+          params.set('user_id', `eq.${user.id}`);
+          params.set('order', 'created_at.desc');
+          if (filters.unreadOnly) params.set('read', 'eq.false');
+          if (filters.types && filters.types.length > 0) params.set('type', `in.(${filters.types.join(',')})`);
+          if (filters.limit) params.set('limit', String(filters.limit));
+
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData?.session?.access_token;
+          const res = await fetch(`/api/rest/notifications?${params.toString()}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined
+          });
+          const text = await res.text();
+          let json; try { json = JSON.parse(text); } catch { json = text; }
+          if (res.ok && Array.isArray(json)) {
+            const typedData = (json || []).map((item: any) => ({
+              ...item,
+              type: item.type as Notification['type']
+            })) as Notification[];
+            setNotifications(typedData);
+            updateUnreadCount(typedData);
+            return;
+          }
+        } catch (fallbackErr) {
+          console.error('REST proxy fallback failed:', fallbackErr);
+        }
       } else {
         console.error('Error fetching notifications:', serialized);
       }
@@ -104,6 +133,23 @@ export function useNotifications() {
       if (error) throw error;
     } catch (error) {
       console.error("Error marking notification as read:", error);
+      // Try REST proxy fallback on network error
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        const res = await fetch(`/api/rest/notifications?id=eq.${notificationId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify({ read: true })
+        });
+        if (!res.ok) throw new Error('REST proxy update failed');
+      } catch (fallbackErr) {
+        console.error('REST proxy fallback failed:', fallbackErr);
+      }
       // Revert optimistic update
       fetchNotifications();
     }
@@ -126,6 +172,23 @@ export function useNotifications() {
       if (error) throw error;
     } catch (error) {
       console.error("Error marking all notifications as read:", error);
+      // Try REST proxy fallback on network error
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        const res = await fetch(`/api/rest/notifications?user_id=eq.${user.id}&read=eq.false`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify({ read: true })
+        });
+        if (!res.ok) throw new Error('REST proxy update failed');
+      } catch (fallbackErr) {
+        console.error('REST proxy fallback failed:', fallbackErr);
+      }
       // Revert optimistic update
       fetchNotifications();
     }
