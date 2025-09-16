@@ -27,21 +27,35 @@
 
     const handleRpcProxy = async (rpcPath, req, res, mapBody = (b)=>b) => {
       try {
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-        const serviceRole = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY;
+        // Load runtime config as fallback
+        let runtime = {};
+        try {
+          const runtimePath = path.join(__dirname, 'supabase', 'runtime.json');
+          if (fs.existsSync(runtimePath)) {
+            runtime = JSON.parse(fs.readFileSync(runtimePath, 'utf-8'));
+          }
+        } catch {}
+
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || runtime.url;
+        const serviceRole = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY || runtime.serviceRole;
+        const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || runtime.anonKey;
         if (!supabaseUrl) return sendJSON(res, 500, { error: 'Supabase URL not configured' });
-        if (!serviceRole) return sendJSON(res, 500, { error: 'Supabase service role key (SUPABASE_SERVICE_ROLE) not configured on the server' });
+        if (!serviceRole && !anonKey) return sendJSON(res, 500, { error: 'Supabase key not configured (service role or anon)' });
 
         const body = await parseJSONBody(req) || {};
         const rpcBody = mapBody(body);
+
+        const incomingAuth = req.headers['authorization'] || req.headers['Authorization'];
+        const authHeader = incomingAuth ? String(incomingAuth) : `Bearer ${serviceRole || anonKey}`;
+        const apikeyHeader = serviceRole || anonKey;
 
         const rpcUrl = supabaseUrl.replace(/\/$/, '') + rpcPath;
         const response = await fetch(rpcUrl, {
           method: req.method || 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'apikey': serviceRole,
-            'Authorization': `Bearer ${serviceRole}`,
+            'apikey': apikeyHeader,
+            'Authorization': authHeader,
           },
           body: JSON.stringify(rpcBody),
         });
@@ -93,6 +107,54 @@
         }
 
         // API routes
+        // Generic RPC proxy: /api/rpc/<function>
+        if (url.startsWith('/api/rpc/')) {
+          const fn = url.replace(/^\/api\/rpc\//, '').split('?')[0];
+          if (!fn) return sendJSON(res, 400, { error: 'RPC function name required' });
+          return handleRpcProxy(`/rest/v1/rpc/${fn}`, req, res, (body) => body || {});
+        }
+
+        // Generic REST proxy: /api/rest/<path>
+        if (url.startsWith('/api/rest/')) {
+          try {
+            // Load runtime config
+            let runtime = {};
+            try {
+              const runtimePath = path.join(__dirname, 'supabase', 'runtime.json');
+              if (fs.existsSync(runtimePath)) {
+                runtime = JSON.parse(fs.readFileSync(runtimePath, 'utf-8'));
+              }
+            } catch {}
+
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || runtime.url;
+            const serviceRole = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY || runtime.serviceRole;
+            const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || runtime.anonKey;
+            if (!supabaseUrl) return sendJSON(res, 500, { error: 'Supabase URL not configured' });
+            if (!serviceRole && !anonKey) return sendJSON(res, 500, { error: 'Supabase key not configured (service role or anon)' });
+
+            const incomingAuth = req.headers['authorization'] || req.headers['Authorization'];
+            const authHeader = incomingAuth ? String(incomingAuth) : `Bearer ${serviceRole || anonKey}`;
+            const apikeyHeader = serviceRole || anonKey;
+
+            const restPath = url.replace(/^\/api\/rest\//, '');
+            const targetUrl = supabaseUrl.replace(/\/$/, '') + '/rest/v1/' + restPath;
+
+            const method = req.method || 'GET';
+            const headers = { 'apikey': apikeyHeader, 'Authorization': authHeader };
+            if (method !== 'GET' && method !== 'HEAD') headers['Content-Type'] = 'application/json';
+
+            const body = (method !== 'GET' && method !== 'HEAD') ? JSON.stringify(await parseJSONBody(req) || {}) : undefined;
+            const response = await fetch(targetUrl, { method, headers, body });
+            const text = await response.text();
+            let data; try { data = JSON.parse(text); } catch { data = text; }
+            if (!response.ok) return sendJSON(res, response.status, { error: 'Supabase REST error', details: data });
+            return sendJSON(res, 200, data);
+          } catch (err) {
+            console.error('Error in REST proxy:', err);
+            return sendJSON(res, 500, { error: 'Internal server error' });
+          }
+        }
+
         if (url.startsWith('/api/leases/expiring')) {
           return handleRpcProxy('/rest/v1/rpc/get_lease_expiry_report', req, res, (body) => {
             const out = {};

@@ -201,23 +201,38 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
     
     try {
       // Call the edge function to create tenant account
-      // Prefer same-origin server proxy to avoid browser CORS
+      // Try in order: same-origin proxy -> user-JWT invoke -> direct public fetch
       let invokeResponse: any = null;
-      try {
-        const res = await fetch('/api/edge/create-tenant-account', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...requestPayload, force: true })
-        });
-        const text = await res.text();
-        let data: any; try { data = JSON.parse(text); } catch { data = text; }
-        if (res.ok) {
-          invokeResponse = { data, error: null };
-        } else {
-          invokeResponse = { data: null, error: { message: 'Proxy call failed', status: res.status, details: data } };
+
+      const attemptProxy = async () => {
+        try {
+          const res = await fetch('/api/edge/create-tenant-account', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...requestPayload, force: true })
+          });
+          const text = await res.text();
+          let data: any; try { data = JSON.parse(text); } catch { data = text; }
+          if (res.ok) return { data, error: null };
+          return { data: null, error: { message: 'Proxy call failed', status: res.status, details: data } };
+        } catch (e: any) {
+          return { data: null, error: { message: e?.message || 'Proxy network error' } };
         }
-      } catch (proxyErr: any) {
-        console.warn('Server proxy failed, attempting direct fetch:', proxyErr);
+      };
+
+      const attemptUserInvoke = async () => {
+        try {
+          const resp = await (supabase.functions as any).invoke('create-tenant-account', {
+            body: requestPayload,
+            headers: { 'x-force-create': 'true' }
+          });
+          return resp;
+        } catch (e: any) {
+          return { data: null, error: e };
+        }
+      };
+
+      const attemptDirectPublic = async () => {
         try {
           const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } = await import("@/integrations/supabase/client");
           const fnUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/create-tenant-account`;
@@ -235,40 +250,21 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
           });
           const text = await res.text();
           let data: any; try { data = JSON.parse(text); } catch { data = text; }
-          if (res.ok) {
-            invokeResponse = { data, error: null };
-          } else {
-            invokeResponse = { data: null, error: { message: 'Edge function fetch failed', status: res.status, details: data } };
-          }
-        } catch (directErr: any) {
-          console.warn('Direct function fetch failed, falling back to supabase-js invoke:', directErr);
-          try {
-            invokeResponse = await supabase.functions.invoke('create-tenant-account', { body: requestPayload, headers: { 'x-force-create': 'true' } });
-          } catch (fnErr: any) {
-            console.error("Edge function threw an error:", fnErr);
-            let details = fnErr?.message || "Edge function invocation failed";
-            try {
-              if (fnErr?.response && typeof fnErr.response.text === 'function') {
-                const txt = await fnErr.response.text();
-                try {
-                  const parsed = JSON.parse(txt);
-                  details = parsed.error || parsed.message || parsed.details || JSON.stringify(parsed);
-                } catch (e) {
-                  details = txt;
-                }
-              }
-            } catch (e) {
-              console.warn('Failed to extract error response body', e);
-            }
+          if (res.ok) return { data, error: null };
+          return { data: null, error: { message: 'Edge function fetch failed', status: res.status, details: data } };
+        } catch (e: any) {
+          return { data: null, error: { message: e?.message || 'Direct fetch failed' } };
+        }
+      };
 
-            toast({
-              title: "Tenant Creation Failed",
-              description: details,
-              variant: "destructive",
-            });
-            setLoading(false);
-            return;
-          }
+      invokeResponse = await attemptProxy();
+      if (invokeResponse?.error) {
+        // Prefer user-JWT invoke for authenticated users
+        const userAttempt = await attemptUserInvoke();
+        if (!userAttempt?.error) {
+          invokeResponse = userAttempt;
+        } else {
+          invokeResponse = await attemptDirectPublic();
         }
       }
 
