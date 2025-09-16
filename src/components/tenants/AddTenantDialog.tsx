@@ -55,10 +55,18 @@ type TenantFormData = z.infer<typeof tenantFormSchema>;
 
 interface AddTenantDialogProps {
   onTenantAdded: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  showTrigger?: boolean;
 }
 
-export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
+export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenChange, showTrigger = true }: AddTenantDialogProps) {
   const [open, setOpen] = useState(false);
+  const isOpen = controlledOpen ?? open;
+  const handleOpenChange = (next: boolean) => {
+    if (onOpenChange) onOpenChange(next);
+    else setOpen(next);
+  };
   const [loading, setLoading] = useState(false);
   const [properties, setProperties] = useState<any[]>([]);
   const [units, setUnits] = useState<any[]>([]);
@@ -285,7 +293,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
 
         // Enhanced communication status reporting
         const commStatus = result.communicationStatus;
-        let statusMessage = "�� Tenant account created successfully!";
+        let statusMessage = "Tenant account created successfully!";
         let communicationDetails = [];
         
         if (commStatus?.emailSent && commStatus?.smsSent) {
@@ -320,7 +328,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
         });
         
         reset();
-        setOpen(false);
+        handleOpenChange(false);
         onTenantAdded();
       } else {
         throw new Error(result?.error || "Failed to create tenant account");
@@ -350,13 +358,15 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className="bg-primary hover:bg-primary/90">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Tenant
-        </Button>
-      </DialogTrigger>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      {showTrigger && (
+        <DialogTrigger asChild>
+          <Button className="bg-primary hover:bg-primary/90">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Tenant
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto bg-tint-gray">
         <DialogHeader className="pb-4">
           <DialogTitle className="text-xl font-semibold text-primary">Add New Tenant</DialogTitle>
@@ -816,7 +826,7 @@ export function AddTenantDialog({ onTenantAdded }: AddTenantDialogProps) {
             </div>
 
             <div className="flex justify-end gap-3 pt-6 border-t border-border">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)} className="border-primary text-primary hover:bg-primary hover:text-primary-foreground">
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} className="border-primary text-primary hover:bg-primary hover:text-primary-foreground">
                 Cancel
               </Button>
               <Button type="submit" disabled={loading} className="bg-accent hover:bg-accent/90">
