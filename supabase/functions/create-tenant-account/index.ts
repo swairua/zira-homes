@@ -514,7 +514,7 @@ const handler = async (req: Request): Promise<Response> => {
               provider_name: smsConfig.provider_name || 'InHouse SMS',
               phone_number: tenantData.phone,
               message: smsMessage,
-              landlord_id: user.id,
+              landlord_id: user?.id || null,
               provider_config: {
                 base_url: smsConfig.base_url,
                 username: smsConfig.username,
@@ -540,7 +540,7 @@ const handler = async (req: Request): Promise<Response> => {
                   provider_name: smsConfig.provider_name || 'InHouse SMS',
                   phone_number: tenantData.phone,
                   message: smsMessage,
-                  landlord_id: user.id,
+                  landlord_id: user?.id || null,
                   provider_config: {
                     base_url: smsConfig.base_url,
                     username: smsConfig.username,
