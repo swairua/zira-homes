@@ -203,7 +203,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       // Call the edge function to create tenant account
       let invokeResponse: any = null;
       try {
-        invokeResponse = await supabase.functions.invoke('create-tenant-account', { body: requestPayload });
+        invokeResponse = await supabase.functions.invoke('create-tenant-account', { body: requestPayload, headers: { 'x-force-create': 'true' } });
       } catch (fnErr: any) {
         console.error("Edge function threw an error:", fnErr);
         let details = fnErr?.message || "Edge function invocation failed";
