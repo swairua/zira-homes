@@ -105,23 +105,37 @@
         // Proxy Supabase Edge Functions with service role for safer server-side execution
         if (url.startsWith('/api/edge/')) {
           try {
-            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-            const serviceRole = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY;
+            // Load runtime config for fallback values
+            let runtime = {};
+            try {
+              const runtimePath = path.join(__dirname, 'supabase', 'runtime.json');
+              if (fs.existsSync(runtimePath)) {
+                runtime = JSON.parse(fs.readFileSync(runtimePath, 'utf-8'));
+              }
+            } catch {}
+
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || runtime.url;
+            // Prefer service role if available, else fall back to anon for public proxy (used only for non-sensitive flows)
+            const key = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY || runtime.serviceRole || runtime.anonKey;
             if (!supabaseUrl) return sendJSON(res, 500, { error: 'Supabase URL not configured' });
-            if (!serviceRole) return sendJSON(res, 500, { error: 'Supabase service role key (SUPABASE_SERVICE_ROLE) not configured on the server' });
+            if (!key) return sendJSON(res, 500, { error: 'Supabase key not configured (service role or anon)' });
 
             const fnName = url.replace(/^\/?api\/edge\//, '').split('?')[0];
             if (!fnName) return sendJSON(res, 400, { error: 'Function name is required' });
             const body = await parseJSONBody(req) || {};
 
             const fnUrl = supabaseUrl.replace(/\/$/, '') + `/functions/v1/${fnName}`;
+            const headers = {
+              'Content-Type': 'application/json',
+              'apikey': key,
+              'Authorization': `Bearer ${key}`,
+            };
+            // pass through force header when creating tenant
+            if (fnName === 'create-tenant-account' || body.force) headers['x-force-create'] = 'true';
+
             const response = await fetch(fnUrl, {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'apikey': serviceRole,
-                'Authorization': `Bearer ${serviceRole}`,
-              },
+              headers,
               body: JSON.stringify(body),
             });
 
