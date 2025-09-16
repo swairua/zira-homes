@@ -60,9 +60,26 @@ export function usePlanFeatureAccess(
           serialized = String(error);
         }
 
-        // Detect network/fetch failures and return a safe fallback
+        // Detect network/fetch failures and fallback to server RPC proxy
         if (typeof error.message === 'string' && error.message.toLowerCase().includes('failed to fetch')) {
-          console.error('❌ Feature access RPC failed due to network/fetch error. This often indicates a CORS or network issue contacting Supabase. Details:', serialized);
+          console.error('❌ Feature access RPC failed due to network/fetch error. Trying server proxy...:', serialized);
+          try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const token = sessionData?.session?.access_token;
+            const res = await fetch('/api/rpc/check_plan_feature_access', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              body: JSON.stringify({ _user_id: user.id, _feature: feature, _current_count: count })
+            });
+            const text = await res.text();
+            let data; try { data = JSON.parse(text); } catch { data = text; }
+            if (res.ok) return (data as any) as FeatureAccessResult;
+          } catch (fallbackErr) {
+            console.error('RPC proxy fallback failed:', fallbackErr);
+          }
           return {
             allowed: false,
             is_limited: true,
