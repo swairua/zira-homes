@@ -85,7 +85,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       profession: "",
       employment_status: "",
       employer_name: "",
-      monthly_income: undefined,
+      monthly_income: "" as any,
       emergency_contact_name: "",
       emergency_contact_phone: "",
       previous_address: "",
@@ -93,8 +93,8 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       unit_id: "",
       lease_start_date: "",
       lease_end_date: "",
-      monthly_rent: undefined as any,
-      security_deposit: undefined as any,
+      monthly_rent: "" as any,
+      security_deposit: "" as any,
     }
   });
   
@@ -392,6 +392,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="John"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -411,6 +412,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="Doe"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -440,6 +442,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="john@example.com"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -459,6 +462,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="+254 700 000 000"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -487,6 +491,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="12345678"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -506,6 +511,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="Software Engineer"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -522,7 +528,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                       <FormLabel className="text-sm font-medium text-primary">
                         Employment Status <span className="text-muted-foreground">(Optional)</span>
                       </FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={(field.value as any) ?? ""}>
                         <FormControl>
                           <SelectTrigger className="bg-card border-border focus:border-accent focus:ring-accent">
                             <SelectValue placeholder="Select status" />
@@ -553,6 +559,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="ABC Company Ltd"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -574,6 +581,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                         className="bg-card border-border focus:border-accent focus:ring-accent"
                         placeholder="50000"
                         {...field}
+                        value={field.value ?? ""}
                       />
                     </FormControl>
                     <FormMessage />
@@ -601,6 +609,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="Jane Doe"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -620,6 +629,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                           className="bg-card border-border focus:border-accent focus:ring-accent"
                           placeholder="+254 700 000 001"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -643,12 +653,12 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                       <FormLabel className="text-sm font-medium text-primary">
                         Property <span className="text-destructive">*</span>
                       </FormLabel>
-                      <Select 
+                      <Select
                         onValueChange={(value) => {
                           field.onChange(value);
                           setValue("unit_id", ""); // Reset unit when property changes
                         }}
-                        defaultValue={field.value}
+                        value={(field.value as any) ?? ""}
                       >
                         <FormControl>
                           <SelectTrigger className="bg-card border-border focus:border-accent focus:ring-accent">
@@ -675,16 +685,16 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                       <FormLabel className="text-sm font-medium text-primary">
                         Unit <span className="text-destructive">*</span>
                       </FormLabel>
-                      <Select 
+                      <Select
                         onValueChange={(value) => {
                           field.onChange(value);
                           // Auto-fill rent amount when unit is selected
                           const selectedUnit = units.find(u => u.id === value);
                           if (selectedUnit) {
-                            setValue("monthly_rent", selectedUnit.rent_amount);
+                            setValue("monthly_rent", String(selectedUnit.rent_amount ?? ""));
                           }
                         }}
-                        defaultValue={field.value}
+                        value={(field.value as any) ?? ""}
                         disabled={!watchPropertyId}
                       >
                         <FormControl>
@@ -727,6 +737,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                             type="date"
                             className="bg-card border-border focus:border-accent focus:ring-accent"
                             {...field}
+                            value={field.value ?? ""}
                           />
                         </FormControl>
                         <FormMessage />
@@ -746,6 +757,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                             type="date"
                             className="bg-card border-border focus:border-accent focus:ring-accent"
                             {...field}
+                            value={field.value ?? ""}
                           />
                         </FormControl>
                         <FormMessage />
@@ -764,11 +776,12 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                         </FormLabel>
                         <FormControl>
                           <Input
-                            type="number"
-                            className="bg-card border-border focus:border-accent focus:ring-accent"
-                            placeholder="50000"
-                            {...field}
-                          />
+                        type="number"
+                        className="bg-card border-border focus:border-accent focus:ring-accent"
+                        placeholder="50000"
+                        {...field}
+                        value={field.value ?? ""}
+                      />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -784,11 +797,12 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                         </FormLabel>
                         <FormControl>
                           <Input
-                            type="number"
-                            className="bg-card border-border focus:border-accent focus:ring-accent"
-                            placeholder="50000"
-                            {...field}
-                          />
+                        type="number"
+                        className="bg-card border-border focus:border-accent focus:ring-accent"
+                        placeholder="50000"
+                        {...field}
+                        value={field.value ?? ""}
+                      />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -817,6 +831,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                         placeholder="Previous residential address"
                         rows={3}
                         {...field}
+                        value={field.value ?? ""}
                       />
                     </FormControl>
                     <FormMessage />
