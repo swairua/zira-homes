@@ -183,10 +183,11 @@ const Tenants = () => {
         console.warn('Audit log (user activity) failed', e);
       }
     } catch (error) {
-      console.error('Error fetching tenants via RPC:', error);
+      const details = (error as any)?.message || JSON.stringify(error);
+      console.error('Error fetching tenants via RPC:', details, error);
       toast({
         title: "Error",
-        description: "Failed to load tenants",
+        description: `Failed to load tenants: ${details}`,
         variant: "destructive",
       });
       setTenants([]);
