@@ -200,63 +200,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
     console.log("Submitting tenant creation request:", requestPayload);
 
-    // Helper to invoke edge function create-tenant-account (tries proxy, direct fetch, then supabase.functions)
-    const invokeEdgeCreate = async () => {
-      try {
-        // try same-origin proxy first
-        const res = await fetch('/api/edge/create-tenant-account', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...requestPayload, force: true })
-        });
-        const text = await res.text();
-        let dataRes: any; try { dataRes = JSON.parse(text); } catch { dataRes = text; }
-        if (res.ok) return { data: dataRes, error: null };
-        return { data: null, error: { message: 'Proxy call failed', status: res.status, details: dataRes } };
-      } catch (proxyErr) {
-        console.warn('Server proxy failed, attempting direct fetch:', proxyErr);
-      }
-
-      try {
-        const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } = await import("@/integrations/supabase/client");
-        const fnUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/create-tenant-account`;
-        const res = await fetch(fnUrl, {
-          method: 'POST',
-          mode: 'cors',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': SUPABASE_PUBLISHABLE_KEY,
-            'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
-            'x-force-create': 'true',
-            'x-requested-with': 'XMLHttpRequest',
-          },
-          body: JSON.stringify(requestPayload)
-        });
-        const text = await res.text();
-        let dataRes: any; try { dataRes = JSON.parse(text); } catch { dataRes = text; }
-        if (res.ok) return { data: dataRes, error: null };
-        return { data: null, error: { message: 'Edge function fetch failed', status: res.status, details: dataRes } };
-      } catch (directErr) {
-        console.warn('Direct function fetch failed, falling back to supabase-js invoke:', directErr);
-      }
-
-      try {
-        const res = await supabase.functions.invoke('create-tenant-account', { body: requestPayload, headers: { 'x-force-create': 'true' } });
-        return res;
-      } catch (fnErr: any) {
-        console.error('Edge function invocation failed:', fnErr);
-        let details = fnErr?.message || 'Edge function invocation failed';
-        try {
-          if (fnErr?.response && typeof fnErr.response.text === 'function') {
-            const txt = await fnErr.response.text();
-            try { details = JSON.parse(txt); } catch { details = txt; }
-          }
-        } catch (e) {}
-        return { data: null, error: details };
-      }
-    };
-
-    // Direct creation without Edge Functions (attempt, but fallback to edge on encryption errors)
+    // Direct creation without Edge Functions — avoid using server-side edge function fallback.
     try {
       const insertBase: any = {
         first_name: data.first_name,
@@ -298,23 +242,49 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       tenantError = attempt.error;
 
       if (tenantError) {
+        // If insert failed due to encryption-related DB triggers, attempt a non-PII insert (do not call edge functions).
         const msg = String(tenantError.message || tenantError).toLowerCase();
         if (/encrypt|encrypt_iv|encrypt_pii|extensions\.encrypt_iv|function encrypt\(/i.test(msg)) {
-          console.warn('Direct insert failed due to encryption error; falling back to edge function');
-          const invokeResponse = await invokeEdgeCreate();
-          const result = invokeResponse?.data ?? invokeResponse;
-          const error = invokeResponse?.error ?? null;
+          console.warn('Direct insert failed due to encryption error; retrying without PII fields');
+          const insertNoPii = {
+            first_name: data.first_name,
+            last_name: data.last_name,
+            email: data.email,
+            employment_status: data.employment_status,
+            profession: data.profession,
+            employer_name: data.employer_name,
+            monthly_income: data.monthly_income ? Number(data.monthly_income) : null,
+            previous_address: data.previous_address || null,
+          };
 
-          if (error) throw new Error(typeof error === 'string' ? error : (error.message || JSON.stringify(error)));
-          if (!result) throw new Error('Edge function did not return a result');
+          // Try with property_id then without
+          let retryAttempt = await supabase
+            .from('tenants')
+            .insert({ ...insertNoPii, property_id: data.property_id || null })
+            .select()
+            .single()
+            .catch(() => null);
 
-          if (result?.success) {
-            await logActivity('tenant_created', 'tenant', result.tenant?.id, { tenant_name: `${data.first_name} ${data.last_name}`, tenant_email: data.email, unit_id: data.unit_id, property_id: data.property_id, has_lease: !!data.unit_id });
-            toast({ title: 'Tenant Created', description: 'Tenant created via server function (encryption bypass).', variant: 'default' });
+          if (!retryAttempt || retryAttempt.error) {
+            retryAttempt = await supabase
+              .from('tenants')
+              .insert(insertNoPii)
+              .select()
+              .single()
+              .catch(() => null);
+          }
+
+          if (retryAttempt && !retryAttempt.error) {
+            const tenantRow = retryAttempt.data;
+            await logActivity('tenant_created', 'tenant', tenantRow?.id, { tenant_name: `${data.first_name} ${data.last_name}`, tenant_email: data.email, unit_id: data.unit_id, property_id: data.property_id, has_lease: !!data.unit_id });
+            toast({ title: 'Tenant Created', description: 'Tenant created without storing sensitive PII fields. Add PII later.', variant: 'default' });
             reset(); handleOpenChange(false); onTenantAdded(); return;
           }
-          throw new Error(result?.error || 'Failed to create tenant via edge function');
+
+          throw new Error('Retry without PII failed');
         }
+
+        // Not an encryption error — surface it
         throw new Error(tenantError.message);
       }
 
