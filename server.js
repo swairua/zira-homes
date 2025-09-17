@@ -27,22 +27,35 @@
 
     const handleRpcProxy = async (rpcPath, req, res, mapBody = (b)=>b) => {
       try {
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-        const serviceRole = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY;
+        // Load runtime for defaults
+        let runtime = {};
+        try {
+          const runtimePath = path.join(__dirname, 'supabase', 'runtime.json');
+          if (fs.existsSync(runtimePath)) runtime = JSON.parse(fs.readFileSync(runtimePath, 'utf-8'));
+        } catch {}
+
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || runtime.url;
+        const serviceRole = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY || runtime.serviceRole;
+        const authHeader = req.headers['authorization'] || req.headers['Authorization'];
         if (!supabaseUrl) return sendJSON(res, 500, { error: 'Supabase URL not configured' });
-        if (!serviceRole) return sendJSON(res, 500, { error: 'Supabase service role key (SUPABASE_SERVICE_ROLE) not configured on the server' });
 
         const body = await parseJSONBody(req) || {};
         const rpcBody = mapBody(body);
 
         const rpcUrl = supabaseUrl.replace(/\/$/, '') + rpcPath;
+
+        // Prefer user token passthrough; else fall back to service role; else anon
+        const key = serviceRole || runtime.anonKey || '';
+        const headers = {
+          'Content-Type': 'application/json',
+          'apikey': authHeader ? (runtime.anonKey || key) : key,
+          'Authorization': authHeader ? String(authHeader) : (key ? `Bearer ${key}` : undefined),
+        };
+        if (!headers.Authorization) delete headers.Authorization;
+
         const response = await fetch(rpcUrl, {
           method: req.method || 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': serviceRole,
-            'Authorization': `Bearer ${serviceRole}`,
-          },
+          headers,
           body: JSON.stringify(rpcBody),
         });
 
@@ -93,6 +106,12 @@
         }
 
         // API routes
+        if (url.startsWith('/api/rpc/')) {
+          const fnName = url.replace(/^\/?api\/rpc\//, '').split('?')[0];
+          if (!fnName) return sendJSON(res, 400, { error: 'Function name is required' });
+          return handleRpcProxy(`/rest/v1/rpc/${fnName}`, req, res);
+        }
+
         if (url.startsWith('/api/leases/expiring')) {
           return handleRpcProxy('/rest/v1/rpc/get_lease_expiry_report', req, res, (body) => {
             const out = {};
@@ -146,6 +165,20 @@
             return sendJSON(res, 200, data);
           } catch (err) {
             console.error('Error proxying edge function:', err);
+            return sendJSON(res, 500, { error: 'Internal server error' });
+          }
+        }
+
+        // Admin: migrate plaintext tenant PII into encrypted columns
+        if (url.startsWith('/api/admin/migrate-tenant-pii')) {
+          try {
+            // Simple admin auth using MIGRATION_ADMIN_KEY header
+            const adminKey = process.env.MIGRATION_ADMIN_KEY;
+            const provided = req.headers['x-admin-key'] || req.headers['x-admin-key'];
+            if (!adminKey || String(provided) !== String(adminKey)) return sendJSON(res, 403, { error: 'Not authorized' });
+            return handleRpcProxy('/rest/v1/rpc/migrate_plain_tenant_pii', req, res);
+          } catch (err) {
+            console.error('Error in migrate-tenant-pii:', err);
             return sendJSON(res, 500, { error: 'Internal server error' });
           }
         }

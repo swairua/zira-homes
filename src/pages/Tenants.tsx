@@ -90,32 +90,96 @@ const Tenants = () => {
       if (rpcError || !rpcData) {
         const details = rpcError?.message || (rpcError ? JSON.stringify(rpcError) : 'No data from RPC');
         console.error('RPC error fetching tenants summary:', details);
-        // Fallback: fetch a minimal tenants list to keep UI functional
-        const { data: trows, error: tError, count } = await supabase
+
+        // Fallback: strictly scope to current landlord's portfolio (owner or manager)
+        const { data: auth } = await supabase.auth.getUser();
+        const uid = auth?.user?.id;
+        if (!uid) throw new Error('Not authenticated');
+
+        // 1) Get properties owned/managed by this user
+        const { data: ownedProps, error: propsErr } = await (supabase as any)
+          .from('properties')
+          .select('id, name')
+          .or(`owner_id.eq.${uid},manager_id.eq.${uid}`);
+        if (propsErr) throw propsErr;
+        const propertyIds = (ownedProps || []).map((p: any) => p.id);
+        const propertyById: Record<string, any> = (ownedProps || []).reduce((acc: any, p: any) => { acc[p.id] = p; return acc; }, {});
+
+        if (!propertyIds.length) {
+          setTenants([]);
+          setTotalCount(0);
+          return;
+        }
+
+        // 2) Get units within those properties
+        const { data: units, error: unitsErr } = await supabase
+          .from('units')
+          .select('id, unit_number, property_id')
+          .in('property_id', propertyIds);
+        if (unitsErr) throw unitsErr;
+        const unitById: Record<string, any> = (units || []).reduce((acc: any, u: any) => { acc[u.id] = u; return acc; }, {});
+        const unitIds = (units || []).map((u: any) => u.id);
+
+        if (!unitIds.length) {
+          setTenants([]);
+          setTotalCount(0);
+          return;
+        }
+
+        // 3) Get active leases for those units
+        const { data: leases, error: leasesErr } = await supabase
+          .from('leases')
+          .select('tenant_id, unit_id, monthly_rent, status')
+          .in('unit_id', unitIds)
+          .neq('status', 'terminated');
+        if (leasesErr) throw leasesErr;
+
+        const tenantIds = Array.from(new Set((leases || []).map((l: any) => l.tenant_id).filter(Boolean)));
+
+        if (!tenantIds.length) {
+          setTenants([]);
+          setTotalCount(0);
+          return;
+        }
+
+        // 4) Fetch tenants with pagination and exact count
+        const { data: tenantRows, error: tError, count } = await supabase
           .from('tenants')
           .select('id, first_name, last_name, email, phone, employment_status, employer_name, monthly_income, emergency_contact_name, emergency_contact_phone, previous_address, created_at', { count: 'exact' })
+          .in('id', tenantIds)
           .order('created_at', { ascending: false })
           .range(offset, offset + pageSize - 1);
 
         if (tError) throw tError;
 
-        const transformedFallback = (trows || []).map((t: any) => ({
-          id: t.id,
-          first_name: t.first_name,
-          last_name: t.last_name,
-          email: t.email,
-          phone: t.phone,
-          employment_status: t.employment_status,
-          employer_name: t.employer_name,
-          monthly_income: t.monthly_income,
-          emergency_contact_name: t.emergency_contact_name,
-          emergency_contact_phone: t.emergency_contact_phone,
-          previous_address: t.previous_address,
-          created_at: t.created_at,
-          property_name: undefined,
-          unit_number: undefined,
-          rent_amount: undefined,
-        }));
+        // 5) Map tenants to their unit/property/rent where possible (choose first active lease per tenant)
+        const leaseByTenant: Record<string, any> = {};
+        (leases || []).forEach((l: any) => {
+          if (!leaseByTenant[l.tenant_id]) leaseByTenant[l.tenant_id] = l; // keep first (most recent selection could be improved)
+        });
+
+        const transformedFallback = (tenantRows || []).map((t: any) => {
+          const l = leaseByTenant[t.id];
+          const unit = l ? unitById[l.unit_id] : null;
+          const prop = unit ? propertyById[unit.property_id] : null;
+          return {
+            id: t.id,
+            first_name: t.first_name,
+            last_name: t.last_name,
+            email: t.email,
+            phone: t.phone,
+            employment_status: t.employment_status,
+            employer_name: t.employer_name,
+            monthly_income: t.monthly_income,
+            emergency_contact_name: t.emergency_contact_name,
+            emergency_contact_phone: t.emergency_contact_phone,
+            previous_address: t.previous_address,
+            created_at: t.created_at,
+            property_name: prop?.name,
+            unit_number: unit?.unit_number,
+            rent_amount: l?.monthly_rent,
+          };
+        });
 
         setTenants(transformedFallback as Tenant[]);
         setTotalCount(count || transformedFallback.length || 0);
@@ -199,13 +263,18 @@ const Tenants = () => {
 
   const fetchProperties = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth?.user?.id;
+      if (!uid) throw new Error('Not authenticated');
+
+      const { data, error } = await (supabase as any)
         .from('properties')
-        .select('id, name, property_type')
+        .select('id, name, property_type, owner_id, manager_id')
+        .or(`owner_id.eq.${uid},manager_id.eq.${uid}`)
         .order('name');
 
       if (error) throw error;
-      setProperties(data || []);
+      setProperties((data || []).map(p => ({ id: p.id, name: p.name, property_type: p.property_type })));
     } catch (error) {
       console.error('Error fetching properties:', error);
       setProperties([]);
