@@ -90,33 +90,66 @@ const Tenants = () => {
       if (rpcError || !rpcData) {
         const details = rpcError?.message || (rpcError ? JSON.stringify(rpcError) : 'No data from RPC');
         console.error('RPC error fetching tenants summary:', details);
-        // Fallback: fetch a minimal tenants list to keep UI functional
-        const { data: trows, error: tError, count } = await supabase
-          .from('tenants')
-          .select('id, first_name, last_name, email, phone, employment_status, employer_name, monthly_income, emergency_contact_name, emergency_contact_phone, previous_address, created_at', { count: 'exact' })
-          .order('created_at', { ascending: false })
-          .range(offset, offset + pageSize - 1);
 
+        // Fallback: strictly scope to current landlord's portfolio (owner or manager)
+        const { data: auth } = await supabase.auth.getUser();
+        const uid = auth?.user?.id;
+        if (!uid) throw new Error('Not authenticated');
+
+        // Server-side filtering by ownership/management, search and employment
+        let query = (supabase as any)
+          .from('leases')
+          .select(`
+            id, monthly_rent, status,
+            tenants:tenants!inner(
+              id, first_name, last_name, email, phone,
+              employment_status, employer_name, monthly_income,
+              emergency_contact_name, emergency_contact_phone,
+              previous_address, created_at
+            ),
+            units:units!inner(
+              unit_number,
+              properties:properties!inner(name, owner_id, manager_id)
+            )
+          `, { count: 'exact' })
+          .order('created_at', { ascending: false, referencedTable: 'tenants' })
+          .or(`units.properties.owner_id.eq.${uid},units.properties.manager_id.eq.${uid}`);
+
+        if (searchTerm) {
+          const term = `%${searchTerm}%`;
+          query = query.or(
+            `tenants.first_name.ilike.${term},tenants.last_name.ilike.${term},tenants.email.ilike.${term}`
+          );
+        }
+        if (filterEmployment && filterEmployment !== 'all') {
+          query = query.eq('tenants.employment_status', filterEmployment);
+        }
+        if (filterProperty && filterProperty !== 'all') {
+          query = query.eq('units.properties.name', filterProperty);
+        }
+
+        const { data: rows, error: tError, count } = await query.range(offset, offset + pageSize - 1);
         if (tError) throw tError;
 
-        const transformedFallback = (trows || []).map((t: any) => ({
-          id: t.id,
-          first_name: t.first_name,
-          last_name: t.last_name,
-          email: t.email,
-          phone: t.phone,
-          employment_status: t.employment_status,
-          employer_name: t.employer_name,
-          monthly_income: t.monthly_income,
-          emergency_contact_name: t.emergency_contact_name,
-          emergency_contact_phone: t.emergency_contact_phone,
-          previous_address: t.previous_address,
-          created_at: t.created_at,
-          property_name: undefined,
-          unit_number: undefined,
-          rent_amount: undefined,
+        const transformedFallback = (rows || []).map((r: any) => ({
+          id: r.tenants.id,
+          first_name: r.tenants.first_name,
+          last_name: r.tenants.last_name,
+          email: r.tenants.email,
+          phone: r.tenants.phone,
+          employment_status: r.tenants.employment_status,
+          employer_name: r.tenants.employer_name,
+          monthly_income: r.tenants.monthly_income,
+          emergency_contact_name: r.tenants.emergency_contact_name,
+          emergency_contact_phone: r.tenants.emergency_contact_phone,
+          previous_address: r.tenants.previous_address,
+          created_at: r.tenants.created_at,
+          property_name: r.units?.properties?.name,
+          unit_number: r.units?.unit_number,
+          rent_amount: r.monthly_rent,
         }));
 
+        // Optionally filter complex client-side ranges (bedrooms, rent range)
         setTenants(transformedFallback as Tenant[]);
         setTotalCount(count || transformedFallback.length || 0);
         return;
