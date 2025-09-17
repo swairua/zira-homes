@@ -20,15 +20,14 @@ const tenantFormSchemaBase = z.object({
   first_name: z.string().min(1, "First name is required").transform((s) => s.trim()),
   last_name: z.string().min(1, "Last name is required").transform((s) => s.trim()),
   email: z.string().email("Invalid email address").transform((s) => s.trim()),
-  // PII fields: collected but stored into plaintext columns (phone_plain, national_id_plain, emergency_contact_*)
   phone: z.string().min(1, "Phone number is required").transform((s) => s.trim()),
   national_id: z.string().min(1, "National ID or Passport is required").transform((s) => s.trim()),
-  emergency_contact_name: z.string().optional(),
-  emergency_contact_phone: z.string().optional(),
   profession: z.string().optional(),
   employment_status: z.string().optional(),
   employer_name: z.string().optional(),
   monthly_income: z.coerce.number().optional(),
+  emergency_contact_name: z.string().optional(),
+  emergency_contact_phone: z.string().optional(),
   previous_address: z.string().optional(),
   property_id: z.string().min(1, "Property is required"),
   unit_id: z.string().min(1, "Unit is required"),
@@ -83,12 +82,12 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       email: "",
       phone: "",
       national_id: "",
-      emergency_contact_name: "",
-      emergency_contact_phone: "",
       profession: "",
       employment_status: "",
       employer_name: "",
       monthly_income: 0,
+      emergency_contact_name: "",
+      emergency_contact_phone: "",
       previous_address: "",
       property_id: "",
       unit_id: "",
@@ -150,75 +149,354 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
   const onSubmit = async (data: TenantFormData) => {
     if (!user) {
-      toast({ title: "Error", description: "You must be logged in to add tenants", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "You must be logged in to add tenants",
+        variant: "destructive",
+      });
       return;
+    }
+
+    // Non-blocking backend health probe; proceed regardless, fallbacks will handle connectivity
+    try {
+      const health = await checkBackendReady();
+      if (!health.ok) {
+        console.warn("Backend health check failed, proceeding with fallback paths:", health.reason);
+      }
+    } catch (e) {
+      console.warn("Backend health probe error, proceeding:", e);
     }
 
     setLoading(true);
 
+    // Prepare request payload
+    const requestPayload = {
+      tenantData: {
+        first_name: data.first_name,
+        last_name: data.last_name,
+        email: data.email,
+        phone: data.phone,
+        national_id: data.national_id,
+        employment_status: data.employment_status,
+        profession: data.profession,
+        employer_name: data.employer_name,
+        monthly_income: data.monthly_income ? parseFloat(data.monthly_income.toString()) : undefined,
+        emergency_contact_name: data.emergency_contact_name,
+        emergency_contact_phone: data.emergency_contact_phone,
+        previous_address: data.previous_address
+      },
+      unitId: data.unit_id,
+      propertyId: data.property_id,
+      leaseData: data.unit_id ? {
+        lease_start_date: data.lease_start_date,
+        lease_end_date: data.lease_end_date,
+        monthly_rent: data.monthly_rent != null ? parseFloat(data.monthly_rent.toString()) : undefined,
+        security_deposit: data.security_deposit != null ? parseFloat(data.security_deposit.toString()) : undefined
+      } : undefined,
+      force: true
+    };
+
+    try { await logActivity('tenant_create_attempt', 'tenant', undefined, { property_id: data.property_id, unit_id: data.unit_id, has_lease: !!data.unit_id }); } catch {}
+
+    console.log("Submitting tenant creation request:", requestPayload);
+
+    // Direct creation without Edge Functions
     try {
-      // Lightweight health probe (non-blocking)
-      try { const health = await checkBackendReady(); if (!health.ok) console.warn('Backend health:', health.reason); } catch (e) {}
-
-      await logActivity('tenant_create_attempt', 'tenant', undefined, { property_id: data.property_id, unit_id: data.unit_id, has_lease: !!data.unit_id });
-
-      // Non-PII insert only
+      // Attempt insert with property_id; fallback without if column doesn't exist
       const insertBase: any = {
         first_name: data.first_name,
         last_name: data.last_name,
         email: data.email,
-        phone_plain: data.phone || null,
-        national_id_plain: data.national_id || null,
-        emergency_contact_name_plain: data.emergency_contact_name || null,
-        emergency_contact_phone_plain: data.emergency_contact_phone || null,
+        phone: data.phone,
+        national_id: data.national_id,
         employment_status: data.employment_status,
         profession: data.profession,
         employer_name: data.employer_name,
         monthly_income: data.monthly_income ? Number(data.monthly_income) : null,
+        emergency_contact_name: data.emergency_contact_name || null,
+        emergency_contact_phone: data.emergency_contact_phone || null,
         previous_address: data.previous_address || null,
       };
 
-      const attemptWithPropertyId = async () => supabase.from('tenants').insert({ ...insertBase, property_id: data.property_id || null }).select().single();
+      let tenantInserted: any = null;
+      let tenantError: any = null;
+
+      const attemptWithPropertyId = async () => {
+        return await supabase
+          .from('tenants')
+          .insert({ ...insertBase, property_id: data.property_id || null })
+          .select()
+          .single();
+      };
 
       let attempt = await attemptWithPropertyId();
+
       if (attempt.error && /property_id/i.test(attempt.error.message || '')) {
-        attempt = await supabase.from('tenants').insert(insertBase).select().single();
+        // Retry without property_id for schemas that don't have this column
+        attempt = await supabase
+          .from('tenants')
+          .insert(insertBase)
+          .select()
+          .single();
       }
 
-      if (attempt.error) throw attempt.error;
+      tenantInserted = attempt.data;
+      tenantError = attempt.error;
 
-      const tenantInserted = attempt.data;
+      if (tenantError) throw new Error(tenantError.message);
 
-      // Create lease if needed
+      let leaseCreated: any = null;
       if (data.unit_id) {
-        if (!data.lease_start_date || !data.lease_end_date || !data.monthly_rent) throw new Error('Missing lease fields (start, end, monthly rent).');
-        const { data: leaseRow, error: leaseError } = await supabase.from('leases').insert({
-          tenant_id: tenantInserted.id,
-          unit_id: data.unit_id,
-          monthly_rent: Number(data.monthly_rent),
-          lease_start_date: data.lease_start_date,
-          lease_end_date: data.lease_end_date,
-          security_deposit: data.security_deposit != null ? Number(data.security_deposit) : null
-        }).select().single();
-        if (leaseError) throw leaseError;
+        if (!data.lease_start_date || !data.lease_end_date || !data.monthly_rent) {
+          throw new Error("Missing lease fields (start, end, monthly rent).");
+        }
+        const { data: leaseRow, error: leaseError } = await supabase
+          .from('leases')
+          .insert({
+            tenant_id: (tenantInserted as any).id,
+            unit_id: data.unit_id,
+            monthly_rent: Number(data.monthly_rent),
+            lease_start_date: data.lease_start_date,
+            lease_end_date: data.lease_end_date,
+            security_deposit: data.security_deposit != null ? Number(data.security_deposit) : null
+          })
+          .select()
+          .single();
+        if (leaseError) throw new Error(leaseError.message);
+        leaseCreated = leaseRow;
+
         try { await supabase.rpc('sync_unit_status', { p_unit_id: data.unit_id }); } catch {}
       }
 
-      await logActivity('tenant_created', 'tenant', tenantInserted.id, { tenant_name: `${data.first_name} ${data.last_name}`, tenant_email: data.email, unit_id: data.unit_id, property_id: data.property_id, has_lease: !!data.unit_id });
+      await logActivity(
+        'tenant_created',
+        'tenant',
+        (tenantInserted as any).id,
+        {
+          tenant_name: `${data.first_name} ${data.last_name}`,
+          tenant_email: data.email,
+          unit_id: data.unit_id,
+          property_id: data.property_id,
+          has_lease: !!data.unit_id
+        }
+      );
 
-      toast({ title: 'Tenant Created', description: 'Tenant created successfully (PII not stored).', variant: 'default', duration: 6000 });
+      toast({
+        title: "Tenant Created",
+        description: leaseCreated ? "Tenant and lease created successfully." : "Tenant created successfully.",
+        variant: "default",
+        duration: 6000,
+      });
 
-      reset(); handleOpenChange(false); onTenantAdded();
+      reset();
+      handleOpenChange(false);
+      onTenantAdded();
       return;
-    } catch (err: any) {
-      console.error('Error creating tenant:', err);
-      try { await logActivity('tenant_create_failed', 'tenant', undefined, { message: String(err) }); } catch {}
-      toast({ title: 'Tenant Creation Failed', description: String(err?.message || err), variant: 'destructive' });
+    } catch (e) {
+      throw e as any;
+    }
+    
+    try {
+      // Call the edge function to create tenant account
+      // Prefer same-origin server proxy to avoid browser CORS
+      let invokeResponse: any = null;
+      try {
+        const res = await fetch('/api/edge/create-tenant-account', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...requestPayload, force: true })
+        });
+        const text = await res.text();
+        let data: any; try { data = JSON.parse(text); } catch { data = text; }
+        if (res.ok) {
+          invokeResponse = { data, error: null };
+        } else {
+          invokeResponse = { data: null, error: { message: 'Proxy call failed', status: res.status, details: data } };
+        }
+      } catch (proxyErr: any) {
+        console.warn('Server proxy failed, attempting direct fetch:', proxyErr);
+        try {
+          const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } = await import("@/integrations/supabase/client");
+          const fnUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/create-tenant-account`;
+          const res = await fetch(fnUrl, {
+            method: 'POST',
+            mode: 'cors',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_PUBLISHABLE_KEY,
+              'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+              'x-force-create': 'true',
+              'x-requested-with': 'XMLHttpRequest',
+            },
+            body: JSON.stringify(requestPayload)
+          });
+          const text = await res.text();
+          let data: any; try { data = JSON.parse(text); } catch { data = text; }
+          if (res.ok) {
+            invokeResponse = { data, error: null };
+          } else {
+            invokeResponse = { data: null, error: { message: 'Edge function fetch failed', status: res.status, details: data } };
+          }
+        } catch (directErr: any) {
+          console.warn('Direct function fetch failed, falling back to supabase-js invoke:', directErr);
+          try {
+            invokeResponse = await supabase.functions.invoke('create-tenant-account', { body: requestPayload, headers: { 'x-force-create': 'true' } });
+          } catch (fnErr: any) {
+            console.error("Edge function threw an error:", fnErr);
+            let details = fnErr?.message || "Edge function invocation failed";
+            try {
+              if (fnErr?.response && typeof fnErr.response.text === 'function') {
+                const txt = await fnErr.response.text();
+                try {
+                  const parsed = JSON.parse(txt);
+                  details = parsed.error || parsed.message || parsed.details || JSON.stringify(parsed);
+                } catch (e) {
+                  details = txt;
+                }
+              }
+            } catch (e) {
+              console.warn('Failed to extract error response body', e);
+            }
+
+            toast({
+              title: "Tenant Creation Failed",
+              description: details,
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
+      const result = invokeResponse?.data ?? invokeResponse;
+      const error = invokeResponse?.error ?? null;
+
+      console.log("Response from create-tenant-account function:", { result, error });
+
+      if (error) {
+        console.error("Edge function returned error:", error);
+        let errorMessage = "Failed to create tenant account";
+        let errorDetails = "";
+
+        if (typeof error === 'string') {
+          errorMessage = error;
+        } else if (error.message) {
+          errorMessage = error.message;
+          if (error.details) errorDetails = ` Details: ${error.details}`;
+        } else if (error.error) {
+          errorMessage = error.error;
+        } else if (error.details) {
+          errorMessage = error.details;
+        }
+
+        console.error("Processed error message:", errorMessage + errorDetails);
+
+        toast({
+          title: "Tenant Creation Failed",
+          description: errorMessage + errorDetails,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Check if we have a valid result
+      if (!result) {
+        console.error("No result data received from edge function");
+        toast({
+          title: "Tenant Creation Failed",
+          description: "No response received from server",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      console.log("Processing successful response:", result);
+
+      if (result?.success) {
+        // Log the activity
+        await logActivity(
+          'tenant_created',
+          'tenant',
+          result.tenant?.id,
+          {
+            tenant_name: `${data.first_name} ${data.last_name}`,
+            tenant_email: data.email,
+            unit_id: data.unit_id,
+            property_id: data.property_id,
+            has_lease: !!data.unit_id
+          }
+        );
+
+        // Enhanced communication status reporting
+        const commStatus = result.communicationStatus;
+        let statusMessage = "✅ Tenant account created successfully!";
+        let communicationDetails = [];
+        
+        if (commStatus?.emailSent && commStatus?.smsSent) {
+          statusMessage += "\n\n📧 Email sent ✓\n📱 SMS sent ✓";
+          communicationDetails.push("Email notification delivered", "SMS notification delivered");
+        } else if (commStatus?.emailSent) {
+          statusMessage += "\n\n📧 Email sent ✓\n📱 SMS failed ⚠️";
+          communicationDetails.push("Email notification delivered", "SMS delivery failed");
+        } else if (commStatus?.smsSent) {
+          statusMessage += "\n\n�� Email failed ⚠️\n📱 SMS sent ✓";
+          communicationDetails.push("Email delivery failed", "SMS notification delivered");
+        } else {
+          statusMessage += "\n\n⚠️ Both email and SMS delivery failed";
+          communicationDetails.push("Email delivery failed", "SMS delivery failed");
+        }
+
+        // Always show login details for manual sharing if needed
+        if (commStatus?.errors?.length > 0 || (!commStatus?.emailSent && !commStatus?.smsSent)) {
+          statusMessage += `\n\n🔑 Manual sharing required:\nEmail: ${result.loginDetails?.email}\nPassword: ${result.loginDetails?.temporaryPassword}\nLogin: ${result.loginDetails?.loginUrl}`;
+        }
+
+        // Show communication errors if any
+        if (commStatus?.errors?.length > 0) {
+          statusMessage += `\n\n❌ Delivery issues:\n${commStatus.errors.join('\n')}`;
+        }
+
+        toast({
+          title: commStatus?.emailSent || commStatus?.smsSent ? "Tenant Created Successfully" : "Tenant Created - Manual Action Required",
+          description: statusMessage,
+          variant: commStatus?.emailSent || commStatus?.smsSent ? "default" : "destructive",
+          duration: 8000, // Longer duration for important information
+        });
+        
+        reset();
+        handleOpenChange(false);
+        onTenantAdded();
+      } else {
+        throw new Error(result?.error || "Failed to create tenant account");
+      }
+    } catch (error: any) {
+      console.error("Error creating tenant:", error);
+      
+      // Extract meaningful error message
+      let errorMessage = "An unexpected error occurred";
+      
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error?.error) {
+        errorMessage = error.error;
+      }
+      
+      try { await logActivity('tenant_create_failed', 'tenant', undefined, { message: errorMessage }); } catch {}
+
+      toast({
+        title: "Tenant Creation Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
   };
-
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -235,9 +513,6 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
           <DialogTitle className="text-xl font-semibold text-primary">Add New Tenant</DialogTitle>
         </DialogHeader>
         <Form {...form}>
-          <div className="p-3 rounded border border-destructive bg-destructive/10 text-destructive text-sm">
-            Warning: Due to a temporary encryption issue, sensitive fields (phone, national ID, emergency contact) will be stored in plaintext in the database. This is temporary — do NOT use for highly sensitive production data until encryption is fixed.
-          </div>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             {/* Personal Information */}
             <div className="bg-card p-6 rounded-lg border border-border space-y-4">
@@ -315,7 +590,6 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="phone"
@@ -365,7 +639,6 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="profession"
@@ -458,6 +731,54 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
               />
             </div>
 
+            {/* Emergency Contact */}
+            <div className="bg-card p-6 rounded-lg border border-border space-y-4">
+              <h3 className="text-base font-semibold text-primary border-b border-border pb-2">
+                Emergency Contact
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="emergency_contact_name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-medium text-primary">
+                        Emergency Contact Name <span className="text-muted-foreground">(Optional)</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          className="bg-card border-border focus:border-accent focus:ring-accent"
+                          placeholder="Jane Doe"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="emergency_contact_phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-medium text-primary">
+                        Emergency Contact Phone <span className="text-muted-foreground">(Optional)</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          className="bg-card border-border focus:border-accent focus:ring-accent"
+                          placeholder="+254 700 000 001"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
 
             {/* Property & Unit Assignment */}
             <div className="bg-card p-6 rounded-lg border border-border space-y-4">

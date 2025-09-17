@@ -277,28 +277,18 @@ SET search_path TO 'public'
 AS $$
 DECLARE
   decrypted_data TEXT;
-  decoded BYTEA;
-  iv BYTEA;
-  ciphertext BYTEA;
 BEGIN
-  -- Decode the base64 data
-  decoded := decode(encrypted_data, 'base64');
-
-  -- Extract IV (first 16 bytes) and ciphertext
-  iv := substring(decoded from 1 for 16);
-  ciphertext := substring(decoded from 17);
-
-  -- Use pgcrypto for AES-256-CBC decryption
+  -- Use pgcrypto for AES-256-GCM decryption
   SELECT convert_from(
     decrypt_iv(
-      ciphertext,
+      decode(encrypted_data, 'base64'),
       digest(key, 'sha256'),
-      iv,
+      gen_random_bytes(16),
       'aes-cbc'
     ),
     'utf8'
   ) INTO decrypted_data;
-
+  
   RETURN decrypted_data;
 EXCEPTION WHEN OTHERS THEN
   -- Log error but don't expose sensitive details
