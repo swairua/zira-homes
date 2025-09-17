@@ -235,6 +235,9 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
           <DialogTitle className="text-xl font-semibold text-primary">Add New Tenant</DialogTitle>
         </DialogHeader>
         <Form {...form}>
+          <div className="p-3 rounded border border-destructive bg-destructive/10 text-destructive text-sm">
+            Warning: Due to a temporary encryption issue, sensitive fields (phone, national ID, emergency contact) will be stored in plaintext in the database. This is temporary — do NOT use for highly sensitive production data until encryption is fixed.
+          </div>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             {/* Personal Information */}
             <div className="bg-card p-6 rounded-lg border border-border space-y-4">
