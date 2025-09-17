@@ -51,7 +51,8 @@ export function DisabledActionWrapper({
   }, [hasRole]);
 
   // If allowed or admin bypass, render the children normally
-  if ((allowed || adminBypass) && !loading) {
+  const netBypass = !loading && (reason === 'network_error' || reason === 'rpc_error' || reason === 'error');
+  if ((allowed || adminBypass || netBypass) && !loading) {
     return children;
   }
 
