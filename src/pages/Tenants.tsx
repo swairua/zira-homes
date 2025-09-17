@@ -85,11 +85,41 @@ const Tenants = () => {
         p_property_filter: filterProperty || 'all',
         p_limit: pageSize,
         p_offset: offset
-      }).maybeSingle();
+      });
 
-      if (rpcError) {
-        console.error('RPC error fetching tenants summary:', rpcError);
-        throw rpcError;
+      if (rpcError || !rpcData) {
+        const details = rpcError?.message || (rpcError ? JSON.stringify(rpcError) : 'No data from RPC');
+        console.error('RPC error fetching tenants summary:', details);
+        // Fallback: fetch a minimal tenants list to keep UI functional
+        const { data: trows, error: tError, count } = await supabase
+          .from('tenants')
+          .select('id, first_name, last_name, email, phone, employment_status, employer_name, monthly_income, emergency_contact_name, emergency_contact_phone, previous_address, created_at', { count: 'exact' })
+          .order('created_at', { ascending: false })
+          .range(offset, offset + pageSize - 1);
+
+        if (tError) throw tError;
+
+        const transformedFallback = (trows || []).map((t: any) => ({
+          id: t.id,
+          first_name: t.first_name,
+          last_name: t.last_name,
+          email: t.email,
+          phone: t.phone,
+          employment_status: t.employment_status,
+          employer_name: t.employer_name,
+          monthly_income: t.monthly_income,
+          emergency_contact_name: t.emergency_contact_name,
+          emergency_contact_phone: t.emergency_contact_phone,
+          previous_address: t.previous_address,
+          created_at: t.created_at,
+          property_name: undefined,
+          unit_number: undefined,
+          rent_amount: undefined,
+        }));
+
+        setTenants(transformedFallback as Tenant[]);
+        setTotalCount(count || transformedFallback.length || 0);
+        return;
       }
 
       const tenantsArray = (rpcData && (rpcData as any).tenants) ? JSON.parse(JSON.stringify((rpcData as any).tenants)) : [];
