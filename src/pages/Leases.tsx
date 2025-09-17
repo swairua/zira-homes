@@ -398,8 +398,8 @@ const Leases = () => {
     const matchesSearch =
       lease.tenants.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lease.tenants.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lease.units.unit_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lease.units.properties.name.toLowerCase().includes(searchTerm.toLowerCase());
+      (lease.units?.unit_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (lease.units?.properties?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
 
     if (!matchesSearch) return false;
 
@@ -678,7 +678,7 @@ const Leases = () => {
                           {lease.tenants.first_name} {lease.tenants.last_name}
                         </h3>
                         <p className="text-sm text-muted-foreground">
-                          {lease.units.properties.name} - Unit {lease.units.unit_number}
+                          {(lease.units?.properties?.name || 'Unknown Property')} - Unit {(lease.units?.unit_number || 'N/A')}
                         </p>
                       </div>
                     </div>
