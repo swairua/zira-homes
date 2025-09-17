@@ -126,7 +126,7 @@ const Leases = () => {
           if (!Array.isArray(rows) || rows.length === 0) {
             const { data: d2, error: e2 } = await (supabase as any)
               .from('leases')
-              .select('id, lease_end_date, lease_start_date, monthly_rent, security_deposit, status, unit_id, tenant_id, tenants(first_name,last_name), units(unit_number, properties(name))')
+              .select('id, lease_end_date, lease_start_date, monthly_rent, security_deposit, status, unit_id, tenant_id, tenants:tenants!leases_tenant_id_fkey(first_name,last_name), units:units!leases_unit_id_fkey(unit_number, properties:properties!units_property_id_fkey(name))')
               .gte('lease_end_date', startDate)
               .lte('lease_end_date', endDate);
             if (!e2) {
@@ -171,7 +171,7 @@ const Leases = () => {
 
             const { data, error } = await (supabase as any)
               .from('leases')
-              .select('id, lease_end_date, lease_start_date, monthly_rent, security_deposit, status, unit_id, tenant_id, tenants(first_name,last_name), units(unit_number, properties(name))')
+              .select('id, lease_end_date, lease_start_date, monthly_rent, security_deposit, status, unit_id, tenant_id, tenants:tenants!leases_tenant_id_fkey(first_name,last_name), units:units!leases_unit_id_fkey(unit_number, properties:properties!units_property_id_fkey(name))')
               .gte('lease_end_date', filters.gte)
               .lte('lease_end_date', filters.lte);
             if (error) throw error;
@@ -199,11 +199,16 @@ const Leases = () => {
       // Otherwise: original fetch for full list (visible to any authenticated user)
       const { data, error } = await (supabase as any)
         .from("leases")
-        .select(`*, tenants:tenants(id, first_name, last_name), units:units(id, unit_number, property_id, properties:properties(id, name))`)
+        .select(`*, tenants:tenants!leases_tenant_id_fkey(id, first_name, last_name), units:units!leases_unit_id_fkey(id, unit_number, property_id, properties:properties!units_property_id_fkey(id, name))`)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      setLeases(data || []);
-      console.log("✅ Loaded leases for all users:", data?.length || 0);
+      const normalized = (data || []).map((l: any) => ({
+        ...l,
+        tenants: { first_name: l?.tenants?.first_name || '', last_name: l?.tenants?.last_name || '' },
+        units: { unit_number: l?.units?.unit_number || '', properties: { name: l?.units?.properties?.name || '' } }
+      }));
+      setLeases(normalized);
+      console.log("✅ Loaded leases for all users:", normalized.length);
       return;
     } catch (error: any) {
       const msg = formatError(error);
@@ -243,7 +248,7 @@ const Leases = () => {
         // Admin: all vacant units with property names
         const { data: allUnits, error: unitsErr } = await (supabase as any)
           .from("units")
-          .select("id, unit_number, status, properties:properties(id, name)")
+          .select("id, unit_number, status, properties:properties!units_property_id_fkey(id, name)")
           .eq('status', 'vacant');
         if (unitsErr) throw unitsErr;
         setTenants(tenantsData || []);
@@ -398,8 +403,8 @@ const Leases = () => {
     const matchesSearch =
       lease.tenants.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lease.tenants.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lease.units.unit_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lease.units.properties.name.toLowerCase().includes(searchTerm.toLowerCase());
+      (lease.units?.unit_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (lease.units?.properties?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
 
     if (!matchesSearch) return false;
 
@@ -678,7 +683,7 @@ const Leases = () => {
                           {lease.tenants.first_name} {lease.tenants.last_name}
                         </h3>
                         <p className="text-sm text-muted-foreground">
-                          {lease.units.properties.name} - Unit {lease.units.unit_number}
+                          {(lease.units?.properties?.name || 'Unknown Property')} - Unit {(lease.units?.unit_number || 'N/A')}
                         </p>
                       </div>
                     </div>

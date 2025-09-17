@@ -34,7 +34,7 @@ export function LeaseDetailsDialog({ leaseId, trigger, open, onOpenChange }: Lea
     try {
       const { data, error } = await (supabase as any)
         .from("leases")
-        .select(`*, tenants:tenants(*), units:units(*, properties:properties(*))`)
+        .select(`*, tenants:tenants!leases_tenant_id_fkey(*), units:units!leases_unit_id_fkey(*, properties:properties!units_property_id_fkey(*))`)
         .eq("id", leaseId)
         .single();
 

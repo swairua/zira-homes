@@ -27,7 +27,7 @@ export function DisabledActionWrapper({
   showUpgradeInTooltip = true,
   tooltipSide = "top"
 }: DisabledActionWrapperProps) {
-  const { allowed, is_limited, remaining, plan_name, loading } = usePlanFeatureAccess(feature, currentCount);
+  const { allowed, is_limited, remaining, plan_name, loading, reason } = usePlanFeatureAccess(feature, currentCount);
   const { analytics } = usePlatformAnalytics();
   const { hasRole } = useAuth();
 
@@ -51,7 +51,8 @@ export function DisabledActionWrapper({
   }, [hasRole]);
 
   // If allowed or admin bypass, render the children normally
-  if ((allowed || adminBypass) && !loading) {
+  const netBypass = !loading && (reason === 'network_error' || reason === 'rpc_error' || reason === 'error');
+  if ((allowed || adminBypass || netBypass) && !loading) {
     return children;
   }
 
