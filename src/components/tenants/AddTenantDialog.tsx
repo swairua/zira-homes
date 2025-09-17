@@ -200,9 +200,64 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
     console.log("Submitting tenant creation request:", requestPayload);
 
-    // Direct creation without Edge Functions
+    // Helper to invoke edge function create-tenant-account (tries proxy, direct fetch, then supabase.functions)
+    const invokeEdgeCreate = async () => {
+      try {
+        // try same-origin proxy first
+        const res = await fetch('/api/edge/create-tenant-account', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...requestPayload, force: true })
+        });
+        const text = await res.text();
+        let dataRes: any; try { dataRes = JSON.parse(text); } catch { dataRes = text; }
+        if (res.ok) return { data: dataRes, error: null };
+        return { data: null, error: { message: 'Proxy call failed', status: res.status, details: dataRes } };
+      } catch (proxyErr) {
+        console.warn('Server proxy failed, attempting direct fetch:', proxyErr);
+      }
+
+      try {
+        const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } = await import("@/integrations/supabase/client");
+        const fnUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/create-tenant-account`;
+        const res = await fetch(fnUrl, {
+          method: 'POST',
+          mode: 'cors',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_PUBLISHABLE_KEY,
+            'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+            'x-force-create': 'true',
+            'x-requested-with': 'XMLHttpRequest',
+          },
+          body: JSON.stringify(requestPayload)
+        });
+        const text = await res.text();
+        let dataRes: any; try { dataRes = JSON.parse(text); } catch { dataRes = text; }
+        if (res.ok) return { data: dataRes, error: null };
+        return { data: null, error: { message: 'Edge function fetch failed', status: res.status, details: dataRes } };
+      } catch (directErr) {
+        console.warn('Direct function fetch failed, falling back to supabase-js invoke:', directErr);
+      }
+
+      try {
+        const res = await supabase.functions.invoke('create-tenant-account', { body: requestPayload, headers: { 'x-force-create': 'true' } });
+        return res;
+      } catch (fnErr: any) {
+        console.error('Edge function invocation failed:', fnErr);
+        let details = fnErr?.message || 'Edge function invocation failed';
+        try {
+          if (fnErr?.response && typeof fnErr.response.text === 'function') {
+            const txt = await fnErr.response.text();
+            try { details = JSON.parse(txt); } catch { details = txt; }
+          }
+        } catch (e) {}
+        return { data: null, error: details };
+      }
+    };
+
+    // Direct creation without Edge Functions (attempt, but fallback to edge on encryption errors)
     try {
-      // Attempt insert with property_id; fallback without if column doesn't exist
       const insertBase: any = {
         first_name: data.first_name,
         last_name: data.last_name,
@@ -232,7 +287,6 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       let attempt = await attemptWithPropertyId();
 
       if (attempt.error && /property_id/i.test(attempt.error.message || '')) {
-        // Retry without property_id for schemas that don't have this column
         attempt = await supabase
           .from('tenants')
           .insert(insertBase)
@@ -243,13 +297,30 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       tenantInserted = attempt.data;
       tenantError = attempt.error;
 
-      if (tenantError) throw new Error(tenantError.message);
+      if (tenantError) {
+        const msg = String(tenantError.message || tenantError).toLowerCase();
+        if (/encrypt|encrypt_iv|encrypt_pii|extensions\.encrypt_iv|function encrypt\(/i.test(msg)) {
+          console.warn('Direct insert failed due to encryption error; falling back to edge function');
+          const invokeResponse = await invokeEdgeCreate();
+          const result = invokeResponse?.data ?? invokeResponse;
+          const error = invokeResponse?.error ?? null;
+
+          if (error) throw new Error(typeof error === 'string' ? error : (error.message || JSON.stringify(error)));
+          if (!result) throw new Error('Edge function did not return a result');
+
+          if (result?.success) {
+            await logActivity('tenant_created', 'tenant', result.tenant?.id, { tenant_name: `${data.first_name} ${data.last_name}`, tenant_email: data.email, unit_id: data.unit_id, property_id: data.property_id, has_lease: !!data.unit_id });
+            toast({ title: 'Tenant Created', description: 'Tenant created via server function (encryption bypass).', variant: 'default' });
+            reset(); handleOpenChange(false); onTenantAdded(); return;
+          }
+          throw new Error(result?.error || 'Failed to create tenant via edge function');
+        }
+        throw new Error(tenantError.message);
+      }
 
       let leaseCreated: any = null;
       if (data.unit_id) {
-        if (!data.lease_start_date || !data.lease_end_date || !data.monthly_rent) {
-          throw new Error("Missing lease fields (start, end, monthly rent).");
-        }
+        if (!data.lease_start_date || !data.lease_end_date || !data.monthly_rent) throw new Error("Missing lease fields (start, end, monthly rent).");
         const { data: leaseRow, error: leaseError } = await supabase
           .from('leases')
           .insert({
@@ -264,34 +335,14 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
           .single();
         if (leaseError) throw new Error(leaseError.message);
         leaseCreated = leaseRow;
-
         try { await supabase.rpc('sync_unit_status', { p_unit_id: data.unit_id }); } catch {}
       }
 
-      await logActivity(
-        'tenant_created',
-        'tenant',
-        (tenantInserted as any).id,
-        {
-          tenant_name: `${data.first_name} ${data.last_name}`,
-          tenant_email: data.email,
-          unit_id: data.unit_id,
-          property_id: data.property_id,
-          has_lease: !!data.unit_id
-        }
-      );
+      await logActivity('tenant_created', 'tenant', (tenantInserted as any).id, { tenant_name: `${data.first_name} ${data.last_name}`, tenant_email: data.email, unit_id: data.unit_id, property_id: data.property_id, has_lease: !!data.unit_id });
 
-      toast({
-        title: "Tenant Created",
-        description: leaseCreated ? "Tenant and lease created successfully." : "Tenant created successfully.",
-        variant: "default",
-        duration: 6000,
-      });
+      toast({ title: "Tenant Created", description: leaseCreated ? "Tenant and lease created successfully." : "Tenant created successfully.", variant: "default", duration: 6000 });
 
-      reset();
-      handleOpenChange(false);
-      onTenantAdded();
-      return;
+      reset(); handleOpenChange(false); onTenantAdded(); return;
     } catch (e) {
       throw e as any;
     }
