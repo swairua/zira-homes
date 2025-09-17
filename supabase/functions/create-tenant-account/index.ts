@@ -633,14 +633,13 @@ const handler = async (req: Request): Promise<Response> => {
         success: true,
         tenant,
         lease,
-        temporaryPassword: isNewUser ? temporaryPassword : null, // Only return for new users
+        temporaryPassword: isNewUser ? temporaryPassword : null,
         isNewUser,
         communicationStatus: {
           emailSent,
           smsSent,
           errors: communicationErrors
         },
-        // Include login details with appropriate messaging
         loginDetails: {
           email: tenantData.email,
           temporaryPassword: isNewUser ? temporaryPassword : null,
@@ -649,6 +648,9 @@ const handler = async (req: Request): Promise<Response> => {
             ? "Share these credentials with the tenant and ask them to change their password on first login."
             : "The tenant can use their existing credentials to log in."
         },
+        notices: [
+          "If database encryption functions are unavailable, sensitive PII may have been omitted to ensure account creation.",
+        ],
         message: isNewUser
           ? "Tenant account created successfully with new login credentials."
           : "Tenant account created successfully. User already had an account."
