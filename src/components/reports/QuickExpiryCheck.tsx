@@ -66,7 +66,7 @@ export function QuickExpiryCheck({ onViewDetails, hideWhenEmpty = false }: Quick
         if (!Array.isArray(rawLeases) || rawLeases.length === 0) {
           const { data, error } = await (supabase as any)
             .from('leases')
-            .select('lease_end_date, tenants:tenants!leases_tenant_id_fkey(first_name,last_name), units:units!leases_unit_id_fkey(unit_number, properties:properties(name))')
+            .select('lease_end_date, tenants:tenants!leases_tenant_id_fkey(first_name,last_name), units:units!leases_unit_id_fkey(unit_number, properties:properties!units_property_id_fkey(name))')
             .gte('lease_end_date', startDate)
             .lte('lease_end_date', endDate);
           if (!error && Array.isArray(data)) {
