@@ -656,7 +656,7 @@ const handler = async (req: Request): Promise<Response> => {
             : "The tenant can use their existing credentials to log in."
         },
         notices: [
-          "If database encryption functions are unavailable, sensitive PII may have been omitted to ensure account creation.",
+          "Database encryption functions were unavailable. Sensitive PII was stored as plaintext in both normal and *_encrypted columns to bypass triggers. Update your DB (enable pgcrypto) and backfill/rotate data ASAP.",
         ],
         message: isNewUser
           ? "Tenant account created successfully with new login credentials."
