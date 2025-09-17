@@ -312,6 +312,27 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                     </FormItem>
                   )}
                 />
+
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-medium text-primary">
+                        Phone Number <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          className="bg-card border-border focus:border-accent focus:ring-accent"
+                          placeholder="+254 700 000 000"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
             </div>
 
