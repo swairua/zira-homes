@@ -24,6 +24,7 @@ try {
 
     // Prepare headers BEFORE first attempt so the function receives correct auth/force flags
     const extraHeaders: Record<string, string> = { ...(options?.headers || {}) };
+    let proxyFailedDetails: any = null;
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const access = sessionData?.session?.access_token;
@@ -93,29 +94,43 @@ try {
     }
   };
 
-  // RPC fallback via proxy to bypass browser CORS
+  // RPC fallback via proxy to bypass browser CORS and keep builder-like API
   const origRpc = (supabase as any).rpc.bind(supabase);
-  (supabase as any).rpc = async (fn: string, params?: any) => {
-    try {
-      const res = await origRpc(fn, params);
-      if (res?.error && String(res.error?.message || '').toLowerCase().includes('failed to fetch')) throw res.error;
-      return res;
-    } catch (err: any) {
+  (supabase as any).rpc = (fn: string, params?: any) => {
+    const exec = async () => {
       try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const access = sessionData?.session?.access_token;
-        const r = await fetch(`/api/rpc/${encodeURIComponent(fn)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(access ? { Authorization: `Bearer ${access}` } : {}) },
-          body: JSON.stringify(params || {})
-        });
-        const text = await r.text();
-        let data: any; try { data = JSON.parse(text); } catch { data = text; }
-        if (r.ok) return { data, error: null };
-        return { data: null, error: data?.error || data };
-      } catch (e) {
-        return { data: null, error: err || e };
+        const res = await origRpc(fn, params);
+        if (res?.error && String(res.error?.message || '').toLowerCase().includes('failed to fetch')) {
+          throw res.error;
+        }
+        return res;
+      } catch (err: any) {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const access = sessionData?.session?.access_token;
+          const r = await fetch(`/api/rpc/${encodeURIComponent(fn)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(access ? { Authorization: `Bearer ${access}` } : {}) },
+            body: JSON.stringify(params || {})
+          });
+          const text = await r.text();
+          let data: any; try { data = JSON.parse(text); } catch { data = text; }
+          if (r.ok) return { data, error: null };
+          return { data: null, error: data?.error || data };
+        } catch (e) {
+          return { data: null, error: err || e };
+        }
       }
-    }
+    };
+
+    const wrapper: any = {
+      maybeSingle: () => exec(),
+      single: () => exec(),
+      then: (onFulfilled: any, onRejected: any) => exec().then(onFulfilled, onRejected),
+      catch: (onRejected: any) => exec().catch(onRejected),
+      finally: (onFinally: any) => exec().finally(onFinally),
+    };
+
+    return wrapper;
   };
 } catch {}
