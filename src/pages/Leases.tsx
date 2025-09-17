@@ -202,8 +202,13 @@ const Leases = () => {
         .select(`*, tenants:tenants!leases_tenant_id_fkey(id, first_name, last_name), units:units!leases_unit_id_fkey(id, unit_number, property_id, properties:properties!units_property_id_fkey(id, name))`)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      setLeases(data || []);
-      console.log("✅ Loaded leases for all users:", data?.length || 0);
+      const normalized = (data || []).map((l: any) => ({
+        ...l,
+        tenants: { first_name: l?.tenants?.first_name || '', last_name: l?.tenants?.last_name || '' },
+        units: { unit_number: l?.units?.unit_number || '', properties: { name: l?.units?.properties?.name || '' } }
+      }));
+      setLeases(normalized);
+      console.log("✅ Loaded leases for all users:", normalized.length);
       return;
     } catch (error: any) {
       const msg = formatError(error);
