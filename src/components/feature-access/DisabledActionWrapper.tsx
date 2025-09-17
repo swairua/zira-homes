@@ -27,7 +27,7 @@ export function DisabledActionWrapper({
   showUpgradeInTooltip = true,
   tooltipSide = "top"
 }: DisabledActionWrapperProps) {
-  const { allowed, is_limited, remaining, plan_name, loading } = usePlanFeatureAccess(feature, currentCount);
+  const { allowed, is_limited, remaining, plan_name, loading, reason } = usePlanFeatureAccess(feature, currentCount);
   const { analytics } = usePlatformAnalytics();
   const { hasRole } = useAuth();
 
