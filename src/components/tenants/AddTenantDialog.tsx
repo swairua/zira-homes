@@ -202,25 +202,46 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
     // Direct creation without Edge Functions
     try {
-      const { data: tenantInserted, error: tenantError } = await supabase
-        .from('tenants')
-        .insert({
-          first_name: data.first_name,
-          last_name: data.last_name,
-          email: data.email,
-          phone: data.phone,
-          national_id: data.national_id,
-          employment_status: data.employment_status,
-          profession: data.profession,
-          employer_name: data.employer_name,
-          monthly_income: data.monthly_income ? Number(data.monthly_income) : null,
-          emergency_contact_name: data.emergency_contact_name || null,
-          emergency_contact_phone: data.emergency_contact_phone || null,
-          previous_address: data.previous_address || null,
-          property_id: data.property_id || null
-        })
-        .select()
-        .single();
+      // Attempt insert with property_id; fallback without if column doesn't exist
+      const insertBase: any = {
+        first_name: data.first_name,
+        last_name: data.last_name,
+        email: data.email,
+        phone: data.phone,
+        national_id: data.national_id,
+        employment_status: data.employment_status,
+        profession: data.profession,
+        employer_name: data.employer_name,
+        monthly_income: data.monthly_income ? Number(data.monthly_income) : null,
+        emergency_contact_name: data.emergency_contact_name || null,
+        emergency_contact_phone: data.emergency_contact_phone || null,
+        previous_address: data.previous_address || null,
+      };
+
+      let tenantInserted: any = null;
+      let tenantError: any = null;
+
+      const attemptWithPropertyId = async () => {
+        return await supabase
+          .from('tenants')
+          .insert({ ...insertBase, property_id: data.property_id || null })
+          .select()
+          .single();
+      };
+
+      let attempt = await attemptWithPropertyId();
+
+      if (attempt.error && /property_id/i.test(attempt.error.message || '')) {
+        // Retry without property_id for schemas that don't have this column
+        attempt = await supabase
+          .from('tenants')
+          .insert(insertBase)
+          .select()
+          .single();
+      }
+
+      tenantInserted = attempt.data;
+      tenantError = attempt.error;
 
       if (tenantError) throw new Error(tenantError.message);
 
@@ -421,7 +442,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
           statusMessage += "\n\n📧 Email sent ✓\n📱 SMS failed ⚠️";
           communicationDetails.push("Email notification delivered", "SMS delivery failed");
         } else if (commStatus?.smsSent) {
-          statusMessage += "\n\n📧 Email failed ⚠️\n📱 SMS sent ✓";
+          statusMessage += "\n\n�� Email failed ⚠️\n📱 SMS sent ✓";
           communicationDetails.push("Email delivery failed", "SMS notification delivered");
         } else {
           statusMessage += "\n\n⚠️ Both email and SMS delivery failed";
