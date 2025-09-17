@@ -344,6 +344,27 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
+                  name="national_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-medium text-primary">
+                        National ID / Passport <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          className="bg-card border-border focus:border-accent focus:ring-accent"
+                          placeholder="12345678"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
                   name="profession"
                   render={({ field }) => (
                     <FormItem>
