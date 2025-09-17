@@ -95,27 +95,78 @@ try {
 
   // RPC fallback via proxy to bypass browser CORS
   const origRpc = (supabase as any).rpc.bind(supabase);
-  (supabase as any).rpc = async (fn: string, params?: any) => {
-    try {
-      const res = await origRpc(fn, params);
-      if (res?.error && String(res.error?.message || '').toLowerCase().includes('failed to fetch')) throw res.error;
-      return res;
-    } catch (err: any) {
+  (supabase as any).rpc = (fn: string, params?: any) => {
+    // Helper that attempts the original RPC call and falls back to the proxy fetch
+    const callOrig = async () => {
       try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const access = sessionData?.session?.access_token;
-        const r = await fetch(`/api/rpc/${encodeURIComponent(fn)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(access ? { Authorization: `Bearer ${access}` } : {}) },
-          body: JSON.stringify(params || {})
-        });
-        const text = await r.text();
-        let data: any; try { data = JSON.parse(text); } catch { data = text; }
-        if (r.ok) return { data, error: null };
-        return { data: null, error: data?.error || data };
-      } catch (e) {
-        return { data: null, error: err || e };
+        const maybeBuilder = origRpc(fn, params);
+        // If original returned a builder with chainable methods (maybeSingle/single), await its default execution
+        if (maybeBuilder && typeof maybeBuilder.maybeSingle === 'function') {
+          const res = await maybeBuilder;
+          if (res?.error && String(res.error?.message || '').toLowerCase().includes('failed to fetch')) throw res.error;
+          return res;
+        }
+        // If it's already a promise-like result, await it directly
+        const res = await maybeBuilder;
+        if (res?.error && String(res.error?.message || '').toLowerCase().includes('failed to fetch')) throw res.error;
+        return res;
+      } catch (err: any) {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const access = sessionData?.session?.access_token;
+          const r = await fetch(`/api/rpc/${encodeURIComponent(fn)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(access ? { Authorization: `Bearer ${access}` } : {}) },
+            body: JSON.stringify(params || {})
+          });
+          const text = await r.text();
+          let data: any; try { data = JSON.parse(text); } catch { data = text; }
+          if (r.ok) return { data, error: null };
+          return { data: null, error: data?.error || data };
+        } catch (e) {
+          return { data: null, error: err || e };
+        }
       }
-    }
+    };
+
+    // Build a wrapper that is both thenable (so `await supabase.rpc(...)` works)
+    // and exposes common chain methods like maybeSingle/single by delegating to the original builder when possible.
+    const wrapper: any = {
+      maybeSingle: async () => {
+        try {
+          const possibleBuilder = origRpc(fn, params);
+          if (possibleBuilder && typeof possibleBuilder.maybeSingle === 'function') {
+            const res = await possibleBuilder.maybeSingle();
+            if (res?.error && String(res.error?.message || '').toLowerCase().includes('failed to fetch')) throw res.error;
+            return res;
+          }
+          return await callOrig();
+        } catch (e) {
+          return { data: null, error: e };
+        }
+      },
+      single: async () => {
+        try {
+          const possibleBuilder = origRpc(fn, params);
+          if (possibleBuilder && typeof possibleBuilder.single === 'function') {
+            const res = await possibleBuilder.single();
+            if (res?.error && String(res.error?.message || '').toLowerCase().includes('failed to fetch')) throw res.error;
+            return res;
+          }
+          return await callOrig();
+        } catch (e) {
+          return { data: null, error: e };
+        }
+      },
+      // Make wrapper thenable so `await supabase.rpc(...)` resolves to { data, error }
+      then(resolve: any, reject: any) {
+        return callOrig().then(resolve, reject);
+      },
+      catch(cb: any) {
+        return callOrig().catch(cb);
+      }
+    };
+
+    return wrapper;
   };
 } catch {}

@@ -169,6 +169,20 @@
           }
         }
 
+        // Admin: migrate plaintext tenant PII into encrypted columns
+        if (url.startsWith('/api/admin/migrate-tenant-pii')) {
+          try {
+            // Simple admin auth using MIGRATION_ADMIN_KEY header
+            const adminKey = process.env.MIGRATION_ADMIN_KEY;
+            const provided = req.headers['x-admin-key'] || req.headers['x-admin-key'];
+            if (!adminKey || String(provided) !== String(adminKey)) return sendJSON(res, 403, { error: 'Not authorized' });
+            return handleRpcProxy('/rest/v1/rpc/migrate_plain_tenant_pii', req, res);
+          } catch (err) {
+            console.error('Error in migrate-tenant-pii:', err);
+            return sendJSON(res, 500, { error: 'Internal server error' });
+          }
+        }
+
         if (url.startsWith('/api/invoices/overview')) {
           return handleRpcProxy('/rest/v1/rpc/get_invoice_overview', req, res, (body) => ({
             p_limit: body.p_limit ?? 50,
