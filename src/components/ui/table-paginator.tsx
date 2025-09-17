@@ -105,7 +105,7 @@ export const TablePaginator: React.FC<TablePaginatorProps> = ({
 
           <div className="flex items-center space-x-1">
             {getVisiblePages().map((page, index) => (
-              <React.Fragment key={index}>
+              <span key={index} className="contents">
                 {page === '...' ? (
                   <span className="px-2 py-1 text-sm text-muted-foreground">...</span>
                 ) : (
@@ -118,7 +118,7 @@ export const TablePaginator: React.FC<TablePaginatorProps> = ({
                     {page}
                   </Button>
                 )}
-              </React.Fragment>
+              </span>
             ))}
           </div>
 

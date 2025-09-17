@@ -209,7 +209,7 @@ export const EnhancedBillingPage = () => {
           lease:leases(
             unit:units(
               unit_number,
-              property:properties(name)
+              property:properties!units_property_id_fkey(name)
             )
           )
         `)

@@ -28,7 +28,7 @@ export function FeatureGate({
   readOnlyMessage = "This feature is read-only in your current plan"
 }: FeatureGateProps) {
   const navigate = useNavigate();
-  const { allowed, is_limited, limit, remaining, plan_name, loading } = usePlanFeatureAccess(feature, currentCount);
+  const { allowed, is_limited, limit, remaining, plan_name, loading, reason } = usePlanFeatureAccess(feature, currentCount);
 
   const handleUpgrade = () => {
     navigate("/upgrade");
@@ -43,12 +43,15 @@ export function FeatureGate({
     );
   }
 
+  // Treat network/RPC failures as allowed to avoid blocking UX in offline/CORS scenarios
+  const effectiveAllowed = allowed || (!loading && (reason === 'network_error' || reason === 'rpc_error' || reason === 'error'));
+
   // Feature is allowed - show content
-  if (allowed) {
+  if (effectiveAllowed) {
     return (
       <>
         {children}
-        {is_limited && limit && remaining !== undefined && remaining <= 2 && (
+        {allowed && is_limited && limit && remaining !== undefined && remaining <= 2 && (
           <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
             <div className="flex items-center gap-2 text-orange-700">
               <AlertCircle className="h-4 w-4" />
