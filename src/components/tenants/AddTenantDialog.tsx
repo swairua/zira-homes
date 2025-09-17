@@ -202,18 +202,15 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
     // Direct creation without Edge Functions — avoid using server-side edge function fallback.
     try {
+      // Always store non-PII fields only (bypass DB-side PII encryption entirely)
       const insertBase: any = {
         first_name: data.first_name,
         last_name: data.last_name,
         email: data.email,
-        phone: data.phone,
-        national_id: data.national_id,
         employment_status: data.employment_status,
         profession: data.profession,
         employer_name: data.employer_name,
         monthly_income: data.monthly_income ? Number(data.monthly_income) : null,
-        emergency_contact_name: data.emergency_contact_name || null,
-        emergency_contact_phone: data.emergency_contact_phone || null,
         previous_address: data.previous_address || null,
       };
 
@@ -242,50 +239,8 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       tenantError = attempt.error;
 
       if (tenantError) {
-        // If insert failed due to encryption-related DB triggers, attempt a non-PII insert (do not call edge functions).
-        const msg = String(tenantError.message || tenantError).toLowerCase();
-        if (/encrypt|encrypt_iv|encrypt_pii|extensions\.encrypt_iv|function encrypt\(/i.test(msg)) {
-          console.warn('Direct insert failed due to encryption error; retrying without PII fields');
-          const insertNoPii = {
-            first_name: data.first_name,
-            last_name: data.last_name,
-            email: data.email,
-            employment_status: data.employment_status,
-            profession: data.profession,
-            employer_name: data.employer_name,
-            monthly_income: data.monthly_income ? Number(data.monthly_income) : null,
-            previous_address: data.previous_address || null,
-          };
-
-          // Try with property_id then without
-          let retryAttempt = await supabase
-            .from('tenants')
-            .insert({ ...insertNoPii, property_id: data.property_id || null })
-            .select()
-            .single()
-            .catch(() => null);
-
-          if (!retryAttempt || retryAttempt.error) {
-            retryAttempt = await supabase
-              .from('tenants')
-              .insert(insertNoPii)
-              .select()
-              .single()
-              .catch(() => null);
-          }
-
-          if (retryAttempt && !retryAttempt.error) {
-            const tenantRow = retryAttempt.data;
-            await logActivity('tenant_created', 'tenant', tenantRow?.id, { tenant_name: `${data.first_name} ${data.last_name}`, tenant_email: data.email, unit_id: data.unit_id, property_id: data.property_id, has_lease: !!data.unit_id });
-            toast({ title: 'Tenant Created', description: 'Tenant created without storing sensitive PII fields. Add PII later.', variant: 'default' });
-            reset(); handleOpenChange(false); onTenantAdded(); return;
-          }
-
-          throw new Error('Retry without PII failed');
-        }
-
-        // Not an encryption error — surface it
-        throw new Error(tenantError.message);
+        // Surface any error — we no longer attempt edge functions or PII retries
+        throw new Error(tenantError.message || 'Failed to create tenant');
       }
 
       let leaseCreated: any = null;
