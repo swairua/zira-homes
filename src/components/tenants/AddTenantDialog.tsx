@@ -20,7 +20,11 @@ const tenantFormSchemaBase = z.object({
   first_name: z.string().min(1, "First name is required").transform((s) => s.trim()),
   last_name: z.string().min(1, "Last name is required").transform((s) => s.trim()),
   email: z.string().email("Invalid email address").transform((s) => s.trim()),
-  // PII fields removed from client form until encryption is fixed
+  // PII fields: collected but stored into plaintext columns (phone_plain, national_id_plain, emergency_contact_*)
+  phone: z.string().min(1, "Phone number is required").transform((s) => s.trim()),
+  national_id: z.string().min(1, "National ID or Passport is required").transform((s) => s.trim()),
+  emergency_contact_name: z.string().optional(),
+  emergency_contact_phone: z.string().optional(),
   profession: z.string().optional(),
   employment_status: z.string().optional(),
   employer_name: z.string().optional(),
