@@ -107,7 +107,7 @@ export function LeaseExpiryManager({
           const filters = { gte: startDate, lte: endDate } as const;
           const { data: d2, error: e2 } = await (supabase as any)
             .from('leases')
-            .select('id, lease_end_date, monthly_rent, status, unit_id, tenant_id, tenants(first_name,last_name,email), units(unit_number, properties(name))')
+            .select('id, lease_end_date, monthly_rent, status, unit_id, tenant_id, tenants:tenants!leases_tenant_id_fkey(first_name,last_name,email), units:units!leases_unit_id_fkey(unit_number, properties:properties(name))')
             .gte('lease_end_date', filters.gte)
             .lte('lease_end_date', filters.lte);
           if (!e2) {
@@ -129,7 +129,7 @@ export function LeaseExpiryManager({
 
           const { data, error } = await (supabase as any)
             .from('leases')
-            .select('id, lease_end_date, monthly_rent, status, unit_id, tenant_id, tenants(first_name,last_name,email), units(unit_number, properties(name))')
+            .select('id, lease_end_date, monthly_rent, status, unit_id, tenant_id, tenants:tenants!leases_tenant_id_fkey(first_name,last_name,email), units:units!leases_unit_id_fkey(unit_number, properties:properties(name))')
             .gte('lease_end_date', filters.gte)
             .lte('lease_end_date', filters.lte);
           if (error) throw error;
