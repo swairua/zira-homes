@@ -300,26 +300,6 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-primary">
-                        Phone Number <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          className="bg-card border-border focus:border-accent focus:ring-accent"
-                          placeholder="+254 700 000 000"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
             </div>
 
@@ -329,26 +309,6 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                 Identification & Employment
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="national_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-primary">
-                        National ID / Passport <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          className="bg-card border-border focus:border-accent focus:ring-accent"
-                          placeholder="12345678"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
                 <FormField
                   control={form.control}
                   name="profession"
@@ -441,54 +401,6 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
               />
             </div>
 
-            {/* Emergency Contact */}
-            <div className="bg-card p-6 rounded-lg border border-border space-y-4">
-              <h3 className="text-base font-semibold text-primary border-b border-border pb-2">
-                Emergency Contact
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="emergency_contact_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-primary">
-                        Emergency Contact Name <span className="text-muted-foreground">(Optional)</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          className="bg-card border-border focus:border-accent focus:ring-accent"
-                          placeholder="Jane Doe"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="emergency_contact_phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-primary">
-                        Emergency Contact Phone <span className="text-muted-foreground">(Optional)</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          className="bg-card border-border focus:border-accent focus:ring-accent"
-                          placeholder="+254 700 000 001"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
 
             {/* Property & Unit Assignment */}
             <div className="bg-card p-6 rounded-lg border border-border space-y-4">
