@@ -28,7 +28,7 @@ export function FeatureGate({
   readOnlyMessage = "This feature is read-only in your current plan"
 }: FeatureGateProps) {
   const navigate = useNavigate();
-  const { allowed, is_limited, limit, remaining, plan_name, loading } = usePlanFeatureAccess(feature, currentCount);
+  const { allowed, is_limited, limit, remaining, plan_name, loading, reason } = usePlanFeatureAccess(feature, currentCount);
 
   const handleUpgrade = () => {
     navigate("/upgrade");
