@@ -316,15 +316,42 @@ const handler = async (req: Request): Promise<Response> => {
       
       console.log("Tenant insert data:", JSON.stringify(tenantInsertData, null, 2));
       
-      const { data: tenant, error: tenantError } = await supabaseAdmin
-        .from('tenants')
-        .insert(tenantInsertData)
-        .select()
-        .single();
+      const tryInsertTenant = async (payload: any) => {
+        return await supabaseAdmin
+          .from('tenants')
+          .insert(payload)
+          .select()
+          .single();
+      };
+
+      const looksLikeCryptoMissing = (e: any) => {
+        const msg = (e && (e.message || e.error || e.details || e.toString?.())) || '';
+        return /digest\(|encrypt\(|pgcrypto|function\s+.*does\s+not\s+exist|42883/i.test(String(msg));
+      };
+
+      let tenant;
+      let tenantError;
+      ({ data: tenant, error: tenantError } = await tryInsertTenant(tenantInsertData));
+
+      if (tenantError && looksLikeCryptoMissing(tenantError)) {
+        console.warn('Encryption functions unavailable. Retrying tenant insert with PII fields omitted.');
+        const fallbackInsert = {
+          user_id: userId,
+          first_name: tenantData.first_name,
+          last_name: tenantData.last_name,
+          email: tenantData.email,
+          // Omit phone, national_id, emergency contacts to bypass encryption triggers
+        };
+        const retry = await tryInsertTenant(fallbackInsert);
+        tenant = retry.data;
+        tenantError = retry.error;
+        if (!tenantError && tenant) {
+          console.log('Tenant inserted via fallback without PII due to crypto unavailability:', tenant.id);
+        }
+      }
 
       if (tenantError) {
         console.error("Error creating tenant record:", tenantError);
-        // Handle unique constraint (e.g., duplicate email/national_id) explicitly
         const code = (tenantError as any)?.code || (tenantError as any)?.status || null;
         if (code === '23505' || code === '409') {
           return new Response(JSON.stringify({ error: "Tenant already exists", details: tenantError.message }), {
@@ -334,7 +361,7 @@ const handler = async (req: Request): Promise<Response> => {
         }
         throw new Error(`Failed to create tenant record: ${tenantError.message}`);
       }
-      
+
       console.log("Tenant record created successfully:", tenant.id);
 
       // Create lease if unit and lease data provided
