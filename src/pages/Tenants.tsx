@@ -96,60 +96,91 @@ const Tenants = () => {
         const uid = auth?.user?.id;
         if (!uid) throw new Error('Not authenticated');
 
-        // Server-side filtering by ownership/management, search and employment
-        let query = (supabase as any)
+        // 1) Get properties owned/managed by this user
+        const { data: ownedProps, error: propsErr } = await (supabase as any)
+          .from('properties')
+          .select('id, name')
+          .or(`owner_id.eq.${uid},manager_id.eq.${uid}`);
+        if (propsErr) throw propsErr;
+        const propertyIds = (ownedProps || []).map((p: any) => p.id);
+        const propertyById: Record<string, any> = (ownedProps || []).reduce((acc: any, p: any) => { acc[p.id] = p; return acc; }, {});
+
+        if (!propertyIds.length) {
+          setTenants([]);
+          setTotalCount(0);
+          return;
+        }
+
+        // 2) Get units within those properties
+        const { data: units, error: unitsErr } = await supabase
+          .from('units')
+          .select('id, unit_number, property_id')
+          .in('property_id', propertyIds);
+        if (unitsErr) throw unitsErr;
+        const unitById: Record<string, any> = (units || []).reduce((acc: any, u: any) => { acc[u.id] = u; return acc; }, {});
+        const unitIds = (units || []).map((u: any) => u.id);
+
+        if (!unitIds.length) {
+          setTenants([]);
+          setTotalCount(0);
+          return;
+        }
+
+        // 3) Get active leases for those units
+        const { data: leases, error: leasesErr } = await supabase
           .from('leases')
-          .select(`
-            id, monthly_rent, status,
-            tenants:tenants!inner(
-              id, first_name, last_name, email, phone,
-              employment_status, employer_name, monthly_income,
-              emergency_contact_name, emergency_contact_phone,
-              previous_address, created_at
-            ),
-            units:units!inner(
-              unit_number,
-              properties:properties!inner(name, owner_id, manager_id)
-            )
-          `, { count: 'exact' })
-          .order('created_at', { ascending: false, referencedTable: 'tenants' })
-          .or(`units.properties.owner_id.eq.${uid},units.properties.manager_id.eq.${uid}`);
+          .select('tenant_id, unit_id, monthly_rent, status')
+          .in('unit_id', unitIds)
+          .neq('status', 'terminated');
+        if (leasesErr) throw leasesErr;
 
-        if (searchTerm) {
-          const term = `%${searchTerm}%`;
-          query = query.or(
-            `tenants.first_name.ilike.${term},tenants.last_name.ilike.${term},tenants.email.ilike.${term}`
-          );
-        }
-        if (filterEmployment && filterEmployment !== 'all') {
-          query = query.eq('tenants.employment_status', filterEmployment);
-        }
-        if (filterProperty && filterProperty !== 'all') {
-          query = query.eq('units.properties.name', filterProperty);
+        const tenantIds = Array.from(new Set((leases || []).map((l: any) => l.tenant_id).filter(Boolean)));
+
+        if (!tenantIds.length) {
+          setTenants([]);
+          setTotalCount(0);
+          return;
         }
 
-        const { data: rows, error: tError, count } = await query.range(offset, offset + pageSize - 1);
+        // 4) Fetch tenants with pagination and exact count
+        const { data: tenantRows, error: tError, count } = await supabase
+          .from('tenants')
+          .select('id, first_name, last_name, email, phone, employment_status, employer_name, monthly_income, emergency_contact_name, emergency_contact_phone, previous_address, created_at', { count: 'exact' })
+          .in('id', tenantIds)
+          .order('created_at', { ascending: false })
+          .range(offset, offset + pageSize - 1);
+
         if (tError) throw tError;
 
-        const transformedFallback = (rows || []).map((r: any) => ({
-          id: r.tenants.id,
-          first_name: r.tenants.first_name,
-          last_name: r.tenants.last_name,
-          email: r.tenants.email,
-          phone: r.tenants.phone,
-          employment_status: r.tenants.employment_status,
-          employer_name: r.tenants.employer_name,
-          monthly_income: r.tenants.monthly_income,
-          emergency_contact_name: r.tenants.emergency_contact_name,
-          emergency_contact_phone: r.tenants.emergency_contact_phone,
-          previous_address: r.tenants.previous_address,
-          created_at: r.tenants.created_at,
-          property_name: r.units?.properties?.name,
-          unit_number: r.units?.unit_number,
-          rent_amount: r.monthly_rent,
-        }));
+        // 5) Map tenants to their unit/property/rent where possible (choose first active lease per tenant)
+        const leaseByTenant: Record<string, any> = {};
+        (leases || []).forEach((l: any) => {
+          if (!leaseByTenant[l.tenant_id]) leaseByTenant[l.tenant_id] = l; // keep first (most recent selection could be improved)
+        });
 
-        // Optionally filter complex client-side ranges (bedrooms, rent range)
+        const transformedFallback = (tenantRows || []).map((t: any) => {
+          const l = leaseByTenant[t.id];
+          const unit = l ? unitById[l.unit_id] : null;
+          const prop = unit ? propertyById[unit.property_id] : null;
+          return {
+            id: t.id,
+            first_name: t.first_name,
+            last_name: t.last_name,
+            email: t.email,
+            phone: t.phone,
+            employment_status: t.employment_status,
+            employer_name: t.employer_name,
+            monthly_income: t.monthly_income,
+            emergency_contact_name: t.emergency_contact_name,
+            emergency_contact_phone: t.emergency_contact_phone,
+            previous_address: t.previous_address,
+            created_at: t.created_at,
+            property_name: prop?.name,
+            unit_number: unit?.unit_number,
+            rent_amount: l?.monthly_rent,
+          };
+        });
+
         setTenants(transformedFallback as Tenant[]);
         setTotalCount(count || transformedFallback.length || 0);
         return;
