@@ -232,13 +232,18 @@ const Tenants = () => {
 
   const fetchProperties = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth?.user?.id;
+      if (!uid) throw new Error('Not authenticated');
+
+      const { data, error } = await (supabase as any)
         .from('properties')
-        .select('id, name, property_type')
+        .select('id, name, property_type, owner_id, manager_id')
+        .or(`owner_id.eq.${uid},manager_id.eq.${uid}`)
         .order('name');
 
       if (error) throw error;
-      setProperties(data || []);
+      setProperties((data || []).map(p => ({ id: p.id, name: p.name, property_type: p.property_type })));
     } catch (error) {
       console.error('Error fetching properties:', error);
       setProperties([]);
