@@ -498,35 +498,6 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
     }
   };
 
-  // Instrumentation: prevent accidental Enter-submit and log key events inside the tenant form
-  const handleFormKeyDownCapture = (e: any) => {
-    try {
-      const key = e.key;
-      const target = e.target as HTMLElement | null;
-      const tag = target?.tagName;
-      const type = (target as any)?.type;
-      console.log('[tenant-form] keydown', { key, tag, type, name: (target as any)?.name, value: (target as any)?.value });
-      if (key === 'Enter') {
-        // Allow Enter in textareas and when focused on explicit submit/button
-        if (tag !== 'TEXTAREA' && tag !== 'BUTTON') {
-          if (type !== 'submit' && type !== 'button') {
-            e.preventDefault();
-            e.stopPropagation();
-            console.warn('[tenant-form] Prevented Enter from submitting form');
-            // Expose counter for debugging in console
-            (window as any).__TENANT_FORM_PREVENTED = (window as any).__TENANT_FORM_PREVENTED ? (window as any).__TENANT_FORM_PREVENTED + 1 : 1;
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('[tenant-form] instrumentation error', err);
-    }
-  };
-
-  const handleFormSubmitWrapper = (e: any) => {
-    console.log('[tenant-form] submit event', { defaultPrevented: e?.defaultPrevented, activeElement: (document.activeElement && (document.activeElement as any).tagName) });
-    return form.handleSubmit(onSubmit)(e);
-  };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -543,7 +514,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
           <DialogTitle className="text-xl font-semibold text-primary">Add New Tenant</DialogTitle>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={handleFormSubmitWrapper} onKeyDownCapture={handleFormKeyDownCapture} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             {/* Personal Information */}
             <div className="bg-card p-6 rounded-lg border border-border space-y-4">
               <h3 className="text-base font-semibold text-primary border-b border-border pb-2">
