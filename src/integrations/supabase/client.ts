@@ -41,7 +41,7 @@ try {
       if (result?.error) throw result.error;
       return result;
     } catch (err: any) {
-      // Try server proxy fallback using service role
+      // Try server proxy fallback using service role or anon
       try {
         const body = options?.body ?? {};
         const res = await fetch(`/api/edge/${name}`, {
@@ -89,6 +89,32 @@ try {
         if (e?.hint) parts.push(`hint: ${e.hint}`);
         if (proxyFailedDetails) parts.push(`proxy: ${typeof proxyFailedDetails === 'string' ? proxyFailedDetails : JSON.stringify(proxyFailedDetails)}`);
         return { data: null as any, error: { message: parts.join(' | ') || String(e) } };
+      }
+    }
+  };
+
+  // RPC fallback via proxy to bypass browser CORS
+  const origRpc = (supabase as any).rpc.bind(supabase);
+  (supabase as any).rpc = async (fn: string, params?: any) => {
+    try {
+      const res = await origRpc(fn, params);
+      if (res?.error && String(res.error?.message || '').toLowerCase().includes('failed to fetch')) throw res.error;
+      return res;
+    } catch (err: any) {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const access = sessionData?.session?.access_token;
+        const r = await fetch(`/api/rpc/${encodeURIComponent(fn)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(access ? { Authorization: `Bearer ${access}` } : {}) },
+          body: JSON.stringify(params || {})
+        });
+        const text = await r.text();
+        let data: any; try { data = JSON.parse(text); } catch { data = text; }
+        if (r.ok) return { data, error: null };
+        return { data: null, error: data?.error || data };
+      } catch (e) {
+        return { data: null, error: err || e };
       }
     }
   };
