@@ -43,10 +43,13 @@ export interface ButtonProps
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "button"
+    // Ensure buttons don't act as form submit by default when used as isolated UI controls
+    const defaultType = (props as any).type ?? 'button'
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
+        type={defaultType}
         {...props}
       />
     )
