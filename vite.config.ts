@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import fs from "fs";
 import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
@@ -9,7 +10,6 @@ export default defineConfig(({ mode }) => {
   let supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   let supabaseAnon = process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
   try {
-    const fs = require('fs');
     const runtimePath = path.resolve(__dirname, 'supabase', 'runtime.json');
     if (!supabaseUrl || !supabaseAnon) {
       if (fs.existsSync(runtimePath)) {
