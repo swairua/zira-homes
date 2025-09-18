@@ -132,15 +132,33 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
   const fetchUnits = async (propertyId: string) => {
     try {
-      const { data, error } = await supabase
+      // First, fetch units marked vacant for performance
+      const { data: rawUnits, error } = await supabase
         .from('units')
         .select('id, unit_number, rent_amount, status')
         .eq('property_id', propertyId)
         .eq('status', 'vacant')
         .order('unit_number');
-      
       if (error) throw error;
-      setUnits(data || []);
+
+      const unitsList = rawUnits || [];
+
+      // Extra safety: filter out any unit that still has an active lease (in case of stale status)
+      if (unitsList.length > 0) {
+        const unitIds = unitsList.map(u => u.id);
+        const { data: activeLeaseUnits, error: leasesErr } = await supabase
+          .from('leases')
+          .select('unit_id')
+          .in('unit_id', unitIds)
+          .eq('status', 'active');
+        if (!leasesErr && Array.isArray(activeLeaseUnits)) {
+          const blocked = new Set(activeLeaseUnits.map((l: any) => l.unit_id));
+          setUnits(unitsList.filter(u => !blocked.has(u.id)));
+          return;
+        }
+      }
+
+      setUnits(unitsList);
     } catch (error) {
       console.error('Error fetching units:', error);
       setUnits([]);
