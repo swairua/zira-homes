@@ -200,135 +200,29 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
     console.log("Submitting tenant creation request:", requestPayload);
 
-    // Direct creation without Edge Functions
     try {
-      const looksLikeCryptoMissing = (e: any) => {
-        const msg = (e && (e.message || e.error || e.details || e.toString?.())) || '';
-        return /digest\(|encrypt\(|pgcrypto|function\s+.*does\s+not\s+exist|42883/i.test(String(msg));
-      };
-
-      // Attempt insert with property_id; fallback without if column doesn't exist
-      const insertBase: any = {
-        first_name: data.first_name,
-        last_name: data.last_name,
-        email: data.email,
-        phone: data.phone,
-        national_id: data.national_id,
-        employment_status: data.employment_status,
-        profession: data.profession,
-        employer_name: data.employer_name,
-        monthly_income: data.monthly_income ? Number(data.monthly_income) : null,
-        emergency_contact_name: data.emergency_contact_name || null,
-        emergency_contact_phone: data.emergency_contact_phone || null,
-        previous_address: data.previous_address || null,
-      };
-
-      const insertWithPlainEncrypted = (withProperty: boolean) => supabase
-        .from('tenants')
-        .insert({
-          ...insertBase,
-          ...(withProperty ? { property_id: data.property_id || null } : {}),
-          // Pre-fill encrypted columns with plaintext to bypass DB triggers when crypto is missing
-          phone_encrypted: data.phone || null,
-          national_id_encrypted: data.national_id || null,
-          emergency_contact_phone_encrypted: data.emergency_contact_phone || null,
-        })
-        .select()
-        .single();
-
-      const insertNormal = (withProperty: boolean) => supabase
-        .from('tenants')
-        .insert({
-          ...insertBase,
-          ...(withProperty ? { property_id: data.property_id || null } : {}),
-        })
-        .select()
-        .single();
-
-      let attempt = await insertNormal(true);
-
-      if (attempt.error && /property_id/i.test(attempt.error.message || '')) {
-        // Retry without property_id for schemas that don't have this column
-        attempt = await insertNormal(false);
-      }
-
-      if (attempt.error && looksLikeCryptoMissing(attempt.error)) {
-        console.warn('Encryption functions unavailable. Retrying insert with PII also set on *_encrypted columns.');
-        attempt = await insertWithPlainEncrypted(Boolean(data.property_id));
-      }
-
-      const tenantInserted: any = attempt.data;
-      const tenantError: any = attempt.error;
-
-      if (tenantError) throw new Error(tenantError.message);
-
-      let leaseCreated: any = null;
-      if (data.unit_id) {
-        if (!data.lease_start_date || !data.lease_end_date || !data.monthly_rent) {
-          throw new Error("Missing lease fields (start, end, monthly rent).");
-        }
-        const { data: leaseRow, error: leaseError } = await supabase
-          .from('leases')
-          .insert({
-            tenant_id: (tenantInserted as any).id,
-            unit_id: data.unit_id,
-            monthly_rent: Number(data.monthly_rent),
-            lease_start_date: data.lease_start_date,
-            lease_end_date: data.lease_end_date,
-            security_deposit: data.security_deposit != null ? Number(data.security_deposit) : null
-          })
-          .select()
-          .single();
-        if (leaseError) throw new Error(leaseError.message);
-        leaseCreated = leaseRow;
-
-        try { await supabase.rpc('sync_unit_status', { p_unit_id: data.unit_id }); } catch {}
-      }
-
-      await logActivity(
-        'tenant_created',
-        'tenant',
-        (tenantInserted as any).id,
-        {
-          tenant_name: `${data.first_name} ${data.last_name}`,
-          tenant_email: data.email,
-          unit_id: data.unit_id,
-          property_id: data.property_id,
-          has_lease: !!data.unit_id
-        }
-      );
-
-      toast({
-        title: "Tenant Created",
-        description: leaseCreated ? "Tenant and lease created successfully." : "Tenant created successfully.",
-        variant: "default",
-        duration: 6000,
-      });
-
-      reset();
-      handleOpenChange(false);
-      onTenantAdded();
-      return;
-    } catch (e) {
-      throw e as any;
-    }
-    
-    try {
-      // Call the edge function to create tenant account
-      // Prefer same-origin server proxy to avoid browser CORS
+      // Prefer our server route to bypass CORS/Edge issues and force insert
       let invokeResponse: any = null;
       try {
-        const res = await fetch('/api/edge/create-tenant-account', {
+        const res = await fetch('/api/tenants/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...requestPayload, force: true })
+          body: JSON.stringify({
+            tenantData: requestPayload.tenantData,
+            unitId: requestPayload.unitId,
+            propertyId: requestPayload.propertyId,
+            leaseData: requestPayload.leaseData,
+          })
         });
         const text = await res.text();
         let data: any; try { data = JSON.parse(text); } catch { data = text; }
         if (res.ok) {
-          invokeResponse = { data, error: null };
+          // Normalize to edge-function-like shape
+          if (data && data.success) invokeResponse = { data, error: null };
+          else if (data && data.data) invokeResponse = { data: { success: true, tenant: Array.isArray(data.data) ? data.data[0] : data.data }, error: null };
+          else invokeResponse = { data, error: null };
         } else {
-          invokeResponse = { data: null, error: { message: 'Proxy call failed', status: res.status, details: data } };
+          invokeResponse = { data: null, error: { message: 'Server create failed', status: res.status, details: data } };
         }
       } catch (proxyErr: any) {
         console.warn('Server proxy failed, attempting direct fetch:', proxyErr);
@@ -360,28 +254,42 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
             invokeResponse = await supabase.functions.invoke('create-tenant-account', { body: requestPayload, headers: { 'x-force-create': 'true' } });
           } catch (fnErr: any) {
             console.error("Edge function threw an error:", fnErr);
-            let details = fnErr?.message || "Edge function invocation failed";
+            // Last resort: force insert via server proxy to REST with plaintext in encrypted columns
             try {
-              if (fnErr?.response && typeof fnErr.response.text === 'function') {
-                const txt = await fnErr.response.text();
+              const forcePayload: any = {
+                ...requestPayload.tenantData,
+                property_id: requestPayload.propertyId || null,
+                phone_encrypted: requestPayload.tenantData.phone || null,
+                national_id_encrypted: requestPayload.tenantData.national_id || null,
+                emergency_contact_phone_encrypted: requestPayload.tenantData.emergency_contact_phone || null,
+              };
+              const res = await fetch('/api/tenants/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(forcePayload)
+              });
+              const text = await res.text();
+              let data: any; try { data = JSON.parse(text); } catch { data = text; }
+              if (res.ok && data?.data) {
+                invokeResponse = { data: data.data, error: null };
+              } else {
+                let details = fnErr?.message || 'Edge function invocation failed';
                 try {
-                  const parsed = JSON.parse(txt);
-                  details = parsed.error || parsed.message || parsed.details || JSON.stringify(parsed);
-                } catch (e) {
-                  details = txt;
-                }
+                  if (fnErr?.response && typeof fnErr.response.text === 'function') {
+                    const txt = await fnErr.response.text();
+                    try { const parsed = JSON.parse(txt); details = parsed.error || parsed.message || parsed.details || JSON.stringify(parsed); } catch { details = txt; }
+                  }
+                } catch {}
+                toast({ title: 'Tenant Creation Failed', description: details, variant: 'destructive' });
+                setLoading(false);
+                return;
               }
-            } catch (e) {
-              console.warn('Failed to extract error response body', e);
+            } catch (lastErr) {
+              let details = (lastErr as any)?.message || 'Tenant creation failed';
+              toast({ title: 'Tenant Creation Failed', description: details, variant: 'destructive' });
+              setLoading(false);
+              return;
             }
-
-            toast({
-              title: "Tenant Creation Failed",
-              description: details,
-              variant: "destructive",
-            });
-            setLoading(false);
-            return;
           }
         }
       }
@@ -432,12 +340,13 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
       console.log("Processing successful response:", result);
 
-      if (result?.success) {
+      const isSuccess = Boolean(result?.success) || Boolean(result?.tenant?.id) || (Array.isArray(result) && result[0]?.id) || Boolean(result?.id);
+      if (isSuccess) {
         // Log the activity
         await logActivity(
           'tenant_created',
           'tenant',
-          result.tenant?.id,
+          (result?.tenant?.id) || (Array.isArray(result) ? result[0]?.id : result?.id),
           {
             tenant_name: `${data.first_name} ${data.last_name}`,
             tenant_email: data.email,
