@@ -11,7 +11,12 @@
     const port = process.env.PORT || 3000;
 
     const sendJSON = (res, status, data) => {
-      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.writeHead(status, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'authorization, content-type, apikey, x-force-create, x-requested-with',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
+      });
       res.end(JSON.stringify(data));
     };
 
@@ -83,6 +88,16 @@
         res.setHeader('X-XSS-Protection', '1; mode=block');
 
         const url = req.url || '/';
+
+        // Handle CORS preflight for API
+        if (req.method === 'OPTIONS' && url.startsWith('/api/')) {
+          res.writeHead(204, {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'authorization, content-type, apikey, x-force-create, x-requested-with',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
+          });
+          return res.end();
+        }
 
         // Health route to validate supabase connectivity
         if (url.startsWith('/api/health')) {
