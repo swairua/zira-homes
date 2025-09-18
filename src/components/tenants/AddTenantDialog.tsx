@@ -187,6 +187,27 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
     setLoading(true);
 
+    // Safety check: prevent creating a lease if an active one already exists for the unit
+    if (data.unit_id) {
+      try {
+        const { data: existingActive, error: activeErr } = await supabase
+          .from('leases')
+          .select('id')
+          .eq('unit_id', data.unit_id)
+          .eq('status', 'active')
+          .limit(1);
+        if (!activeErr && Array.isArray(existingActive) && existingActive.length > 0) {
+          toast({
+            title: 'Unit Already Occupied',
+            description: 'The selected unit already has an active lease. Please choose a different unit or end the current lease first.',
+            variant: 'destructive',
+          });
+          setLoading(false);
+          return;
+        }
+      } catch {}
+    }
+
     // Prepare request payload
     const requestPayload = {
       tenantData: {
@@ -224,6 +245,8 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
         const msg = (e && (e.message || e.error || e.details || e.toString?.())) || '';
         return /digest\(|encrypt\(|pgcrypto|function\s+.*does\s+not\s+exist|42883/i.test(String(msg));
       };
+
+      const isActiveLeaseConstraint = (m: any) => /idx_unique_active_lease_per_unit|unique\s+.*active\s+lease\s+.*unit/i.test(String(m || ''));
 
       // Attempt insert with property_id; fallback without if column doesn't exist
       const insertBase: any = {
@@ -297,7 +320,18 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
           })
           .select()
           .single();
-        if (leaseError) throw new Error(leaseError.message);
+        if (leaseError) {
+          if (isActiveLeaseConstraint(leaseError.message)) {
+            toast({
+              title: 'Unit Already Occupied',
+              description: 'The selected unit already has an active lease. Please choose a different unit or end the current lease first.',
+              variant: 'destructive',
+            });
+            setLoading(false);
+            return;
+          }
+          throw new Error(leaseError.message);
+        }
         leaseCreated = leaseRow;
 
         try { await supabase.rpc('sync_unit_status', { p_unit_id: data.unit_id }); } catch {}
