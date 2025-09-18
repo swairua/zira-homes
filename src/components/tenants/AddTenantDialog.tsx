@@ -201,21 +201,28 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
     console.log("Submitting tenant creation request:", requestPayload);
 
     try {
-      // Call the edge function to create tenant account
-      // Prefer same-origin server proxy to avoid browser CORS
+      // Prefer our server route to bypass CORS/Edge issues and force insert
       let invokeResponse: any = null;
       try {
-        const res = await fetch('/api/edge/create-tenant-account', {
+        const res = await fetch('/api/tenants/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...requestPayload, force: true })
+          body: JSON.stringify({
+            tenantData: requestPayload.tenantData,
+            unitId: requestPayload.unitId,
+            propertyId: requestPayload.propertyId,
+            leaseData: requestPayload.leaseData,
+          })
         });
         const text = await res.text();
         let data: any; try { data = JSON.parse(text); } catch { data = text; }
         if (res.ok) {
-          invokeResponse = { data, error: null };
+          // Normalize to edge-function-like shape
+          if (data && data.success) invokeResponse = { data, error: null };
+          else if (data && data.data) invokeResponse = { data: { success: true, tenant: Array.isArray(data.data) ? data.data[0] : data.data }, error: null };
+          else invokeResponse = { data, error: null };
         } else {
-          invokeResponse = { data: null, error: { message: 'Proxy call failed', status: res.status, details: data } };
+          invokeResponse = { data: null, error: { message: 'Server create failed', status: res.status, details: data } };
         }
       } catch (proxyErr: any) {
         console.warn('Server proxy failed, attempting direct fetch:', proxyErr);
@@ -333,12 +340,13 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
       console.log("Processing successful response:", result);
 
-      if (result?.success) {
+      const isSuccess = Boolean(result?.success) || Boolean(result?.tenant?.id) || (Array.isArray(result) && result[0]?.id) || Boolean(result?.id);
+      if (isSuccess) {
         // Log the activity
         await logActivity(
           'tenant_created',
           'tenant',
-          result.tenant?.id,
+          (result?.tenant?.id) || (Array.isArray(result) ? result[0]?.id : result?.id),
           {
             tenant_name: `${data.first_name} ${data.last_name}`,
             tenant_email: data.email,
