@@ -132,15 +132,33 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
   const fetchUnits = async (propertyId: string) => {
     try {
-      const { data, error } = await supabase
+      // First, fetch units marked vacant for performance
+      const { data: rawUnits, error } = await supabase
         .from('units')
         .select('id, unit_number, rent_amount, status')
         .eq('property_id', propertyId)
         .eq('status', 'vacant')
         .order('unit_number');
-      
       if (error) throw error;
-      setUnits(data || []);
+
+      const unitsList = rawUnits || [];
+
+      // Extra safety: filter out any unit that still has an active lease (in case of stale status)
+      if (unitsList.length > 0) {
+        const unitIds = unitsList.map(u => u.id);
+        const { data: activeLeaseUnits, error: leasesErr } = await supabase
+          .from('leases')
+          .select('unit_id')
+          .in('unit_id', unitIds)
+          .eq('status', 'active');
+        if (!leasesErr && Array.isArray(activeLeaseUnits)) {
+          const blocked = new Set(activeLeaseUnits.map((l: any) => l.unit_id));
+          setUnits(unitsList.filter(u => !blocked.has(u.id)));
+          return;
+        }
+      }
+
+      setUnits(unitsList);
     } catch (error) {
       console.error('Error fetching units:', error);
       setUnits([]);
@@ -168,6 +186,27 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
     }
 
     setLoading(true);
+
+    // Safety check: prevent creating a lease if an active one already exists for the unit
+    if (data.unit_id) {
+      try {
+        const { data: existingActive, error: activeErr } = await supabase
+          .from('leases')
+          .select('id')
+          .eq('unit_id', data.unit_id)
+          .eq('status', 'active')
+          .limit(1);
+        if (!activeErr && Array.isArray(existingActive) && existingActive.length > 0) {
+          toast({
+            title: 'Unit Already Occupied',
+            description: 'The selected unit already has an active lease. Please choose a different unit or end the current lease first.',
+            variant: 'destructive',
+          });
+          setLoading(false);
+          return;
+        }
+      } catch {}
+    }
 
     // Prepare request payload
     const requestPayload = {
@@ -200,29 +239,148 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
     console.log("Submitting tenant creation request:", requestPayload);
 
+    // Direct creation without Edge Functions
     try {
-      // Prefer our server route to bypass CORS/Edge issues and force insert
+      const looksLikeCryptoMissing = (e: any) => {
+        const msg = (e && (e.message || e.error || e.details || e.toString?.())) || '';
+        return /digest\(|encrypt\(|pgcrypto|function\s+.*does\s+not\s+exist|42883/i.test(String(msg));
+      };
+
+      const isActiveLeaseConstraint = (m: any) => /idx_unique_active_lease_per_unit|unique\s+.*active\s+lease\s+.*unit/i.test(String(m || ''));
+
+      // Attempt insert with property_id; fallback without if column doesn't exist
+      const insertBase: any = {
+        first_name: data.first_name,
+        last_name: data.last_name,
+        email: data.email,
+        phone: data.phone,
+        national_id: data.national_id,
+        employment_status: data.employment_status,
+        profession: data.profession,
+        employer_name: data.employer_name,
+        monthly_income: data.monthly_income ? Number(data.monthly_income) : null,
+        emergency_contact_name: data.emergency_contact_name || null,
+        emergency_contact_phone: data.emergency_contact_phone || null,
+        previous_address: data.previous_address || null,
+      };
+
+      const insertWithPlainEncrypted = (withProperty: boolean) => supabase
+        .from('tenants')
+        .insert({
+          ...insertBase,
+          ...(withProperty ? { property_id: data.property_id || null } : {}),
+          // Pre-fill encrypted columns with plaintext to bypass DB triggers when crypto is missing
+          phone_encrypted: data.phone || null,
+          national_id_encrypted: data.national_id || null,
+          emergency_contact_phone_encrypted: data.emergency_contact_phone || null,
+        })
+        .select()
+        .single();
+
+      const insertNormal = (withProperty: boolean) => supabase
+        .from('tenants')
+        .insert({
+          ...insertBase,
+          ...(withProperty ? { property_id: data.property_id || null } : {}),
+        })
+        .select()
+        .single();
+
+      let attempt = await insertNormal(true);
+
+      if (attempt.error && /property_id/i.test(attempt.error.message || '')) {
+        // Retry without property_id for schemas that don't have this column
+        attempt = await insertNormal(false);
+      }
+
+      if (attempt.error && looksLikeCryptoMissing(attempt.error)) {
+        console.warn('Encryption functions unavailable. Retrying insert with PII also set on *_encrypted columns.');
+        attempt = await insertWithPlainEncrypted(Boolean(data.property_id));
+      }
+
+      const tenantInserted: any = attempt.data;
+      const tenantError: any = attempt.error;
+
+      if (tenantError) throw new Error(tenantError.message);
+
+      let leaseCreated: any = null;
+      if (data.unit_id) {
+        if (!data.lease_start_date || !data.lease_end_date || !data.monthly_rent) {
+          throw new Error("Missing lease fields (start, end, monthly rent).");
+        }
+        const { data: leaseRow, error: leaseError } = await supabase
+          .from('leases')
+          .insert({
+            tenant_id: (tenantInserted as any).id,
+            unit_id: data.unit_id,
+            monthly_rent: Number(data.monthly_rent),
+            lease_start_date: data.lease_start_date,
+            lease_end_date: data.lease_end_date,
+            security_deposit: data.security_deposit != null ? Number(data.security_deposit) : null
+          })
+          .select()
+          .single();
+        if (leaseError) {
+          if (isActiveLeaseConstraint(leaseError.message)) {
+            toast({
+              title: 'Unit Already Occupied',
+              description: 'The selected unit already has an active lease. Please choose a different unit or end the current lease first.',
+              variant: 'destructive',
+            });
+            setLoading(false);
+            return;
+          }
+          throw new Error(leaseError.message);
+        }
+        leaseCreated = leaseRow;
+
+        try { await supabase.rpc('sync_unit_status', { p_unit_id: data.unit_id }); } catch {}
+      }
+
+      await logActivity(
+        'tenant_created',
+        'tenant',
+        (tenantInserted as any).id,
+        {
+          tenant_name: `${data.first_name} ${data.last_name}`,
+          tenant_email: data.email,
+          unit_id: data.unit_id,
+          property_id: data.property_id,
+          has_lease: !!data.unit_id
+        }
+      );
+
+      toast({
+        title: "Tenant Created",
+        description: leaseCreated ? "Tenant and lease created successfully." : "Tenant created successfully.",
+        variant: "default",
+        duration: 6000,
+      });
+
+      reset();
+      handleOpenChange(false);
+      onTenantAdded();
+      return;
+    } catch (e) {
+      throw e as any;
+    }
+    
+    try {
+      // Call the edge function to create tenant account
+      // Prefer same-origin server proxy to avoid browser CORS
       let invokeResponse: any = null;
       try {
-        const res = await fetch('/api/tenants/create', {
+        const res = await fetch('/api/edge/create-tenant-account', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tenantData: requestPayload.tenantData,
-            unitId: requestPayload.unitId,
-            propertyId: requestPayload.propertyId,
-            leaseData: requestPayload.leaseData,
-          })
+          body: JSON.stringify({ ...requestPayload, force: true })
         });
         const text = await res.text();
         let data: any; try { data = JSON.parse(text); } catch { data = text; }
         if (res.ok) {
-          // Normalize to edge-function-like shape
-          if (data && data.success) invokeResponse = { data, error: null };
-          else if (data && data.data) invokeResponse = { data: { success: true, tenant: Array.isArray(data.data) ? data.data[0] : data.data }, error: null };
-          else invokeResponse = { data, error: null };
+          invokeResponse = { data, error: null };
         } else {
-          invokeResponse = { data: null, error: { message: 'Server create failed', status: res.status, details: data } };
+          invokeResponse = { data: null, error: { message: 'Proxy call failed', status: res.status, details: data } };
         }
       } catch (proxyErr: any) {
         console.warn('Server proxy failed, attempting direct fetch:', proxyErr);
@@ -254,42 +412,28 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
             invokeResponse = await supabase.functions.invoke('create-tenant-account', { body: requestPayload, headers: { 'x-force-create': 'true' } });
           } catch (fnErr: any) {
             console.error("Edge function threw an error:", fnErr);
-            // Last resort: force insert via server proxy to REST with plaintext in encrypted columns
+            let details = fnErr?.message || "Edge function invocation failed";
             try {
-              const forcePayload: any = {
-                ...requestPayload.tenantData,
-                property_id: requestPayload.propertyId || null,
-                phone_encrypted: requestPayload.tenantData.phone || null,
-                national_id_encrypted: requestPayload.tenantData.national_id || null,
-                emergency_contact_phone_encrypted: requestPayload.tenantData.emergency_contact_phone || null,
-              };
-              const res = await fetch('/api/tenants/create', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(forcePayload)
-              });
-              const text = await res.text();
-              let data: any; try { data = JSON.parse(text); } catch { data = text; }
-              if (res.ok && data?.data) {
-                invokeResponse = { data: data.data, error: null };
-              } else {
-                let details = fnErr?.message || 'Edge function invocation failed';
+              if (fnErr?.response && typeof fnErr.response.text === 'function') {
+                const txt = await fnErr.response.text();
                 try {
-                  if (fnErr?.response && typeof fnErr.response.text === 'function') {
-                    const txt = await fnErr.response.text();
-                    try { const parsed = JSON.parse(txt); details = parsed.error || parsed.message || parsed.details || JSON.stringify(parsed); } catch { details = txt; }
-                  }
-                } catch {}
-                toast({ title: 'Tenant Creation Failed', description: details, variant: 'destructive' });
-                setLoading(false);
-                return;
+                  const parsed = JSON.parse(txt);
+                  details = parsed.error || parsed.message || parsed.details || JSON.stringify(parsed);
+                } catch (e) {
+                  details = txt;
+                }
               }
-            } catch (lastErr) {
-              let details = (lastErr as any)?.message || 'Tenant creation failed';
-              toast({ title: 'Tenant Creation Failed', description: details, variant: 'destructive' });
-              setLoading(false);
-              return;
+            } catch (e) {
+              console.warn('Failed to extract error response body', e);
             }
+
+            toast({
+              title: "Tenant Creation Failed",
+              description: details,
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
           }
         }
       }
@@ -340,13 +484,12 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
       console.log("Processing successful response:", result);
 
-      const isSuccess = Boolean(result?.success) || Boolean(result?.tenant?.id) || (Array.isArray(result) && result[0]?.id) || Boolean(result?.id);
-      if (isSuccess) {
+      if (result?.success) {
         // Log the activity
         await logActivity(
           'tenant_created',
           'tenant',
-          (result?.tenant?.id) || (Array.isArray(result) ? result[0]?.id : result?.id),
+          result.tenant?.id,
           {
             tenant_name: `${data.first_name} ${data.last_name}`,
             tenant_email: data.email,

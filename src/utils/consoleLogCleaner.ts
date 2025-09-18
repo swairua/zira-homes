@@ -29,19 +29,10 @@ if (isProduction) {
   // In development, filter known noisy library warnings (e.g., Recharts defaultProps deprecation)
   console.warn = (...args: any[]) => {
     try {
-      // Build a joined message safely without consuming streams (Response/Request)
+      // Build a joined message safely
       const parts = args.map(a => {
         try {
-          if (a && typeof a === 'object') {
-            const tag = (a as any)[Symbol.toStringTag];
-            const looksLikeResponse = tag === 'Response' || (typeof (a as any).bodyUsed === 'boolean' && (a as any).headers && ((a as any).ok !== undefined || (a as any).status !== undefined));
-            const looksLikeRequest = tag === 'Request' || ((a as any).method && (a as any).url);
-            if (looksLikeResponse) return '[Response]';
-            if (looksLikeRequest) return '[Request]';
-            // Avoid circular/large objects
-            return JSON.stringify(a, (_k, v) => (typeof v === 'object' && v !== null ? undefined : v));
-          }
-          return String(a);
+          return typeof a === 'object' ? JSON.stringify(a) : String(a);
         } catch (e) {
           return String(a);
         }

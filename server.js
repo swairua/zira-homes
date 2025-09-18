@@ -11,12 +11,7 @@
     const port = process.env.PORT || 3000;
 
     const sendJSON = (res, status, data) => {
-      res.writeHead(status, {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'authorization, content-type, apikey, x-force-create, x-requested-with',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
-      });
+      res.writeHead(status, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(data));
     };
 
@@ -88,16 +83,6 @@
         res.setHeader('X-XSS-Protection', '1; mode=block');
 
         const url = req.url || '/';
-
-        // Handle CORS preflight for API
-        if (req.method === 'OPTIONS' && url.startsWith('/api/')) {
-          res.writeHead(204, {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': 'authorization, content-type, apikey, x-force-create, x-requested-with',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
-          });
-          return res.end();
-        }
 
         // Health route to validate supabase connectivity
         if (url.startsWith('/api/health')) {
@@ -237,90 +222,6 @@
             return sendJSON(res, 200, { data });
           } catch (err) {
             console.error('Error in /api/invoices/create:', err);
-            return sendJSON(res, 500, { error: 'Internal server error' });
-          }
-        }
-
-        if (url.startsWith('/api/tenants/create')) {
-          try {
-            // Load runtime for anon fallback
-            let runtime = {};
-            try {
-              const runtimePath = path.join(__dirname, 'supabase', 'runtime.json');
-              if (fs.existsSync(runtimePath)) runtime = JSON.parse(fs.readFileSync(runtimePath, 'utf-8'));
-            } catch {}
-
-            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || runtime.url;
-            const key = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY || runtime.serviceRole || runtime.anonKey;
-            if (!supabaseUrl) return sendJSON(res, 500, { error: 'Supabase URL not configured' });
-            if (!key) return sendJSON(res, 500, { error: 'Supabase key not configured' });
-
-            const body = await parseJSONBody(req) || {};
-            // Support both flat payload and structured payload
-            const t = body.tenantData || body;
-            const payload = {
-              first_name: t.first_name,
-              last_name: t.last_name,
-              email: t.email,
-              phone: t.phone || null,
-              national_id: t.national_id || null,
-              employment_status: t.employment_status || null,
-              profession: t.profession || null,
-              employer_name: t.employer_name || null,
-              monthly_income: t.monthly_income ?? null,
-              emergency_contact_name: t.emergency_contact_name || null,
-              emergency_contact_phone: t.emergency_contact_phone || null,
-              previous_address: t.previous_address || null,
-              property_id: t.property_id || body.propertyId || null,
-              // Pre-fill encrypted columns to bypass DB crypto triggers if they check for NULL
-              phone_encrypted: t.phone || null,
-              national_id_encrypted: t.national_id || null,
-              emergency_contact_phone_encrypted: t.emergency_contact_phone || null,
-            };
-
-            const base = supabaseUrl.replace(/\/$/, '');
-            const headers = {
-              'Content-Type': 'application/json',
-              'apikey': key,
-              'Authorization': `Bearer ${key}`,
-              'Prefer': 'return=representation'
-            };
-
-            // 1) Create tenant
-            const insertTenant = await fetch(base + '/rest/v1/tenants', { method: 'POST', headers, body: JSON.stringify(payload) });
-            const tenantText = await insertTenant.text();
-            let tenantData; try { tenantData = JSON.parse(tenantText); } catch { tenantData = tenantText; }
-            if (!insertTenant.ok) return sendJSON(res, insertTenant.status, { error: 'Supabase insert error', details: tenantData });
-            const tenant = Array.isArray(tenantData) ? tenantData[0] : tenantData;
-
-            // 2) Optionally create lease
-            let lease = null;
-            const unitId = body.unitId || body.unit_id;
-            const leaseData = body.leaseData || body.lease;
-            if (unitId && leaseData && leaseData.monthly_rent && leaseData.lease_start_date && leaseData.lease_end_date) {
-              const leasePayload = {
-                tenant_id: tenant.id,
-                unit_id: unitId,
-                monthly_rent: Number(leaseData.monthly_rent),
-                lease_start_date: leaseData.lease_start_date,
-                lease_end_date: leaseData.lease_end_date,
-                security_deposit: leaseData.security_deposit != null ? Number(leaseData.security_deposit) : Number(leaseData.monthly_rent) * 2,
-                status: 'active'
-              };
-              const insertLease = await fetch(base + '/rest/v1/leases', { method: 'POST', headers, body: JSON.stringify(leasePayload) });
-              const leaseText = await insertLease.text();
-              let leaseResp; try { leaseResp = JSON.parse(leaseText); } catch { leaseResp = leaseText; }
-              if (insertLease.ok) lease = Array.isArray(leaseResp) ? leaseResp[0] : leaseResp;
-
-              // Update unit status to occupied (best-effort)
-              try {
-                await fetch(base + `/rest/v1/units?id=eq.${encodeURIComponent(unitId)}`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'occupied' }) });
-              } catch {}
-            }
-
-            return sendJSON(res, 200, { success: true, tenant, lease });
-          } catch (err) {
-            console.error('Error in /api/tenants/create:', err);
             return sendJSON(res, 500, { error: 'Internal server error' });
           }
         }
