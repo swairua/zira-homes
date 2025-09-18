@@ -241,42 +241,69 @@
             if (!key) return sendJSON(res, 500, { error: 'Supabase key not configured' });
 
             const body = await parseJSONBody(req) || {};
+            // Support both flat payload and structured payload
+            const t = body.tenantData || body;
             const payload = {
-              first_name: body.first_name,
-              last_name: body.last_name,
-              email: body.email,
-              phone: body.phone || null,
-              national_id: body.national_id || null,
-              employment_status: body.employment_status || null,
-              profession: body.profession || null,
-              employer_name: body.employer_name || null,
-              monthly_income: body.monthly_income ?? null,
-              emergency_contact_name: body.emergency_contact_name || null,
-              emergency_contact_phone: body.emergency_contact_phone || null,
-              previous_address: body.previous_address || null,
-              property_id: body.property_id || null,
+              first_name: t.first_name,
+              last_name: t.last_name,
+              email: t.email,
+              phone: t.phone || null,
+              national_id: t.national_id || null,
+              employment_status: t.employment_status || null,
+              profession: t.profession || null,
+              employer_name: t.employer_name || null,
+              monthly_income: t.monthly_income ?? null,
+              emergency_contact_name: t.emergency_contact_name || null,
+              emergency_contact_phone: t.emergency_contact_phone || null,
+              previous_address: t.previous_address || null,
+              property_id: t.property_id || body.propertyId || null,
               // Pre-fill encrypted columns to bypass DB crypto triggers if they check for NULL
-              phone_encrypted: body.phone || null,
-              national_id_encrypted: body.national_id || null,
-              emergency_contact_phone_encrypted: body.emergency_contact_phone || null,
+              phone_encrypted: t.phone || null,
+              national_id_encrypted: t.national_id || null,
+              emergency_contact_phone_encrypted: t.emergency_contact_phone || null,
             };
 
-            const insertUrl = supabaseUrl.replace(/\/$/, '') + '/rest/v1/tenants';
-            const response = await fetch(insertUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'apikey': key,
-                'Authorization': `Bearer ${key}`,
-                'Prefer': 'return=representation'
-              },
-              body: JSON.stringify(payload),
-            });
+            const base = supabaseUrl.replace(/\/$/, '');
+            const headers = {
+              'Content-Type': 'application/json',
+              'apikey': key,
+              'Authorization': `Bearer ${key}`,
+              'Prefer': 'return=representation'
+            };
 
-            const text = await response.text();
-            let data; try { data = JSON.parse(text); } catch { data = text; }
-            if (!response.ok) return sendJSON(res, response.status, { error: 'Supabase insert error', details: data });
-            return sendJSON(res, 200, { data });
+            // 1) Create tenant
+            const insertTenant = await fetch(base + '/rest/v1/tenants', { method: 'POST', headers, body: JSON.stringify(payload) });
+            const tenantText = await insertTenant.text();
+            let tenantData; try { tenantData = JSON.parse(tenantText); } catch { tenantData = tenantText; }
+            if (!insertTenant.ok) return sendJSON(res, insertTenant.status, { error: 'Supabase insert error', details: tenantData });
+            const tenant = Array.isArray(tenantData) ? tenantData[0] : tenantData;
+
+            // 2) Optionally create lease
+            let lease = null;
+            const unitId = body.unitId || body.unit_id;
+            const leaseData = body.leaseData || body.lease;
+            if (unitId && leaseData && leaseData.monthly_rent && leaseData.lease_start_date && leaseData.lease_end_date) {
+              const leasePayload = {
+                tenant_id: tenant.id,
+                unit_id: unitId,
+                monthly_rent: Number(leaseData.monthly_rent),
+                lease_start_date: leaseData.lease_start_date,
+                lease_end_date: leaseData.lease_end_date,
+                security_deposit: leaseData.security_deposit != null ? Number(leaseData.security_deposit) : Number(leaseData.monthly_rent) * 2,
+                status: 'active'
+              };
+              const insertLease = await fetch(base + '/rest/v1/leases', { method: 'POST', headers, body: JSON.stringify(leasePayload) });
+              const leaseText = await insertLease.text();
+              let leaseResp; try { leaseResp = JSON.parse(leaseText); } catch { leaseResp = leaseText; }
+              if (insertLease.ok) lease = Array.isArray(leaseResp) ? leaseResp[0] : leaseResp;
+
+              // Update unit status to occupied (best-effort)
+              try {
+                await fetch(base + `/rest/v1/units?id=eq.${encodeURIComponent(unitId)}`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'occupied' }) });
+              } catch {}
+            }
+
+            return sendJSON(res, 200, { success: true, tenant, lease });
           } catch (err) {
             console.error('Error in /api/tenants/create:', err);
             return sendJSON(res, 500, { error: 'Internal server error' });
