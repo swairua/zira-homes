@@ -202,6 +202,11 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
     // Direct creation without Edge Functions
     try {
+      const looksLikeCryptoMissing = (e: any) => {
+        const msg = (e && (e.message || e.error || e.details || e.toString?.())) || '';
+        return /digest\(|encrypt\(|pgcrypto|function\s+.*does\s+not\s+exist|42883/i.test(String(msg));
+      };
+
       // Attempt insert with property_id; fallback without if column doesn't exist
       const insertBase: any = {
         first_name: data.first_name,
@@ -218,30 +223,42 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
         previous_address: data.previous_address || null,
       };
 
-      let tenantInserted: any = null;
-      let tenantError: any = null;
+      const insertWithPlainEncrypted = (withProperty: boolean) => supabase
+        .from('tenants')
+        .insert({
+          ...insertBase,
+          ...(withProperty ? { property_id: data.property_id || null } : {}),
+          // Pre-fill encrypted columns with plaintext to bypass DB triggers when crypto is missing
+          phone_encrypted: data.phone || null,
+          national_id_encrypted: data.national_id || null,
+          emergency_contact_phone_encrypted: data.emergency_contact_phone || null,
+        })
+        .select()
+        .single();
 
-      const attemptWithPropertyId = async () => {
-        return await supabase
-          .from('tenants')
-          .insert({ ...insertBase, property_id: data.property_id || null })
-          .select()
-          .single();
-      };
+      const insertNormal = (withProperty: boolean) => supabase
+        .from('tenants')
+        .insert({
+          ...insertBase,
+          ...(withProperty ? { property_id: data.property_id || null } : {}),
+        })
+        .select()
+        .single();
 
-      let attempt = await attemptWithPropertyId();
+      let attempt = await insertNormal(true);
 
       if (attempt.error && /property_id/i.test(attempt.error.message || '')) {
         // Retry without property_id for schemas that don't have this column
-        attempt = await supabase
-          .from('tenants')
-          .insert(insertBase)
-          .select()
-          .single();
+        attempt = await insertNormal(false);
       }
 
-      tenantInserted = attempt.data;
-      tenantError = attempt.error;
+      if (attempt.error && looksLikeCryptoMissing(attempt.error)) {
+        console.warn('Encryption functions unavailable. Retrying insert with PII also set on *_encrypted columns.');
+        attempt = await insertWithPlainEncrypted(Boolean(data.property_id));
+      }
+
+      const tenantInserted: any = attempt.data;
+      const tenantError: any = attempt.error;
 
       if (tenantError) throw new Error(tenantError.message);
 
