@@ -32,17 +32,68 @@ export function LeaseDetailsDialog({ leaseId, trigger, open, onOpenChange }: Lea
     if (!leaseId) return;
     setLoading(true);
     try {
+      // Attempt generic relationship select (works if FKs are present regardless of constraint names)
       const { data, error } = await (supabase as any)
         .from("leases")
-        .select(`*, tenants:tenants!leases_tenant_id_fkey(*), units:units!leases_unit_id_fkey(*, properties:properties!units_property_id_fkey(*))`)
+        .select(`
+          *,
+          tenants:tenants(*),
+          units:units(*, properties:properties(*))
+        `)
         .eq("id", leaseId)
         .single();
 
       if (error) throw error;
       setLease(data);
     } catch (err) {
-      console.error("Failed to fetch lease details:", err);
-      setLease(null);
+      // Fallback: fetch pieces separately to avoid dependency on FK names or PostgREST relationship mapping
+      try {
+        const { data: leaseRow, error: leaseErr } = await (supabase as any)
+          .from('leases')
+          .select('*')
+          .eq('id', leaseId)
+          .single();
+        if (leaseErr) throw leaseErr;
+
+        let tenant: any = null;
+        if (leaseRow?.tenant_id) {
+          const { data: t, error: tErr } = await (supabase as any)
+            .from('tenants')
+            .select('id, first_name, last_name, email, phone')
+            .eq('id', leaseRow.tenant_id)
+            .maybeSingle();
+          if (!tErr) tenant = t;
+        }
+
+        let unit: any = null;
+        if (leaseRow?.unit_id) {
+          const { data: u, error: uErr } = await (supabase as any)
+            .from('units')
+            .select('id, unit_number, property_id')
+            .eq('id', leaseRow.unit_id)
+            .maybeSingle();
+          if (!uErr) unit = u;
+        }
+
+        let property: any = null;
+        if (unit?.property_id) {
+          const { data: p, error: pErr } = await (supabase as any)
+            .from('properties')
+            .select('id, name, owner_id')
+            .eq('id', unit.property_id)
+            .maybeSingle();
+          if (!pErr) property = p;
+        }
+
+        setLease({
+          ...leaseRow,
+          tenants: tenant,
+          units: unit ? { ...unit, properties: property } : null,
+        });
+      } catch (fallbackErr) {
+        console.error('Failed to fetch lease details (fallback):', (fallbackErr as any)?.message || JSON.stringify(fallbackErr));
+        setLease(null);
+      }
     } finally {
       setLoading(false);
     }
