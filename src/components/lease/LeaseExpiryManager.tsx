@@ -147,6 +147,34 @@ export function LeaseExpiryManager({
         }
       }
 
+      // If RPC returned rows without IDs, fetch a lightweight list of leases in the same window
+      // and map IDs by (property_name, unit_number, lease_end_date)
+      if (Array.isArray(leasesData) && leasesData.length > 0 && !leasesData.some((l: any) => l.id)) {
+        const filters = { gte: startDate, lte: endDate } as const;
+        const { data: leaseList } = await (supabase as any)
+          .from('leases')
+          .select('id, lease_end_date, units:units!leases_unit_id_fkey(unit_number, properties:properties!units_property_id_fkey(name))')
+          .gte('lease_end_date', filters.gte)
+          .lte('lease_end_date', filters.lte);
+
+        const makeKey = (p?: string, u?: string, d?: string) => {
+          const dd = d ? new Date(d).toISOString().split('T')[0] : '';
+          return `${(p || '').trim()}|${(u || '').trim()}|${dd}`;
+        };
+
+        const idMap = new Map<string, string>();
+        (leaseList || []).forEach((row: any) => {
+          const key = makeKey(row?.units?.properties?.name, row?.units?.unit_number, row?.lease_end_date);
+          if (row?.id) idMap.set(key, row.id);
+        });
+
+        leasesData = leasesData.map((l: any) => {
+          const key = makeKey(l.property_name || l.property, l.unit_number || l.unit, l.lease_end_date);
+          const found = idMap.get(key);
+          return found ? { ...l, id: found } : l;
+        });
+      }
+
       const today = new Date();
       const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       let normalized = leasesData
