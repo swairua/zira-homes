@@ -105,21 +105,52 @@ export function LeaseExpiryManager({
         leasesData = Array.isArray(reportData?.table) ? reportData.table : [];
         if (!Array.isArray(leasesData) || leasesData.length === 0) {
           const filters = { gte: startDate, lte: endDate } as const;
-          const { data: d2, error: e2 } = await (supabase as any)
+          // 1) Fetch leases only (no heavy joins)
+          const { data: leaseRows, error: leaseErr } = await (supabase as any)
             .from('leases')
-            .select('id, lease_end_date, monthly_rent, status, unit_id, tenant_id, tenants:tenants!leases_tenant_id_fkey(first_name,last_name,email), units:units!leases_unit_id_fkey(unit_number, properties:properties!units_property_id_fkey(name))')
+            .select('id, lease_end_date, monthly_rent, status, unit_id, tenant_id')
             .gte('lease_end_date', filters.gte)
-            .lte('lease_end_date', filters.lte);
-          if (!e2) {
-            leasesData = (d2 || []).map((l: any) => ({
-              property_name: l.units?.properties?.name,
-              unit_number: l.units?.unit_number,
-              tenant_name: `${l.tenants?.first_name || ''} ${l.tenants?.last_name || ''}`.trim(),
-              tenant_email: l.tenants?.email,
-              lease_end_date: l.lease_end_date,
-              monthly_rent: l.monthly_rent,
-              status: l.status
-            }));
+            .lte('lease_end_date', filters.lte)
+            .order('lease_end_date', { ascending: true })
+            .limit(500);
+          if (!leaseErr) {
+            const tenantIds = [...new Set((leaseRows || []).map((l: any) => l.tenant_id).filter(Boolean))];
+            const unitIds = [...new Set((leaseRows || []).map((l: any) => l.unit_id).filter(Boolean))];
+
+            // 2) Batch fetch tenants and units
+            const [tenantsRes, unitsRes] = await Promise.all([
+              (supabase as any).from('tenants').select('id, first_name, last_name, email').in('id', tenantIds),
+              (supabase as any).from('units').select('id, unit_number, property_id').in('id', unitIds)
+            ]);
+
+            const tenantsMap = new Map((tenantsRes?.data || []).map((t: any) => [t.id, t]));
+            const unitsData = unitsRes?.data || [];
+            const propertyIds = [...new Set(unitsData.map((u: any) => u.property_id).filter(Boolean))];
+
+            // 3) Batch fetch properties
+            const { data: propsData } = await (supabase as any)
+              .from('properties')
+              .select('id, name')
+              .in('id', propertyIds);
+            const propsMap = new Map((propsData || []).map((p: any) => [p.id, p]));
+
+            // 4) Compose results
+            const unitsMap = new Map(unitsData.map((u: any) => [u.id, u]));
+            leasesData = (leaseRows || []).map((l: any) => {
+              const tenant = tenantsMap.get(l.tenant_id);
+              const unit = unitsMap.get(l.unit_id);
+              const prop = unit ? propsMap.get(unit.property_id) : null;
+              return {
+                id: l.id,
+                property_name: prop?.name,
+                unit_number: unit?.unit_number,
+                tenant_name: `${tenant?.first_name || ''} ${tenant?.last_name || ''}`.trim(),
+                tenant_email: tenant?.email,
+                lease_end_date: l.lease_end_date,
+                monthly_rent: l.monthly_rent,
+                status: l.status
+              };
+            });
           }
         }
       } catch (rpcErr) {
@@ -127,21 +158,48 @@ export function LeaseExpiryManager({
         try {
           const filters = { gte: startDate, lte: endDate } as const;
 
-          const { data, error } = await (supabase as any)
+          const { data: leaseRows, error: leaseErr } = await (supabase as any)
             .from('leases')
-            .select('id, lease_end_date, monthly_rent, status, unit_id, tenant_id, tenants:tenants!leases_tenant_id_fkey(first_name,last_name,email), units:units!leases_unit_id_fkey(unit_number, properties:properties!units_property_id_fkey(name))')
+            .select('id, lease_end_date, monthly_rent, status, unit_id, tenant_id')
             .gte('lease_end_date', filters.gte)
-            .lte('lease_end_date', filters.lte);
-          if (error) throw error;
-          leasesData = (data || []).map((l: any) => ({
-            property_name: l.units?.properties?.name,
-            unit_number: l.units?.unit_number,
-            tenant_name: `${l.tenants?.first_name || ''} ${l.tenants?.last_name || ''}`.trim(),
-            tenant_email: l.tenants?.email,
-            lease_end_date: l.lease_end_date,
-            monthly_rent: l.monthly_rent,
-            status: l.status
-          }));
+            .lte('lease_end_date', filters.lte)
+            .order('lease_end_date', { ascending: true })
+            .limit(500);
+          if (leaseErr) throw leaseErr;
+
+          const tenantIds = [...new Set((leaseRows || []).map((l: any) => l.tenant_id).filter(Boolean))];
+          const unitIds = [...new Set((leaseRows || []).map((l: any) => l.unit_id).filter(Boolean))];
+
+          const [tenantsRes, unitsRes] = await Promise.all([
+            (supabase as any).from('tenants').select('id, first_name, last_name, email').in('id', tenantIds),
+            (supabase as any).from('units').select('id, unit_number, property_id').in('id', unitIds)
+          ]);
+
+          const tenantsMap = new Map((tenantsRes?.data || []).map((t: any) => [t.id, t]));
+          const unitsData = unitsRes?.data || [];
+          const propertyIds = [...new Set(unitsData.map((u: any) => u.property_id).filter(Boolean))];
+          const { data: propsData } = await (supabase as any)
+            .from('properties')
+            .select('id, name')
+            .in('id', propertyIds);
+          const propsMap = new Map((propsData || []).map((p: any) => [p.id, p]));
+          const unitsMap = new Map(unitsData.map((u: any) => [u.id, u]));
+
+          leasesData = (leaseRows || []).map((l: any) => {
+            const tenant = tenantsMap.get(l.tenant_id);
+            const unit = unitsMap.get(l.unit_id);
+            const prop = unit ? propsMap.get(unit.property_id) : null;
+            return {
+              id: l.id,
+              property_name: prop?.name,
+              unit_number: unit?.unit_number,
+              tenant_name: `${tenant?.first_name || ''} ${tenant?.last_name || ''}`.trim(),
+              tenant_email: tenant?.email,
+              lease_end_date: l.lease_end_date,
+              monthly_rent: l.monthly_rent,
+              status: l.status
+            };
+          });
         } catch (srvErr) {
           throw srvErr;
         }
