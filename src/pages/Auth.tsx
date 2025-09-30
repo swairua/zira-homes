@@ -134,6 +134,27 @@ const Auth = () => {
     role: "Landlord" as "Landlord" | "Tenant",
   });
 
+  const normalizePhoneForSignup = (phone: string): string | null => {
+    const trimmed = (phone || "").replace(/\s+/g, "");
+    if (!trimmed) {
+      return "+254700000000";
+    }
+
+    if (/^\+[1-9]\d{7,14}$/.test(trimmed)) {
+      return trimmed;
+    }
+
+    if (/^0\d{8,14}$/.test(trimmed)) {
+      return `+254${trimmed.slice(1)}`;
+    }
+
+    if (/^[1-9]\d{7,14}$/.test(trimmed)) {
+      return `+254${trimmed}`;
+    }
+
+    return null;
+  };
+
   // Show password reset form if in recovery mode
   if (isPasswordReset) {
     return (
@@ -210,18 +231,27 @@ const Auth = () => {
     try {
       const redirectUrl = `${window.location.origin}/`;
       console.log("Signup: creating user", signupData.email, "redirect:", redirectUrl);
-      
+
+      const normalizedPhone = normalizePhoneForSignup(signupData.phone);
+      if (!normalizedPhone) {
+        setError("Please enter a valid phone number in international format, for example +254712345678.");
+        setIsLoading(false);
+        return;
+      }
+
+      const metadata = {
+        first_name: signupData.firstName.trim(),
+        last_name: signupData.lastName.trim(),
+        phone: normalizedPhone,
+        role: signupData.role,
+      } as const;
+
       const { error } = await supabase.auth.signUp({
-        email: signupData.email,
+        email: signupData.email.trim(),
         password: signupData.password,
         options: {
           emailRedirectTo: redirectUrl,
-          data: {
-            first_name: signupData.firstName,
-            last_name: signupData.lastName,
-            phone: signupData.phone,
-            role: signupData.role,
-          },
+          data: metadata,
         },
       });
 
