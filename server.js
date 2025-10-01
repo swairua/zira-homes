@@ -27,7 +27,7 @@
 
     const safeFetch = async (url, opts) => {
       try {
-        const res = await fetch(url, opts);
+        const res = await safeFetch(url, opts);
         return res;
       } catch (err) {
         console.error('[DEV SERVER] safeFetch network error to', url, 'opts_headers=', opts && opts.headers ? Object.keys(opts.headers) : null, 'error=', err && err.message ? err.message : String(err));
@@ -63,7 +63,7 @@
         };
         if (!headers.Authorization) delete headers.Authorization;
 
-        const response = await fetch(rpcUrl, {
+        const response = await safeFetch(rpcUrl, {
           method: req.method || 'POST',
           headers,
           body: JSON.stringify(rpcBody),
@@ -103,7 +103,7 @@
             if (!serviceRole) return sendJSON(res, 500, { error: 'Supabase service role key not configured' });
 
             const testUrl = supabaseUrl.replace(/\/$/, '') + '/rest/v1/invoices?select=id&limit=1';
-            const response = await fetch(testUrl, { headers: { 'apikey': serviceRole, 'Authorization': `Bearer ${serviceRole}` } });
+            const response = await safeFetch(testUrl, { headers: { 'apikey': serviceRole, 'Authorization': `Bearer ${serviceRole}` } });
             const text = await response.text();
             let data;
             try { data = JSON.parse(text); } catch (e) { data = text; }
@@ -171,7 +171,7 @@
                 if (callerAuth) {
                   try {
                     const userUrl = supabaseUrl.replace(/\/$/, '') + '/auth/v1/user';
-                    const userRes = await fetch(userUrl, { headers: { 'apikey': key, 'Authorization': String(callerAuth) } });
+                    const userRes = await safeFetch(userUrl, { headers: { 'apikey': key, 'Authorization': String(callerAuth) } });
                     const userText = await userRes.text();
                     const userData = (() => { try { return JSON.parse(userText); } catch { return null; } })();
                     landlordId = userData?.id || null;
@@ -193,7 +193,7 @@
 
                 // 1) Check for existing profile by email
                 const profilesUrl = supabaseUrl.replace(/\/$/, '') + `/rest/v1/profiles?select=id,email&email=eq.${encodeURIComponent(email)}`;
-                const profilesRes = await fetch(profilesUrl, { headers: { 'apikey': key, 'Authorization': `Bearer ${key}` } });
+                const profilesRes = await safeFetch(profilesUrl, { headers: { 'apikey': key, 'Authorization': `Bearer ${key}` } });
                 const profilesText = await profilesRes.text();
                 let profilesData; try { profilesData = JSON.parse(profilesText); } catch { profilesData = null; }
 
@@ -205,7 +205,7 @@
                   // 2) Create auth user via Admin API
                   const adminCreateUrl = supabaseUrl.replace(/\/$/, '') + '/auth/v1/admin/users';
                   tempPassword = `TempPass${Math.floor(Math.random() * 10000)}!`;
-                  const createResp = await fetch(adminCreateUrl, {
+                  const createResp = await safeFetch(adminCreateUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}` },
                     body: JSON.stringify({ email, password: tempPassword, email_confirm: true, user_metadata: { first_name, last_name, phone, created_by: landlordId, role: 'sub_user' } })
@@ -223,7 +223,7 @@
                   const profilesInsertUrl = supabaseUrl.replace(/\/$/, '') + '/rest/v1/profiles';
                   const profilePayload = { id: userId, first_name, last_name, email, phone };
                   console.log('[DEV SERVER] Creating profile with payload:', profilePayload);
-                  const profileResp = await fetch(profilesInsertUrl, {
+                  const profileResp = await safeFetch(profilesInsertUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}`, 'Prefer': 'return=representation' },
                     body: JSON.stringify(profilePayload)
@@ -245,7 +245,7 @@
                   permissions: permissions,
                   status: 'active'
                 };
-                const subResp = await fetch(subUsersUrl, {
+                const subResp = await safeFetch(subUsersUrl, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}`, 'Prefer': 'return=representation' },
                   body: JSON.stringify(insertPayload)
@@ -273,7 +273,7 @@
             // pass through force header when creating tenant
             if (fnName === 'create-tenant-account' || body.force) headers['x-force-create'] = 'true';
 
-            const response = await fetch(fnUrl, {
+            const response = await safeFetch(fnUrl, {
               method: 'POST',
               headers,
               body: JSON.stringify(body),
@@ -324,7 +324,7 @@
               description: description || null
             };
 
-            const response = await fetch(insertUrl, {
+            const response = await safeFetch(insertUrl, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -379,7 +379,7 @@
               'Authorization': incomingAuth ? String(incomingAuth) : `Bearer ${key}`
             };
 
-            const response = await fetch(targetUrl, {
+            const response = await safeFetch(targetUrl, {
               method,
               headers,
               body: payload
