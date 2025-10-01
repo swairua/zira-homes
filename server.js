@@ -347,12 +347,19 @@
             const incomingAuth = req.headers['authorization'] || req.headers['Authorization'];
 
             // Allow only requests to the configured Supabase URL
-            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || (runtime && runtime.url);
+            // Load runtime defaults if present
+            let runtimeConf = {};
+            try {
+              const runtimePath = path.join(__dirname, 'supabase', 'runtime.json');
+              if (fs.existsSync(runtimePath)) runtimeConf = JSON.parse(fs.readFileSync(runtimePath, 'utf-8'));
+            } catch (e) {}
+
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || runtimeConf.url;
             if (!supabaseUrl) return sendJSON(res, 500, { error: 'Supabase URL not configured' });
             if (!targetUrl || !targetUrl.startsWith(supabaseUrl.replace(/\/$/, ''))) return sendJSON(res, 400, { error: 'Invalid target URL' });
 
             // Use service role for apikey; pass through user auth if available
-            const key = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY || (runtime && runtime.serviceRole) || (runtime && runtime.anonKey);
+            const key = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY || runtimeConf.serviceRole || runtimeConf.anonKey;
             if (!key) return sendJSON(res, 500, { error: 'Supabase key not configured' });
 
             const headers = {
