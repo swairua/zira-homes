@@ -18,6 +18,7 @@ import {
   CheckCircle2
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { formatAmount } from "@/utils/currency";
 import { format, differenceInDays } from "date-fns";
 import { DisabledActionWrapper } from "@/components/feature-access/DisabledActionWrapper";
@@ -117,9 +118,9 @@ export function LeaseExpiryManager({
             const tenantIds = [...new Set((leaseRows || []).map((l: any) => l.tenant_id).filter(Boolean))];
             const unitIds = [...new Set((leaseRows || []).map((l: any) => l.unit_id).filter(Boolean))];
 
-            // 2) Batch fetch tenants and units
+            // 2) Batch fetch tenants and units (include tenant.user_id)
             const [tenantsRes, unitsRes] = await Promise.all([
-              (supabase as any).from('tenants').select('id, first_name, last_name, email').in('id', tenantIds),
+              (supabase as any).from('tenants').select('id, user_id, first_name, last_name, email').in('id', tenantIds),
               (supabase as any).from('units').select('id, unit_number, property_id').in('id', unitIds)
             ]);
 
@@ -127,10 +128,10 @@ export function LeaseExpiryManager({
             const unitsData = unitsRes?.data || [];
             const propertyIds = [...new Set(unitsData.map((u: any) => u.property_id).filter(Boolean))];
 
-            // 3) Batch fetch properties
+            // 3) Batch fetch properties (include owner/manager)
             const { data: propsData } = await (supabase as any)
               .from('properties')
-              .select('id, name')
+              .select('id, name, owner_id, manager_id')
               .in('id', propertyIds);
             const propsMap = new Map((propsData || []).map((p: any) => [p.id, p]));
 
@@ -146,9 +147,12 @@ export function LeaseExpiryManager({
                 unit_number: unit?.unit_number,
                 tenant_name: `${tenant?.first_name || ''} ${tenant?.last_name || ''}`.trim(),
                 tenant_email: tenant?.email,
+                tenant_user_id: tenant?.user_id,
                 lease_end_date: l.lease_end_date,
                 monthly_rent: l.monthly_rent,
-                status: l.status
+                status: l.status,
+                property_owner_id: prop?.owner_id,
+                property_manager_id: prop?.manager_id
               };
             });
           }
@@ -171,7 +175,7 @@ export function LeaseExpiryManager({
           const unitIds = [...new Set((leaseRows || []).map((l: any) => l.unit_id).filter(Boolean))];
 
           const [tenantsRes, unitsRes] = await Promise.all([
-            (supabase as any).from('tenants').select('id, first_name, last_name, email').in('id', tenantIds),
+            (supabase as any).from('tenants').select('id, user_id, first_name, last_name, email').in('id', tenantIds),
             (supabase as any).from('units').select('id, unit_number, property_id').in('id', unitIds)
           ]);
 
@@ -180,7 +184,7 @@ export function LeaseExpiryManager({
           const propertyIds = [...new Set(unitsData.map((u: any) => u.property_id).filter(Boolean))];
           const { data: propsData } = await (supabase as any)
             .from('properties')
-            .select('id, name')
+            .select('id, name, owner_id, manager_id')
             .in('id', propertyIds);
           const propsMap = new Map((propsData || []).map((p: any) => [p.id, p]));
           const unitsMap = new Map(unitsData.map((u: any) => [u.id, u]));
@@ -195,9 +199,12 @@ export function LeaseExpiryManager({
               unit_number: unit?.unit_number,
               tenant_name: `${tenant?.first_name || ''} ${tenant?.last_name || ''}`.trim(),
               tenant_email: tenant?.email,
+              tenant_user_id: tenant?.user_id,
               lease_end_date: l.lease_end_date,
               monthly_rent: l.monthly_rent,
-              status: l.status
+              status: l.status,
+              property_owner_id: prop?.owner_id,
+              property_manager_id: prop?.manager_id
             };
           });
         } catch (srvErr) {
@@ -235,6 +242,8 @@ export function LeaseExpiryManager({
 
       const today = new Date();
       const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const { user } = useAuth();
+
       let normalized = leasesData
         .map((l: any) => {
           const end = l?.lease_end_date ? new Date(l.lease_end_date) : null;
@@ -248,12 +257,25 @@ export function LeaseExpiryManager({
             unit_number: l.unit_number || l.unit || '',
             tenant_name: l.tenant_name || `${l.first_name || ''} ${l.last_name || ''}`.trim(),
             tenant_email: l.tenant_email || l.email || undefined,
+            tenant_user_id: (l as any).tenant_user_id || undefined,
+            property_owner_id: (l as any).property_owner_id || undefined,
+            property_manager_id: (l as any).property_manager_id || undefined,
             days_until_expiry: days,
             status: l.status || 'active'
-          } as LeaseData;
+          } as any as LeaseData;
         })
-        .filter((l: LeaseData) => l.days_until_expiry >= 0 && l.days_until_expiry <= selectedTimeframe);
+        .filter((l: any) => l.days_until_expiry >= 0 && l.days_until_expiry <= selectedTimeframe);
 
+      // Restrict to leases visible to the authenticated user: tenant's own leases or properties they own/manage
+      if (user) {
+        normalized = normalized.filter((l: any) => (
+          l.tenant_user_id === user.id ||
+          l.property_owner_id === user.id ||
+          l.property_manager_id === user.id
+        ));
+      } else {
+        normalized = [];
+      }
 
       normalized.sort((a: LeaseData, b: LeaseData) => a.days_until_expiry - b.days_until_expiry);
       setLeases(normalized);
