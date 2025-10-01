@@ -16,6 +16,16 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
   }
 });
 
+// Detect offline state in browsers to provide clearer errors for network failures
+const isBrowser = typeof window !== 'undefined' && typeof navigator !== 'undefined';
+function isOffline(): boolean {
+  try {
+    return isBrowser && 'onLine' in navigator && !navigator.onLine;
+  } catch (e) {
+    return false;
+  }
+}
+
 // Enhance functions.invoke with multi-fallback and detailed error reporting
 try {
   const originalInvoke = (supabase.functions as any).invoke.bind(supabase.functions);
