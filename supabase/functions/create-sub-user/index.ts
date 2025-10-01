@@ -36,22 +36,28 @@ const handler = async (req: Request): Promise<Response> => {
 
   try {
     // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in environment');
+      return new Response(JSON.stringify({ error: 'Server misconfiguration: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set', success: false }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get the authenticated user (landlord)
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      throw new Error('No authorization header');
+      return new Response(JSON.stringify({ error: 'No authorization header provided', success: false }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const token = authHeader.replace('Bearer ', '');
     const { data: { user: landlord }, error: authError } = await supabase.auth.getUser(token);
-    
+
     if (authError || !landlord) {
-      throw new Error('Unauthorized');
+      console.error('Auth getUser failed:', authError);
+      return new Response(JSON.stringify({ error: 'Unauthorized', details: authError?.message || null, success: false }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // Check if the user is a landlord
@@ -60,7 +66,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (roleCheckError || !hasLandlordRole) {
       console.error('Role check failed or user is not a landlord:', roleCheckError);
-      throw new Error('Only landlords can create sub-users');
+      return new Response(JSON.stringify({ error: 'Only landlords can create sub-users', details: roleCheckError?.message || null, success: false }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const requestData: CreateSubUserRequest = await req.json();
