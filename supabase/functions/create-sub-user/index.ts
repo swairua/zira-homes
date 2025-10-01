@@ -148,7 +148,7 @@ const handler = async (req: Request): Promise<Response> => {
           first_name,
           last_name,
           email,
-          phone: phone || ''
+          phone: phone || null
         });
 
       if (profileError) {
