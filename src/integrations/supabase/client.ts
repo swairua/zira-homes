@@ -110,6 +110,7 @@ try {
   (supabase as any).rpc = (fn: string, params?: any) => {
     const exec = async () => {
       try {
+        if (isOffline()) return { data: null, error: { message: 'Network offline — check your connection' } };
         const res = await origRpc(fn, params);
         if (res?.error && String(res.error?.message || '').toLowerCase().includes('failed to fetch')) {
           throw res.error;
@@ -230,6 +231,7 @@ try {
   (supabase as any).rpc = (fn: string, params?: any) => {
     const exec = async () => {
       try {
+        if (isOffline()) return { data: null, error: { message: 'Network offline — check your connection' } };
         const res = await origRpc(fn, params);
         if (res?.error && String(res.error?.message || '').toLowerCase().includes('failed to fetch')) {
           throw res.error;
