@@ -106,7 +106,7 @@ const handler = async (req: Request): Promise<Response> => {
           .update({
             first_name: first_name || existingUser.first_name,
             last_name: last_name || existingUser.last_name,
-            phone: phone || existingUser.phone
+            phone: (phone === '' ? null : phone) || existingUser.phone || null
           })
           .eq('id', userId);
 
