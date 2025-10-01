@@ -144,39 +144,11 @@ export const useSubUsers = () => {
       fetchSubUsers();
       return;
     } catch (error) {
-      console.error('Proxy/create-sub-user failed, attempting direct invoke as fallback:', error);
-
-      // Try Supabase Edge Function invoke as fallback (may fail in browser due to CORS or 4xx)
-      try {
-        const headers: Record<string,string> = { 'Content-Type': 'application/json' };
-        if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-        const { data: result, error: fnError } = await supabase.functions.invoke('create-sub-user', { body: JSON.stringify(data), headers });
-        if (fnError) {
-          console.error('Edge function error (invoke):', fnError);
-          throw new Error(fnError.message || 'Edge function invoke failed');
-        }
-        if (!result?.success) throw new Error(result?.error || 'Edge function returned non-success');
-
-        console.log('Sub-user created successfully via Edge Function invoke:', result);
-        if (result.temporary_password) {
-          toast.success(
-            `Sub-user created successfully! Share these credentials with them: Email: ${data.email}, Temporary password: ${result.temporary_password}`,
-            { duration: 10000 }
-          );
-        } else {
-          toast.success(
-            `Sub-user added successfully! They can log in using their existing credentials at ${data.email}`,
-            { duration: 6000 }
-          );
-        }
-        fetchSubUsers();
-        return;
-      } catch (finalErr) {
-        console.error('Both proxy and edge function attempts failed:', finalErr);
-        const message = finalErr instanceof Error ? finalErr.message : 'Failed to create sub-user';
-        toast.error(message);
-        throw finalErr;
-      }
+      console.error('Proxy/create-sub-user failed:', error);
+      // Surface proxy error to user with details
+      const message = error instanceof Error ? error.message : 'Failed to create sub-user via proxy';
+      toast.error(message);
+      throw error;
     }
   };
 
