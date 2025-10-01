@@ -48,6 +48,7 @@ try {
     } catch {}
 
     try {
+      if (isOffline()) return { data: null, error: { message: 'Network offline — check your connection' } } as any;
       const result = await originalInvoke(name, { ...(options || {}), headers: { ...(options?.headers || {}), ...extraHeaders } });
       if (result?.error) throw result.error;
       return result;
@@ -167,6 +168,7 @@ try {
     } catch {}
 
     try {
+      if (isOffline()) return { data: null, error: { message: 'Network offline — check your connection' } } as any;
       const result = await originalInvoke(name, { ...(options || {}), headers: { ...(options?.headers || {}), ...extraHeaders } });
       if (result?.error) throw result.error;
       return result;
