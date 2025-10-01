@@ -211,10 +211,12 @@
 
                   // 3) Create profile record
                   const profilesInsertUrl = supabaseUrl.replace(/\/$/, '') + '/rest/v1/profiles';
+                  const profilePayload = { id: userId, first_name, last_name, email, phone };
+                  console.log('[DEV SERVER] Creating profile with payload:', profilePayload);
                   const profileResp = await fetch(profilesInsertUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}`, 'Prefer': 'return=representation' },
-                    body: JSON.stringify({ id: userId, first_name, last_name, email, phone })
+                    body: JSON.stringify(profilePayload)
                   });
                   const profileText = await profileResp.text();
                   let profileData; try { profileData = JSON.parse(profileText); } catch { profileData = null; }
