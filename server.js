@@ -143,6 +143,103 @@
             if (!fnName) return sendJSON(res, 400, { error: 'Function name is required' });
             const body = await parseJSONBody(req) || {};
 
+            // Special-case handling for create-sub-user: implement server-side flow using service role
+            if (fnName === 'create-sub-user') {
+              try {
+                // Validate input
+                const email = (body && body.email) ? String(body.email) : null;
+                const first_name = body?.first_name || '';
+                const last_name = body?.last_name || '';
+                const phone = body?.phone || '';
+                const permissions = body?.permissions || {};
+                if (!email) return sendJSON(res, 400, { error: 'email is required' });
+
+                // Determine landlord (caller) from Authorization header if present
+                const callerAuth = req.headers['authorization'] || req.headers['Authorization'];
+                let landlordId = null;
+                if (callerAuth) {
+                  try {
+                    const userUrl = supabaseUrl.replace(/\/$/, '') + '/auth/v1/user';
+                    const userRes = await fetch(userUrl, { headers: { 'apikey': key, 'Authorization': String(callerAuth) } });
+                    const userText = await userRes.text();
+                    const userData = (() => { try { return JSON.parse(userText); } catch { return null; } })();
+                    landlordId = userData?.id || null;
+                  } catch (e) { console.warn('Failed to fetch caller user info:', e); }
+                }
+                if (!landlordId) return sendJSON(res, 401, { error: 'Unauthorized: landlord token required' });
+
+                // 1) Check for existing profile by email
+                const profilesUrl = supabaseUrl.replace(/\/$/, '') + `/rest/v1/profiles?select=id,email&email=eq.${encodeURIComponent(email)}`;
+                const profilesRes = await fetch(profilesUrl, { headers: { 'apikey': key, 'Authorization': `Bearer ${key}` } });
+                const profilesText = await profilesRes.text();
+                let profilesData; try { profilesData = JSON.parse(profilesText); } catch { profilesData = null; }
+
+                let userId = null;
+                let tempPassword = null;
+                if (Array.isArray(profilesData) && profilesData.length > 0 && profilesData[0]?.id) {
+                  userId = profilesData[0].id;
+                } else {
+                  // 2) Create auth user via Admin API
+                  const adminCreateUrl = supabaseUrl.replace(/\/$/, '') + '/auth/v1/admin/users';
+                  tempPassword = `TempPass${Math.floor(Math.random() * 10000)}!`;
+                  const createResp = await fetch(adminCreateUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}` },
+                    body: JSON.stringify({ email, password: tempPassword, email_confirm: true, user_metadata: { first_name, last_name, phone, created_by: landlordId, role: 'sub_user' } })
+                  });
+                  const createText = await createResp.text();
+                  let createData; try { createData = JSON.parse(createText); } catch { createData = null; }
+                  if (!createResp.ok) {
+                    return sendJSON(res, createResp.status, { error: 'Failed to create auth user', details: createData });
+                  }
+                  // createData should contain id
+                  userId = createData?.id || createData?.user?.id || null;
+                  if (!userId) return sendJSON(res, 500, { error: 'Auth user created but no id returned', details: createData });
+
+                  // 3) Create profile record
+                  const profilesInsertUrl = supabaseUrl.replace(/\/$/, '') + '/rest/v1/profiles';
+                  const profileResp = await fetch(profilesInsertUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}`, 'Prefer': 'return=representation' },
+                    body: JSON.stringify({ id: userId, first_name, last_name, email, phone })
+                  });
+                  const profileText = await profileResp.text();
+                  let profileData; try { profileData = JSON.parse(profileText); } catch { profileData = null; }
+                  if (!profileResp.ok) {
+                    // Cleanup created auth user
+                    await fetch(`${adminCreateUrl}/${encodeURIComponent(userId)}`, { method: 'DELETE', headers: { 'apikey': key, 'Authorization': `Bearer ${key}` } }).catch(() => {});
+                    return sendJSON(res, profileResp.status, { error: 'Failed to create profile', details: profileData });
+                  }
+                }
+
+                // 4) Insert sub_users record
+                const subUsersUrl = supabaseUrl.replace(/\/$/, '') + '/rest/v1/sub_users';
+                const insertPayload = {
+                  landlord_id: landlordId,
+                  user_id: userId,
+                  title: body.title || null,
+                  permissions: permissions,
+                  status: 'active'
+                };
+                const subResp = await fetch(subUsersUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}`, 'Prefer': 'return=representation' },
+                  body: JSON.stringify(insertPayload)
+                });
+                const subText = await subResp.text();
+                let subData; try { subData = JSON.parse(subText); } catch { subData = null; }
+                if (!subResp.ok) {
+                  return sendJSON(res, subResp.status, { error: 'Failed to create sub_user record', details: subData });
+                }
+
+                return sendJSON(res, 200, { success: true, message: 'Sub-user created', user_id: userId, temporary_password: tempPassword || null });
+
+              } catch (err) {
+                console.error('Error handling create-sub-user proxy:', err);
+                return sendJSON(res, 500, { error: 'Internal server error handling create-sub-user', details: String(err) });
+              }
+            }
+
             const fnUrl = supabaseUrl.replace(/\/$/, '') + `/functions/v1/${fnName}`;
             const headers = {
               'Content-Type': 'application/json',
