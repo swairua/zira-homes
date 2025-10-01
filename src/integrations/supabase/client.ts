@@ -32,7 +32,7 @@ try {
   (supabase.functions as any).invoke = async (name: string, options?: any) => {
     const body = options?.body ?? {};
 
-    // Prepare headers BEFORE first attempt so the function receives correct auth/force flags
+    // Prepare headers BEFORE attempts so the function receives correct auth/force flags
     const extraHeaders: Record<string, string> = { ...(options?.headers || {}) };
     let proxyFailedDetails: any = null;
     try {
@@ -42,10 +42,27 @@ try {
         extraHeaders['Authorization'] = `Bearer ${access}`;
       }
       if (body?.force || name === 'create-tenant-account' || name === 'create-user-with-role') {
-        // Always include force header for these flows to avoid anon-key-as-JWT issues
         extraHeaders['x-force-create'] = 'true';
       }
     } catch {}
+
+    // For create-sub-user, prefer server proxy first (ensures service-role operations)
+    if (name === 'create-sub-user') {
+      try {
+        if (isOffline()) return { data: null, error: { message: 'Network offline — check your connection' } } as any;
+        const res = await fetch(`/api/edge/${name}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...extraHeaders },
+          body: JSON.stringify(body)
+        });
+        const text = await res.text();
+        let data: any; try { data = JSON.parse(text); } catch { data = text; }
+        if (res.ok) return { data, error: null } as any;
+        proxyFailedDetails = { status: res.status, details: data };
+      } catch (e: any) {
+        proxyFailedDetails = e?.message || String(e);
+      }
+    }
 
     try {
       if (isOffline()) return { data: null, error: { message: 'Network offline — check your connection' } } as any;
@@ -55,7 +72,6 @@ try {
     } catch (err: any) {
       // Try server proxy fallback using service role or anon
       try {
-        const body = options?.body ?? {};
         const res = await fetch(`/api/edge/${name}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...extraHeaders },
@@ -66,13 +82,13 @@ try {
         if (res.ok) {
           return { data, error: null } as any;
         } else {
-          proxyFailedDetails = { status: res.status, details: data };
+          proxyFailedDetails = proxyFailedDetails || { status: res.status, details: data };
         }
       } catch (fallbackErr: any) {
-        proxyFailedDetails = fallbackErr?.message || String(fallbackErr);
+        proxyFailedDetails = proxyFailedDetails || (fallbackErr?.message || String(fallbackErr));
       }
 
-      // 2) Direct call to Supabase Edge Function with publishable key
+      // Direct call to Supabase Edge Function with publishable key
       try {
         const fnUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/${name}`;
         const res = await fetch(fnUrl, {
@@ -80,7 +96,6 @@ try {
           headers: {
             'Content-Type': 'application/json',
             'apikey': SUPABASE_PUBLISHABLE_KEY,
-            // Prefer user JWT if available; else use anon
             'Authorization': extraHeaders['Authorization'] || `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
             ...extraHeaders,
           },
@@ -153,7 +168,7 @@ try {
   (supabase.functions as any).invoke = async (name: string, options?: any) => {
     const body = options?.body ?? {};
 
-    // Prepare headers BEFORE first attempt so the function receives correct auth/force flags
+    // Prepare headers BEFORE attempts so the function receives correct auth/force flags
     const extraHeaders: Record<string, string> = { ...(options?.headers || {}) };
     let proxyFailedDetails: any = null;
     try {
@@ -163,10 +178,27 @@ try {
         extraHeaders['Authorization'] = `Bearer ${access}`;
       }
       if (body?.force || name === 'create-tenant-account' || name === 'create-user-with-role') {
-        // Always include force header for these flows to avoid anon-key-as-JWT issues
         extraHeaders['x-force-create'] = 'true';
       }
     } catch {}
+
+    // For create-sub-user, prefer server proxy first (ensures service-role operations)
+    if (name === 'create-sub-user') {
+      try {
+        if (isOffline()) return { data: null, error: { message: 'Network offline — check your connection' } } as any;
+        const res = await fetch(`/api/edge/${name}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...extraHeaders },
+          body: JSON.stringify(body)
+        });
+        const text = await res.text();
+        let data: any; try { data = JSON.parse(text); } catch { data = text; }
+        if (res.ok) return { data, error: null } as any;
+        proxyFailedDetails = { status: res.status, details: data };
+      } catch (e: any) {
+        proxyFailedDetails = e?.message || String(e);
+      }
+    }
 
     try {
       if (isOffline()) return { data: null, error: { message: 'Network offline — check your connection' } } as any;
@@ -176,7 +208,6 @@ try {
     } catch (err: any) {
       // Try server proxy fallback using service role or anon
       try {
-        const body = options?.body ?? {};
         const res = await fetch(`/api/edge/${name}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...extraHeaders },
@@ -187,13 +218,13 @@ try {
         if (res.ok) {
           return { data, error: null } as any;
         } else {
-          proxyFailedDetails = { status: res.status, details: data };
+          proxyFailedDetails = proxyFailedDetails || { status: res.status, details: data };
         }
       } catch (fallbackErr: any) {
-        proxyFailedDetails = fallbackErr?.message || String(fallbackErr);
+        proxyFailedDetails = proxyFailedDetails || (fallbackErr?.message || String(fallbackErr));
       }
 
-      // 2) Direct call to Supabase Edge Function with publishable key
+      // Direct call to Supabase Edge Function with publishable key
       try {
         const fnUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/${name}`;
         const res = await fetch(fnUrl, {
@@ -201,7 +232,6 @@ try {
           headers: {
             'Content-Type': 'application/json',
             'apikey': SUPABASE_PUBLISHABLE_KEY,
-            // Prefer user JWT if available; else use anon
             'Authorization': extraHeaders['Authorization'] || `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
             ...extraHeaders,
           },
