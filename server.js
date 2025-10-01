@@ -166,6 +166,18 @@
                     landlordId = userData?.id || null;
                   } catch (e) { console.warn('Failed to fetch caller user info:', e); }
                 }
+
+                // Dev fallback: allow supplying landlord_id in request body or x-landlord-id header
+                if (!landlordId) {
+                  if (body?.landlord_id) {
+                    landlordId = String(body.landlord_id);
+                    console.warn('Using landlord_id from request body as dev fallback:', landlordId);
+                  } else if (req.headers['x-landlord-id']) {
+                    landlordId = String(req.headers['x-landlord-id']);
+                    console.warn('Using x-landlord-id header as dev fallback:', landlordId);
+                  }
+                }
+
                 if (!landlordId) return sendJSON(res, 401, { error: 'Unauthorized: landlord token required' });
 
                 // 1) Check for existing profile by email
