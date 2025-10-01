@@ -25,6 +25,16 @@
       req.on('error', () => resolve(null));
     });
 
+    const safeFetch = async (url, opts) => {
+      try {
+        const res = await fetch(url, opts);
+        return res;
+      } catch (err) {
+        console.error('[DEV SERVER] safeFetch network error to', url, 'opts_headers=', opts && opts.headers ? Object.keys(opts.headers) : null, 'error=', err && err.message ? err.message : String(err));
+        throw err;
+      }
+    };
+
     const handleRpcProxy = async (rpcPath, req, res, mapBody = (b)=>b) => {
       try {
         // Load runtime for defaults
