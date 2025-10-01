@@ -143,6 +143,21 @@ export const useSubUsers = () => {
       fetchSubUsers();
     } catch (error) {
       console.error('Error creating sub-user:', error);
+      // Attempt explicit fallback via server proxy to gather more details
+      try {
+        const headers: Record<string,string> = { 'Content-Type': 'application/json' };
+        if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+        const res = await fetch('/api/edge/create-sub-user', { method: 'POST', headers, body: JSON.stringify(data) });
+        const text = await res.text();
+        let bodyResp: any = null;
+        try { bodyResp = JSON.parse(text); } catch { bodyResp = text; }
+        console.error('Fallback proxy response for create-sub-user:', res.status, bodyResp);
+        toast.error(`Edge function failed: ${res.status} ${res.statusText}`);
+      } catch (fallbackErr) {
+        console.error('Fallback proxy call failed:', fallbackErr);
+        toast.error('Edge function failed and proxy fallback unavailable');
+      }
+
       const message = error instanceof Error ? error.message : 'Failed to create sub-user';
       toast.error(message);
       throw error;
