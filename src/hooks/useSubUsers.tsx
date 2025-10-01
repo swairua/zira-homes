@@ -103,21 +103,50 @@ export const useSubUsers = () => {
   const createSubUser = async (data: CreateSubUserData) => {
     if (!user) return;
 
+    // 1) Try Supabase Edge Function (preferred)
     try {
-      // Use supabase.functions.invoke which already includes robust fallbacks
-      const { data: result, error } = await supabase.functions.invoke('create-sub-user', {
-        body: data,
-      });
+      const { data: result, error } = await supabase.functions.invoke('create-sub-user', { body: data });
+      if (error) throw error;
+      if (!result || !result.success) throw new Error((result as any)?.error || 'Failed to create sub-user');
 
-      if (error) {
-        console.error('create-sub-user invocation error:', error);
-        const message = typeof error === 'string' ? error : (error.message || 'Failed to create sub-user');
-        throw new Error(message);
+      if (result.temporary_password) {
+        toast.success(
+          `Sub-user created successfully! Share these credentials with them: Email: ${data.email}, Temporary password: ${result.temporary_password}`,
+          { duration: 10000 }
+        );
+      } else {
+        toast.success(
+          `Sub-user added successfully! They can log in using their existing credentials at ${data.email}`,
+          { duration: 6000 }
+        );
+      }
+      fetchSubUsers();
+      return;
+    } catch (fnErr: any) {
+      console.warn('Edge Function failed, attempting server proxy fallback:', fnErr?.message || fnErr);
+    }
+
+    // 2) Fallback: server proxy with service role
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      try {
+        const { data: s } = await supabase.auth.getSession();
+        const access = s?.session?.access_token;
+        if (access) headers['Authorization'] = `Bearer ${access}`;
+      } catch {}
+
+      const res = await fetch('/api/edge/create-sub-user', { method: 'POST', headers, body: JSON.stringify(data) });
+      const text = await res.text();
+      let payload: any; try { payload = JSON.parse(text); } catch { payload = text; }
+
+      if (!res.ok) {
+        const details = typeof payload === 'string' ? payload : (payload?.error || JSON.stringify(payload));
+        throw new Error(`Proxy error ${res.status}${details ? `: ${details}` : ''}`);
       }
 
+      const result = payload;
       if (!result || !result.success) {
-        console.warn('create-sub-user returned non-success payload:', result);
-        throw new Error((result as any)?.error || 'Failed to create sub-user');
+        throw new Error(result?.error || 'Failed to create sub-user via proxy');
       }
 
       if (result.temporary_password) {
@@ -131,14 +160,12 @@ export const useSubUsers = () => {
           { duration: 6000 }
         );
       }
-
       fetchSubUsers();
-      return;
-    } catch (error) {
-      console.error('create-sub-user failed:', error);
-      const message = error instanceof Error ? error.message : 'Failed to create sub-user';
+    } catch (proxyErr) {
+      console.error('create-sub-user failed (both paths):', proxyErr);
+      const message = proxyErr instanceof Error ? proxyErr.message : 'Failed to create sub-user';
       toast.error(message);
-      throw error;
+      throw proxyErr;
     }
   };
 
