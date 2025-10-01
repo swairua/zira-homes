@@ -111,7 +111,7 @@ export const useSubUsers = () => {
 
       // Call server proxy first (uses service role) to avoid browser edge function issues
       const res = await fetch('/api/edge/create-sub-user', { method: 'POST', headers, body: bodyStr });
-      const text = await (res.clone()).text();
+      const text = await res.text();
       let payload: any = null;
       try { payload = JSON.parse(text); } catch { payload = text; }
 
