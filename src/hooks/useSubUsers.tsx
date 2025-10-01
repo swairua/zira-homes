@@ -104,41 +104,22 @@ export const useSubUsers = () => {
     if (!user) return;
 
     try {
-      console.log('Creating sub-user via server proxy (preferred):', data);
-      const bodyStr = JSON.stringify(data);
-      const headers: Record<string,string> = { 'Content-Type': 'application/json' };
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+      // Use supabase.functions.invoke which already includes robust fallbacks
+      const { data: result, error } = await supabase.functions.invoke('create-sub-user', {
+        body: data,
+      });
 
-      // Call server proxy first (uses service role) to avoid browser edge function issues
-      const res = await fetch('/api/edge/create-sub-user', { method: 'POST', headers, body: bodyStr });
-      let payload: any = null;
-      try {
-        if (res.bodyUsed) {
-          console.warn('Response body already used');
-          payload = { error: 'Response body already used by prior handler' };
-        } else {
-          const text = await res.text();
-          try { payload = JSON.parse(text); } catch { payload = text; }
-        }
-      } catch (readErr) {
-        console.error('Error reading response body:', readErr);
-        payload = { error: String(readErr) };
+      if (error) {
+        console.error('create-sub-user invocation error:', error);
+        const message = typeof error === 'string' ? error : (error.message || 'Failed to create sub-user');
+        throw new Error(message);
       }
 
-      if (!res.ok) {
-        console.error('Server proxy returned error:', res.status, payload);
-        // If proxy returned a structured error, throw it so higher logic handles fallback
-        throw new Error(payload?.error || `Proxy error ${res.status}`);
-      }
-
-      // Successful proxy response
-      const result = payload;
       if (!result || !result.success) {
-        console.warn('Proxy returned non-success payload:', result);
-        throw new Error(result?.error || 'Failed to create sub-user');
+        console.warn('create-sub-user returned non-success payload:', result);
+        throw new Error((result as any)?.error || 'Failed to create sub-user');
       }
 
-      console.log('Sub-user created successfully via proxy:', result);
       if (result.temporary_password) {
         toast.success(
           `Sub-user created successfully! Share these credentials with them: Email: ${data.email}, Temporary password: ${result.temporary_password}`,
@@ -154,9 +135,8 @@ export const useSubUsers = () => {
       fetchSubUsers();
       return;
     } catch (error) {
-      console.error('Proxy/create-sub-user failed:', error);
-      // Surface proxy error to user with details
-      const message = error instanceof Error ? error.message : 'Failed to create sub-user via proxy';
+      console.error('create-sub-user failed:', error);
+      const message = error instanceof Error ? error.message : 'Failed to create sub-user';
       toast.error(message);
       throw error;
     }
