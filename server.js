@@ -146,6 +146,7 @@
             // Special-case handling for create-sub-user: implement server-side flow using service role
             if (fnName === 'create-sub-user') {
               try {
+                console.log('[DEV SERVER] create-sub-user body:', body);
                 // Validate input
                 const email = (body && body.email) ? String(body.email) : null;
                 const first_name = body?.first_name || '';
