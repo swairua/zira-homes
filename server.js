@@ -151,7 +151,7 @@
                 const email = (body && body.email) ? String(body.email) : null;
                 const first_name = body?.first_name || '';
                 const last_name = body?.last_name || '';
-                const phone = body?.phone || '';
+                const phone = body?.phone ?? null;
                 const permissions = body?.permissions || {};
                 if (!email) return sendJSON(res, 400, { error: 'email is required' });
 
