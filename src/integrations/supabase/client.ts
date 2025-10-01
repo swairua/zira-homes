@@ -8,51 +8,132 @@ export const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ey
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-// Custom fetch to proxy Supabase requests through the local dev server when running in dev.
-const proxiedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-  const urlStr = typeof input === 'string' ? input : String(input);
-  try {
-    if (urlStr.startsWith(SUPABASE_URL)) {
-      const method = init?.method || 'GET';
-      let bodyRaw: any = null;
-      if (init?.body) {
-        try {
-          if (typeof init.body === 'string') bodyRaw = init.body;
-          else if ((init.body as any).getReader) bodyRaw = await new Response(init.body as any).text();
-          else bodyRaw = JSON.stringify(init.body);
-        } catch (e) {
-          bodyRaw = null;
-        }
-      }
-
-      const proxyRes = await window.fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: urlStr, method, body: bodyRaw })
-      });
-
-      const text = await proxyRes.text();
-      const headers = new Headers(proxyRes.headers);
-      return new Response(text, { status: proxyRes.status, headers });
-    }
-  } catch (err) {
-    // Fall back to native fetch on any proxy errors
-    console.warn('proxiedFetch failed, falling back to window.fetch:', err);
-  }
-
-  return window.fetch(input, init);
-};
-
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
-  },
-  global: {
-    fetch: proxiedFetch as any
   }
 });
+
+// Enhance functions.invoke with multi-fallback and detailed error reporting
+try {
+  const originalInvoke = (supabase.functions as any).invoke.bind(supabase.functions);
+  (supabase.functions as any).invoke = async (name: string, options?: any) => {
+    const body = options?.body ?? {};
+
+    // Prepare headers BEFORE first attempt so the function receives correct auth/force flags
+    const extraHeaders: Record<string, string> = { ...(options?.headers || {}) };
+    let proxyFailedDetails: any = null;
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const access = sessionData?.session?.access_token;
+      if (access) {
+        extraHeaders['Authorization'] = `Bearer ${access}`;
+      }
+      if (body?.force || name === 'create-tenant-account' || name === 'create-user-with-role') {
+        // Always include force header for these flows to avoid anon-key-as-JWT issues
+        extraHeaders['x-force-create'] = 'true';
+      }
+    } catch {}
+
+    try {
+      const result = await originalInvoke(name, { ...(options || {}), headers: { ...(options?.headers || {}), ...extraHeaders } });
+      if (result?.error) throw result.error;
+      return result;
+    } catch (err: any) {
+      // Try server proxy fallback using service role or anon
+      try {
+        const body = options?.body ?? {};
+        const res = await fetch(`/api/edge/${name}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...extraHeaders },
+          body: JSON.stringify(body)
+        });
+        const text = await res.text();
+        let data: any; try { data = JSON.parse(text); } catch { data = text; }
+        if (res.ok) {
+          return { data, error: null } as any;
+        } else {
+          proxyFailedDetails = { status: res.status, details: data };
+        }
+      } catch (fallbackErr: any) {
+        proxyFailedDetails = fallbackErr?.message || String(fallbackErr);
+      }
+
+      // 2) Direct call to Supabase Edge Function with publishable key
+      try {
+        const fnUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/${name}`;
+        const res = await fetch(fnUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_PUBLISHABLE_KEY,
+            // Prefer user JWT if available; else use anon
+            'Authorization': extraHeaders['Authorization'] || `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+            ...extraHeaders,
+          },
+          body: JSON.stringify(body)
+        });
+        const text = await res.text();
+        let data: any; try { data = JSON.parse(text); } catch { data = text; }
+        if (res.ok) {
+          return { data, error: null } as any;
+        } else {
+          return { data: null as any, error: { message: 'Edge function fetch failed', status: res.status, details: data, proxyFailedDetails } };
+        }
+      } catch (directErr: any) {
+        const parts: string[] = [];
+        const e = directErr || err;
+        if (e?.message) parts.push(e.message);
+        if (e?.details) parts.push(e.details);
+        if (e?.hint) parts.push(`hint: ${e.hint}`);
+        if (proxyFailedDetails) parts.push(`proxy: ${typeof proxyFailedDetails === 'string' ? proxyFailedDetails : JSON.stringify(proxyFailedDetails)}`);
+        return { data: null as any, error: { message: parts.join(' | ') || String(e) } };
+      }
+    }
+  };
+
+  // RPC fallback via proxy to bypass browser CORS and keep builder-like API
+  const origRpc = (supabase as any).rpc.bind(supabase);
+  (supabase as any).rpc = (fn: string, params?: any) => {
+    const exec = async () => {
+      try {
+        const res = await origRpc(fn, params);
+        if (res?.error && String(res.error?.message || '').toLowerCase().includes('failed to fetch')) {
+          throw res.error;
+        }
+        return res;
+      } catch (err: any) {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const access = sessionData?.session?.access_token;
+          const r = await fetch(`/api/rpc/${encodeURIComponent(fn)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(access ? { Authorization: `Bearer ${access}` } : {}) },
+            body: JSON.stringify(params || {})
+          });
+          const text = await r.text();
+          let data: any; try { data = JSON.parse(text); } catch { data = text; }
+          if (r.ok) return { data, error: null };
+          return { data: null, error: data?.error || data };
+        } catch (e) {
+          return { data: null, error: err || e };
+        }
+      }
+    };
+
+    const wrapper: any = {
+      maybeSingle: () => exec(),
+      single: () => exec(),
+      then: (onFulfilled: any, onRejected: any) => exec().then(onFulfilled, onRejected),
+      catch: (onRejected: any) => exec().catch(onRejected),
+      finally: (onFinally: any) => exec().finally(onFinally),
+    };
+
+    return wrapper;
+  };
+} catch {}
 
 // Enhance functions.invoke with multi-fallback and detailed error reporting
 try {
