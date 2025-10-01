@@ -111,9 +111,19 @@ export const useSubUsers = () => {
 
       // Call server proxy first (uses service role) to avoid browser edge function issues
       const res = await fetch('/api/edge/create-sub-user', { method: 'POST', headers, body: bodyStr });
-      const text = await res.text();
       let payload: any = null;
-      try { payload = JSON.parse(text); } catch { payload = text; }
+      try {
+        if (res.bodyUsed) {
+          console.warn('Response body already used');
+          payload = { error: 'Response body already used by prior handler' };
+        } else {
+          const text = await res.text();
+          try { payload = JSON.parse(text); } catch { payload = text; }
+        }
+      } catch (readErr) {
+        console.error('Error reading response body:', readErr);
+        payload = { error: String(readErr) };
+      }
 
       if (!res.ok) {
         console.error('Server proxy returned error:', res.status, payload);
