@@ -337,6 +337,45 @@
           }
         }
 
+        // Generic proxy for Supabase REST/RPC requests from the browser during dev
+        if (url === '/api/proxy' && req.method === 'POST') {
+          try {
+            const body = await parseJSONBody(req) || {};
+            const targetUrl = body.url || '';
+            const method = body.method || 'POST';
+            const payload = body.body ? JSON.stringify(body.body) : body.rawBody || null;
+            const incomingAuth = req.headers['authorization'] || req.headers['Authorization'];
+
+            // Allow only requests to the configured Supabase URL
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || (runtime && runtime.url);
+            if (!supabaseUrl) return sendJSON(res, 500, { error: 'Supabase URL not configured' });
+            if (!targetUrl || !targetUrl.startsWith(supabaseUrl.replace(/\/$/, ''))) return sendJSON(res, 400, { error: 'Invalid target URL' });
+
+            // Use service role for apikey; pass through user auth if available
+            const key = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY || (runtime && runtime.serviceRole) || (runtime && runtime.anonKey);
+            if (!key) return sendJSON(res, 500, { error: 'Supabase key not configured' });
+
+            const headers = {
+              'Content-Type': 'application/json',
+              'apikey': key,
+              'Authorization': incomingAuth ? String(incomingAuth) : `Bearer ${key}`
+            };
+
+            const response = await fetch(targetUrl, {
+              method,
+              headers,
+              body: payload
+            });
+
+            const text = await response.text();
+            let data; try { data = JSON.parse(text); } catch { data = text; }
+            return sendJSON(res, response.status, data);
+          } catch (err) {
+            console.error('Error in /api/proxy:', err);
+            return sendJSON(res, 500, { error: 'Internal proxy error', details: String(err) });
+          }
+        }
+
         // Fallback for other /api routes
         if (url.startsWith('/api')) {
           console.log('[DEV SERVER] API route not found:', url);
