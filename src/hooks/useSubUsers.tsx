@@ -104,30 +104,31 @@ export const useSubUsers = () => {
     if (!user) return;
 
     try {
-      console.log('Creating sub-user with edge function:', data);
-      
-      const headers: Record<string,string> = {
-        'Content-Type': 'application/json'
-      };
+      console.log('Creating sub-user via server proxy (preferred):', data);
+      const bodyStr = JSON.stringify(data);
+      const headers: Record<string,string> = { 'Content-Type': 'application/json' };
       if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
 
-      const { data: result, error } = await supabase.functions.invoke('create-sub-user', {
-        body: JSON.stringify(data),
-        headers
-      });
+      // Call server proxy first (uses service role) to avoid browser edge function issues
+      const res = await fetch('/api/edge/create-sub-user', { method: 'POST', headers, body: bodyStr });
+      const text = await res.text();
+      let payload: any = null;
+      try { payload = JSON.parse(text); } catch { payload = text; }
 
-      if (error) {
-        console.error('Edge function error:', error);
-        throw new Error(error.message || 'Failed to create sub-user');
+      if (!res.ok) {
+        console.error('Server proxy returned error:', res.status, payload);
+        // If proxy returned a structured error, throw it so higher logic handles fallback
+        throw new Error(payload?.error || `Proxy error ${res.status}`);
       }
 
-      if (!result?.success) {
+      // Successful proxy response
+      const result = payload;
+      if (!result || !result.success) {
+        console.warn('Proxy returned non-success payload:', result);
         throw new Error(result?.error || 'Failed to create sub-user');
       }
 
-      console.log('Sub-user created successfully:', result);
-      
-      // Show appropriate message based on whether temporary password was provided
+      console.log('Sub-user created successfully via proxy:', result);
       if (result.temporary_password) {
         toast.success(
           `Sub-user created successfully! Share these credentials with them: Email: ${data.email}, Temporary password: ${result.temporary_password}`,
@@ -139,28 +140,43 @@ export const useSubUsers = () => {
           { duration: 6000 }
         );
       }
-      
+
       fetchSubUsers();
+      return;
     } catch (error) {
-      console.error('Error creating sub-user:', error);
-      // Attempt explicit fallback via server proxy to gather more details
+      console.error('Proxy/create-sub-user failed, attempting direct invoke as fallback:', error);
+
+      // Try Supabase Edge Function invoke as fallback (may fail in browser due to CORS or 4xx)
       try {
         const headers: Record<string,string> = { 'Content-Type': 'application/json' };
         if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-        const res = await fetch('/api/edge/create-sub-user', { method: 'POST', headers, body: JSON.stringify(data) });
-        const text = await res.text();
-        let bodyResp: any = null;
-        try { bodyResp = JSON.parse(text); } catch { bodyResp = text; }
-        console.error('Fallback proxy response for create-sub-user:', res.status, bodyResp);
-        toast.error(`Edge function failed: ${res.status} ${res.statusText}`);
-      } catch (fallbackErr) {
-        console.error('Fallback proxy call failed:', fallbackErr);
-        toast.error('Edge function failed and proxy fallback unavailable');
-      }
+        const { data: result, error: fnError } = await supabase.functions.invoke('create-sub-user', { body: JSON.stringify(data), headers });
+        if (fnError) {
+          console.error('Edge function error (invoke):', fnError);
+          throw new Error(fnError.message || 'Edge function invoke failed');
+        }
+        if (!result?.success) throw new Error(result?.error || 'Edge function returned non-success');
 
-      const message = error instanceof Error ? error.message : 'Failed to create sub-user';
-      toast.error(message);
-      throw error;
+        console.log('Sub-user created successfully via Edge Function invoke:', result);
+        if (result.temporary_password) {
+          toast.success(
+            `Sub-user created successfully! Share these credentials with them: Email: ${data.email}, Temporary password: ${result.temporary_password}`,
+            { duration: 10000 }
+          );
+        } else {
+          toast.success(
+            `Sub-user added successfully! They can log in using their existing credentials at ${data.email}`,
+            { duration: 6000 }
+          );
+        }
+        fetchSubUsers();
+        return;
+      } catch (finalErr) {
+        console.error('Both proxy and edge function attempts failed:', finalErr);
+        const message = finalErr instanceof Error ? finalErr.message : 'Failed to create sub-user';
+        toast.error(message);
+        throw finalErr;
+      }
     }
   };
 
