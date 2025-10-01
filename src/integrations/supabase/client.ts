@@ -8,11 +8,49 @@ export const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ey
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// Custom fetch to proxy Supabase requests through the local dev server when running in dev.
+const proxiedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const urlStr = typeof input === 'string' ? input : String(input);
+  try {
+    if (urlStr.startsWith(SUPABASE_URL)) {
+      const method = init?.method || 'GET';
+      let bodyRaw: any = null;
+      if (init?.body) {
+        try {
+          if (typeof init.body === 'string') bodyRaw = init.body;
+          else if ((init.body as any).getReader) bodyRaw = await new Response(init.body as any).text();
+          else bodyRaw = JSON.stringify(init.body);
+        } catch (e) {
+          bodyRaw = null;
+        }
+      }
+
+      const proxyRes = await window.fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: urlStr, method, body: bodyRaw })
+      });
+
+      const text = await proxyRes.text();
+      const headers = new Headers(proxyRes.headers);
+      return new Response(text, { status: proxyRes.status, headers });
+    }
+  } catch (err) {
+    // Fall back to native fetch on any proxy errors
+    console.warn('proxiedFetch failed, falling back to window.fetch:', err);
+  }
+
+  return window.fetch(input, init);
+};
+
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
+  },
+  global: {
+    fetch: proxiedFetch as any
   }
 });
 
