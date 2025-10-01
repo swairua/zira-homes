@@ -221,9 +221,8 @@
                   const profileText = await profileResp.text();
                   let profileData; try { profileData = JSON.parse(profileText); } catch { profileData = null; }
                   if (!profileResp.ok) {
-                    // Cleanup created auth user
-                    await fetch(`${adminCreateUrl}/${encodeURIComponent(userId)}`, { method: 'DELETE', headers: { 'apikey': key, 'Authorization': `Bearer ${key}` } }).catch(() => {});
-                    return sendJSON(res, profileResp.status, { error: 'Failed to create profile', details: profileData });
+                    console.warn('[DEV SERVER] Profile creation failed, continuing with created auth user. Details:', profileData);
+                    // Do not abort; continue to create sub_user record even if profile creation failed in dev
                   }
                 }
 
