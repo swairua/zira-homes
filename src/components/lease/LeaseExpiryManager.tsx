@@ -35,6 +35,10 @@ interface LeaseData {
   tenant_email?: string;
   days_until_expiry: number;
   status: string;
+  // Optional metadata used for filtering visibility
+  tenant_user_id?: string;
+  property_owner_id?: string;
+  property_manager_id?: string;
 }
 
 interface LeaseExpiryManagerProps {
@@ -53,6 +57,7 @@ export function LeaseExpiryManager({
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedTimeframe, setSelectedTimeframe] = useState(timeframe);
   const [selectedLeases, setSelectedLeases] = useState<string[]>([]);
+  const { user } = useAuth();
 
   const timeframes = [
     { days: 30, label: "30 days", urgent: true },
@@ -242,7 +247,6 @@ export function LeaseExpiryManager({
 
       const today = new Date();
       const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const { user } = useAuth();
 
       let normalized = leasesData
         .map((l: any) => {
