@@ -106,8 +106,14 @@ export const useSubUsers = () => {
     try {
       console.log('Creating sub-user with edge function:', data);
       
+      const headers: Record<string,string> = {
+        'Content-Type': 'application/json'
+      };
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+
       const { data: result, error } = await supabase.functions.invoke('create-sub-user', {
-        body: data
+        body: JSON.stringify(data),
+        headers
       });
 
       if (error) {
