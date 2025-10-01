@@ -42,7 +42,7 @@ export interface CreateSubUserData {
 }
 
 export const useSubUsers = () => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [subUsers, setSubUsers] = useState<SubUser[]>([]);
   const [loading, setLoading] = useState(false);
 
