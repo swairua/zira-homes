@@ -105,110 +105,72 @@ const Leases = () => {
         return;
       }
 
-      // If an expiry window is requested, use the same RPC as the dashboard for parity
+      // If an expiry window is requested, fetch only leases visible to the current user within the range
       if (expiringWithinDays != null) {
         const days = Number(expiringWithinDays);
         const today = new Date();
         const startDate = today.toISOString().slice(0, 10);
         const endDate = new Date(today.getTime() + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-        const rpcArgs = days === 90 ? { p_start_date: null, p_end_date: null } : { p_start_date: startDate, p_end_date: endDate };
 
-        try {
-          const { data, error } = await (supabase as any)
-            .rpc('get_lease_expiry_report', rpcArgs)
-            .maybeSingle();
-          if (error) throw error;
+        const { data, error } = await (supabase as any)
+          .from('leases')
+          .select('id, lease_end_date, lease_start_date, monthly_rent, security_deposit, status, unit_id, tenant_id, tenants:tenants!leases_tenant_id_fkey(user_id, first_name,last_name), units:units!leases_unit_id_fkey(unit_number, properties:properties!units_property_id_fkey(name, owner_id, manager_id))')
+          .gte('lease_end_date', startDate)
+          .lte('lease_end_date', endDate)
+          .order('created_at', { ascending: false });
+        if (error) throw error;
 
-          const raw = Array.isArray(data) ? data[0] : data;
-          let rows = Array.isArray(raw?.table) ? raw.table : [];
+        const visible = (data || []).filter((l: any) =>
+          l?.tenants?.user_id === user.id ||
+          l?.units?.properties?.owner_id === user.id ||
+          l?.units?.properties?.manager_id === user.id
+        );
 
-          // Fallback if RLS returns empty: client-side queries
-          if (!Array.isArray(rows) || rows.length === 0) {
-            const { data: d2, error: e2 } = await (supabase as any)
-              .from('leases')
-              .select('id, lease_end_date, lease_start_date, monthly_rent, security_deposit, status, unit_id, tenant_id, tenants:tenants!leases_tenant_id_fkey(first_name,last_name), units:units!leases_unit_id_fkey(unit_number, properties:properties!units_property_id_fkey(name))')
-              .gte('lease_end_date', startDate)
-              .lte('lease_end_date', endDate);
-            if (!e2) {
-              rows = (d2 || []).map((l: any) => ({
-                property_name: l.units?.properties?.name,
-                unit_number: l.units?.unit_number,
-                tenant_name: `${l.tenants?.first_name || ''} ${l.tenants?.last_name || ''}`.trim(),
-                lease_start_date: l.lease_start_date,
-                lease_end_date: l.lease_end_date,
-                monthly_rent: l.monthly_rent,
-                security_deposit: l.security_deposit,
-                status: l.status
-              }));
-            }
-          }
+        const mapped = visible.map((l: any) => ({
+          id: l.id,
+          tenant_id: l.tenant_id,
+          unit_id: l.unit_id,
+          lease_start_date: l.lease_start_date,
+          lease_end_date: l.lease_end_date,
+          monthly_rent: Number(l.monthly_rent || 0),
+          security_deposit: Number(l.security_deposit || 0),
+          status: l.status || 'active',
+          tenants: { first_name: (l.tenants?.first_name || '').toString(), last_name: (l.tenants?.last_name || '').toString() },
+          units: { unit_number: l.units?.unit_number || '', properties: { name: l.units?.properties?.name || '' } }
+        }));
 
-          const mapped = rows.map((l: any) => {
-            const tn = (l.tenant_name || '').trim();
-            const parts = tn.split(' ');
-            const last = parts.length > 1 ? parts.pop() : '';
-            const first = parts.join(' ');
-            return {
-              id: l.id || `${l.property_name || ''}-${l.unit_number || ''}-${l.lease_end_date || ''}`,
-              tenant_id: l.tenant_id || '',
-              unit_id: l.unit_id || '',
-              lease_start_date: l.lease_start_date || null,
-              lease_end_date: l.lease_end_date || null,
-              monthly_rent: Number(l.monthly_rent || 0),
-              security_deposit: Number(l.security_deposit || 0),
-              status: l.status || 'active',
-              tenants: { first_name: first || tn, last_name: last || '' },
-              units: { unit_number: l.unit_number || '', properties: { name: l.property_name || '' } }
-            } as any;
-          });
-          setLeases(mapped);
-          console.log("✅ Loaded leases via RPC/fallback:", mapped.length);
-          return;
-        } catch (rpcErr) {
-          console.warn('RPC leases load failed, using client-side fallback:', formatError(rpcErr));
-          try {
-            const filters = { gte: startDate, lte: endDate } as const;
-
-            const { data, error } = await (supabase as any)
-              .from('leases')
-              .select('id, lease_end_date, lease_start_date, monthly_rent, security_deposit, status, unit_id, tenant_id, tenants:tenants!leases_tenant_id_fkey(first_name,last_name), units:units!leases_unit_id_fkey(unit_number, properties:properties!units_property_id_fkey(name))')
-              .gte('lease_end_date', filters.gte)
-              .lte('lease_end_date', filters.lte);
-            if (error) throw error;
-            const mapped = (data || []).map((l: any) => ({
-              id: l.id,
-              tenant_id: l.tenant_id,
-              unit_id: l.unit_id,
-              lease_start_date: l.lease_start_date,
-              lease_end_date: l.lease_end_date,
-              monthly_rent: Number(l.monthly_rent || 0),
-              security_deposit: Number(l.security_deposit || 0),
-              status: l.status || 'active',
-              tenants: { first_name: (l.tenants?.first_name || '').toString(), last_name: (l.tenants?.last_name || '').toString() },
-              units: { unit_number: l.units?.unit_number || '', properties: { name: l.units?.properties?.name || '' } }
-            }));
-            setLeases(mapped);
-            console.log('✅ Loaded leases via client-side fallback (all users):', mapped.length);
-            return;
-          } catch (srvErr) {
-            throw srvErr;
-          }
-        }
+        setLeases(mapped);
+        console.log("✅ Loaded expiring leases for current user:", mapped.length);
+        return;
       }
 
-      // Otherwise: original fetch for full list (visible to any authenticated user)
+      // Otherwise: fetch full list but restrict to leases related to the current user (tenant or property owner/manager)
       const { data, error } = await (supabase as any)
         .from("leases")
-        .select(`*, tenants:tenants!leases_tenant_id_fkey(id, first_name, last_name), units:units!leases_unit_id_fkey(id, unit_number, property_id, properties:properties!units_property_id_fkey(id, name))`)
+        .select(`id, tenant_id, unit_id, lease_start_date, lease_end_date, monthly_rent, security_deposit, status, created_at, tenants:tenants!leases_tenant_id_fkey(user_id, first_name, last_name), units:units!leases_unit_id_fkey(unit_number, properties:properties!units_property_id_fkey(name, owner_id, manager_id))`)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      const normalized = (data || []).map((l: any) => ({
-        ...l,
+
+      const visible = (data || []).filter((l: any) =>
+        l?.tenants?.user_id === user.id ||
+        l?.units?.properties?.owner_id === user.id ||
+        l?.units?.properties?.manager_id === user.id
+      );
+
+      const normalized = visible.map((l: any) => ({
+        id: l.id,
+        tenant_id: l.tenant_id,
+        unit_id: l.unit_id,
+        lease_start_date: l.lease_start_date,
+        lease_end_date: l.lease_end_date,
+        monthly_rent: Number(l.monthly_rent || 0),
+        security_deposit: Number(l.security_deposit || 0),
+        status: l.status || 'active',
         tenants: { first_name: l?.tenants?.first_name || '', last_name: l?.tenants?.last_name || '' },
         units: { unit_number: l?.units?.unit_number || '', properties: { name: l?.units?.properties?.name || '' } }
       }));
       setLeases(normalized);
-      console.log("✅ Loaded leases for all users:", normalized.length);
+      console.log("✅ Loaded leases for current user:", normalized.length);
       return;
     } catch (error: any) {
       const msg = formatError(error);
