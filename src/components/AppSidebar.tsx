@@ -152,23 +152,22 @@ export function AppSidebar() {
 
                   // Filter navigation for sub-users based on permissions
                   if (isSubUser && subUserPermissions) {
-                      const permissionMap: Record<string, keyof typeof subUserPermissions> = {
-                        "Properties": "manage_properties",
-                        "Tenants": "manage_tenants",
-                        "Leases": "manage_leases",
-                        "Maintenance": "manage_maintenance",
-                        "Payments": "manage_payments",
-                        "Reports": "view_reports",
-                        "Expenses": "manage_expenses",
-                        "Email Templates": "send_messages",
-                        "Message Templates": "send_messages",
-                      };
-                      
-                      const requiredPermission = permissionMap[item.title];
-                      // Explicitly check for true (treat undefined/missing as false)
-                      if (requiredPermission && subUserPermissions[requiredPermission] !== true) {
-                        return false;
-                      }
+                    const permissionMap: Record<string, keyof typeof subUserPermissions> = {
+                      "Properties": "manage_properties",
+                      "Tenants": "manage_tenants",
+                      "Leases": "manage_leases",
+                      "Maintenance": "manage_maintenance",
+                      "Payments": "manage_payments",
+                      "Reports": "view_reports",
+                      "Expenses": "manage_expenses",
+                      "Email Templates": "send_messages",
+                      "Message Templates": "send_messages",
+                    };
+                    
+                    const requiredPermission = permissionMap[item.title];
+                    // Explicitly check for true (treat undefined/missing as false)
+                    if (requiredPermission && subUserPermissions[requiredPermission] !== true) {
+                      return false;
                     }
                   }
                   return true;
