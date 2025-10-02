@@ -17,6 +17,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Calendar, AlertTriangle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { SubUserBanner } from "@/components/SubUserBanner";
 
 export default function Index() {
   useRouteTitle();
@@ -80,6 +81,9 @@ export default function Index() {
   return (
     <DashboardLayout>
       <div className="bg-tint-gray p-3 sm:p-4 lg:p-6 space-y-6 sm:space-y-8">
+        {/* Sub-User Banner */}
+        <SubUserBanner />
+        
         {/* Health Check Banner */}
         <HealthCheckBanner />
         

@@ -25,7 +25,7 @@ import { useTrialManagement } from "@/hooks/useTrialManagement";
 export function AppSidebar() {
   const { signOut } = useAuth();
   const { open } = useSidebar();
-  const { isAdmin, isLandlord, isManager, isAgent, loading } = useRole();
+  const { isAdmin, isLandlord, isManager, isAgent, isSubUser, subUserPermissions, loading } = useRole();
   const { trialStatus } = useTrialManagement();
 
   // Feature access hooks
@@ -130,12 +130,33 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
 
-        {(isLandlord || isManager || isAgent) && !isAdmin && landlordNav.map((group) => (
+        {(isLandlord || isManager || isAgent || isSubUser) && !isAdmin && landlordNav.map((group) => (
           <SidebarGroup key={group.title}>
             <SidebarGroupLabel className="text-orange-500 h-8 py-1">{group.title}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu className="gap-0.5">
-                {group.items.map((item) => {
+                {group.items.filter((item) => {
+                  // Filter navigation for sub-users based on permissions
+                  if (isSubUser && subUserPermissions) {
+                    const permissionMap: Record<string, keyof typeof subUserPermissions> = {
+                      "Properties": "manage_properties",
+                      "Tenants": "manage_tenants",
+                      "Leases": "manage_leases",
+                      "Maintenance": "manage_maintenance",
+                      "Payments": "manage_payments",
+                      "Reports": "view_reports",
+                      "Expenses": "manage_expenses",
+                      "Email Templates": "send_messages",
+                      "Message Templates": "send_messages",
+                    };
+                    
+                    const requiredPermission = permissionMap[item.title];
+                    if (requiredPermission && !subUserPermissions[requiredPermission]) {
+                      return false;
+                    }
+                  }
+                  return true;
+                }).map((item) => {
                   // Check feature access for specific items
                   const isReportsItem = item.title === "Reports";
                   const isSubUsersItem = item.title === "Sub Users";

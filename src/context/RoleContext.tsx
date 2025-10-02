@@ -14,6 +14,8 @@ interface RoleContextType {
   isTenant: boolean;
   isManager: boolean;
   isAgent: boolean;
+  isSubUser: boolean;
+  subUserPermissions: Record<string, boolean> | null;
   loading: boolean;
   switchRole: (role: string) => void;
 }
@@ -38,6 +40,7 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [assignedRoles, setAssignedRoles] = useState<string[]>([]);
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const [subUserPermissions, setSubUserPermissions] = useState<Record<string, boolean> | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Optimistic role hydration from localStorage and metadata
@@ -86,44 +89,58 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
 
           // Check user roles FIRST (higher priority roles)
           if (userRolesResult && userRolesResult.length > 0) {
-            // Filter out SubUser roles - they should never be primary
             const allRoles = userRolesResult.map(r => r.role.toLowerCase());
-            const roles = allRoles.filter(r => r !== 'subuser' && r !== 'landlord_subuser');
             
-            setAssignedRoles(roles);
+            setAssignedRoles(allRoles);
             
-            // SECURITY FIX: Only trust selectedRole if it exists in server-verified roles
-            const selectedRole = localStorage.getItem('selectedRole');
-            if (selectedRole && roles.includes(selectedRole.toLowerCase())) {
-              setSelectedRole(selectedRole.toLowerCase());
-            } else {
-              // Set primary role (highest priority first) - NEVER select SubUser
-              if (roles.includes("admin")) {
-                setSelectedRole("admin");
-                return "admin";
-              }
-              if (roles.includes("landlord")) {
-                setSelectedRole("landlord");
-                return "landlord";
-              }
-              if (roles.includes("manager")) {
-                setSelectedRole("manager");
-                return "manager";
-              }
-              if (roles.includes("agent")) {
-                setSelectedRole("agent");
-                return "agent";
-              }
-              if (selectedRole && !roles.includes(selectedRole.toLowerCase())) {
-                localStorage.removeItem('selectedRole'); // Clean up invalid/unauthorized selection
+            // Check if user is a SubUser and fetch permissions
+            if (allRoles.includes("subuser") || allRoles.includes("landlord_subuser")) {
+              const { data: subUserData } = await supabase
+                .from("sub_users")
+                .select("permissions, landlord_id")
+                .eq("user_id", user.id)
+                .eq("status", "active")
+                .maybeSingle();
+              
+              if (subUserData?.permissions) {
+                setSubUserPermissions(subUserData.permissions as Record<string, boolean>);
+                setSelectedRole("subuser");
+                return "subuser";
               }
             }
             
-            // Return the primary role for userRole state - NEVER return SubUser
-            if (roles.includes("admin")) return "admin";
-            if (roles.includes("landlord")) return "landlord";
-            if (roles.includes("manager")) return "manager";
-            if (roles.includes("agent")) return "agent";
+            // SECURITY FIX: Only trust selectedRole if it exists in server-verified roles
+            const selectedRole = localStorage.getItem('selectedRole');
+            if (selectedRole && allRoles.includes(selectedRole.toLowerCase())) {
+              setSelectedRole(selectedRole.toLowerCase());
+            } else {
+              // Set primary role (highest priority first)
+              if (allRoles.includes("admin")) {
+                setSelectedRole("admin");
+                return "admin";
+              }
+              if (allRoles.includes("landlord")) {
+                setSelectedRole("landlord");
+                return "landlord";
+              }
+              if (allRoles.includes("manager")) {
+                setSelectedRole("manager");
+                return "manager";
+              }
+              if (allRoles.includes("agent")) {
+                setSelectedRole("agent");
+                return "agent";
+              }
+              if (selectedRole && !allRoles.includes(selectedRole.toLowerCase())) {
+                localStorage.removeItem('selectedRole');
+              }
+            }
+            
+            // Return the primary role for userRole state
+            if (allRoles.includes("admin")) return "admin";
+            if (allRoles.includes("landlord")) return "landlord";
+            if (allRoles.includes("manager")) return "manager";
+            if (allRoles.includes("agent")) return "agent";
           }
 
           // Only query tenants if no roles found (avoids recursion for Admin/Landlord)
@@ -181,6 +198,7 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
   const isTenant = effectiveRole === "tenant";
   const isManager = effectiveRole === "manager";
   const isAgent = effectiveRole === "agent";
+  const isSubUser = effectiveRole === "subuser";
 
   const switchRole = (role: string) => {
     if (assignedRoles.includes(role)) {
@@ -199,6 +217,8 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
     isTenant,
     isManager,
     isAgent,
+    isSubUser,
+    subUserPermissions,
     loading,
     switchRole,
   };
