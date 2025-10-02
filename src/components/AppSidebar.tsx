@@ -154,10 +154,12 @@ export function AppSidebar() {
                   if (isSubUser && subUserPermissions) {
                     const permissionMap: Record<string, keyof typeof subUserPermissions> = {
                       "Properties": "manage_properties",
+                      "Units": "manage_properties",
                       "Tenants": "manage_tenants",
                       "Leases": "manage_leases",
                       "Maintenance": "manage_maintenance",
                       "Payments": "manage_payments",
+                      "Invoices": "manage_payments",
                       "Reports": "view_reports",
                       "Expenses": "manage_expenses",
                       "Email Templates": "send_messages",

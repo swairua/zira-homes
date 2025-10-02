@@ -127,13 +127,21 @@ export const AppRoutes = () => {
                     <Properties />
                   </PermissionGuard>
                 } />
-                <Route path="/units" element={<Units />} />
+                <Route path="/units" element={
+                  <PermissionGuard permission="manage_properties">
+                    <Units />
+                  </PermissionGuard>
+                } />
                 <Route path="/tenants" element={
                   <PermissionGuard permission="manage_tenants">
                     <Tenants />
                   </PermissionGuard>
                 } />
-                <Route path="/invoices" element={<Invoices />} />
+                <Route path="/invoices" element={
+                  <PermissionGuard permission="manage_payments">
+                    <Invoices />
+                  </PermissionGuard>
+                } />
                 <Route path="/payments" element={
                   <PermissionGuard permission="manage_payments">
                     <Payments />
@@ -201,7 +209,11 @@ export const AppRoutes = () => {
                 <Route path="/message-templates" element={<Navigate to="/billing/message-templates" replace />} />
                 
                 {/* Unified Billing Route */}
-                <Route path="/billing" element={<Billing />} />
+                <Route path="/billing" element={
+                  <SubUserBlockedRoute>
+                    <Billing />
+                  </SubUserBlockedRoute>
+                } />
                 <Route path="/billing/email-templates" element={
                   <PermissionGuard permission="send_messages">
                     <EmailTemplates />
@@ -220,7 +232,11 @@ export const AppRoutes = () => {
                     <BillingPanel />
                   </SubUserBlockedRoute>
                 } />
-                <Route path="/billing/settings" element={<BillingSettings />} />
+                <Route path="/billing/settings" element={
+                  <SubUserBlockedRoute>
+                    <BillingSettings />
+                  </SubUserBlockedRoute>
+                } />
                 <Route path="/billing/landlord-billing" element={<LandlordBillingPage />} />
                 
                 {/* Settings routes */}
