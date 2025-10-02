@@ -22,7 +22,6 @@ interface CreateSubUserRequest {
 }
 
 const handler = async (req: Request): Promise<Response> => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -35,89 +34,122 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE');
 
     if (!supabaseUrl || !supabaseServiceKey) {
       console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in environment');
-      return new Response(JSON.stringify({ error: 'Server misconfiguration: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set', success: false }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(
+        JSON.stringify({ error: 'Server misconfiguration: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set', success: false }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get the authenticated user (landlord)
+    // Caller authentication (landlord)
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'No authorization header provided', success: false }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(
+        JSON.stringify({ error: 'No authorization header provided', success: false }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user: landlord }, error: authError } = await supabase.auth.getUser(token);
+    const { data: userData, error: authError } = await supabase.auth.getUser(token);
+    const landlord = userData?.user || null;
 
     if (authError || !landlord) {
       console.error('Auth getUser failed:', authError);
-      return new Response(JSON.stringify({ error: 'Unauthorized', details: authError?.message || null, success: false }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized', details: authError?.message || null, success: false }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    // Check if the user is a landlord
-    const { data: hasLandlordRole, error: roleCheckError } = await supabase
-      .rpc('has_role', { _user_id: landlord.id, _role: 'Landlord' });
+    // Verify landlord role using user_roles table to avoid RPC dependency
+    const { data: roleRow, error: roleErr } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', landlord.id)
+      .eq('role', 'Landlord')
+      .limit(1)
+      .maybeSingle();
 
-    if (roleCheckError || !hasLandlordRole) {
-      console.error('Role check failed or user is not a landlord:', roleCheckError);
-      return new Response(JSON.stringify({ error: 'Only landlords can create sub-users', details: roleCheckError?.message || null, success: false }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    if (roleErr || !roleRow) {
+      console.error('Role verification failed or user is not a landlord:', roleErr);
+      return new Response(
+        JSON.stringify({ error: 'Only landlords can create sub-users', details: roleErr?.message || null, success: false }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const requestData: CreateSubUserRequest = await req.json();
     const { email, first_name, last_name, phone, title, permissions } = requestData;
 
-    console.log('Creating sub-user:', { email, first_name, last_name });
+    if (!email || !first_name || !last_name) {
+      return new Response(
+        JSON.stringify({ error: 'email, first_name and last_name are required', success: false }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
-    // Check if user already exists by email
-    const { data: existingUserData } = await supabase.rpc('find_user_by_email', { _email: email });
-    const existingUser = existingUserData?.[0];
+    console.log('Creating sub-user:', { email, first_name, last_name, landlord_id: landlord.id });
+
+    // Find existing user via profiles table by unique email
+    const { data: existingProfile, error: profileLookupErr } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, phone')
+      .eq('email', email)
+      .limit(1)
+      .maybeSingle();
+
+    if (profileLookupErr) {
+      console.warn('Profile lookup error (continuing):', profileLookupErr);
+    }
 
     let userId: string;
     let isNewUser = false;
     let tempPassword: string | null = null;
 
-    if (existingUser?.user_id) {
-      console.log('User already exists with email:', email);
-      userId = existingUser.user_id;
+    if (existingProfile?.id) {
+      userId = existingProfile.id;
 
-      // Check if this user is already an active sub-user for this landlord
-      const { data: existingSubUser } = await supabase
+      // Prevent duplicate active sub-user link
+      const { data: existingSubUser, error: existingSubUserErr } = await supabase
         .from('sub_users')
         .select('id, status')
         .eq('landlord_id', landlord.id)
         .eq('user_id', userId)
         .eq('status', 'active')
-        .single();
+        .maybeSingle();
 
-      if (existingSubUser) {
-        throw new Error('This email is already associated with an active sub-user for your organization');
+      if (!existingSubUserErr && existingSubUser) {
+        return new Response(
+          JSON.stringify({ error: 'This email is already associated with an active sub-user for your organization', success: false }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
-      // Update existing profile with new information if provided
-      if (existingUser.has_profile) {
+      // Optionally update profile fields if provided
+      const shouldUpdate = Boolean(first_name || last_name || phone);
+      if (shouldUpdate) {
         const { error: profileUpdateError } = await supabase
           .from('profiles')
           .update({
-            first_name: first_name || existingUser.first_name,
-            last_name: last_name || existingUser.last_name,
-            phone: (phone === '' ? null : phone) || existingUser.phone || null
+            first_name: first_name || existingProfile.first_name || null,
+            last_name: last_name || existingProfile.last_name || null,
+            phone: phone === '' ? null : (phone || existingProfile.phone || null),
           })
           .eq('id', userId);
-
         if (profileUpdateError) {
           console.warn('Profile update failed (non-critical):', profileUpdateError);
         }
       }
     } else {
-      // Create new auth user
+      // Create new auth user via Admin API
       tempPassword = `TempPass${Math.floor(Math.random() * 10000)}!`;
-      
       const { data: newUser, error: createUserError } = await supabase.auth.admin.createUser({
         email,
         password: tempPassword,
@@ -127,102 +159,82 @@ const handler = async (req: Request): Promise<Response> => {
           last_name,
           phone,
           created_by: landlord.id,
-          role: 'sub_user'
-        }
+          role: 'sub_user',
+        },
       });
 
-      if (createUserError || !newUser.user) {
+      if (createUserError || !newUser?.user) {
         console.error('Error creating auth user:', createUserError);
-        throw new Error(`Failed to create user account: ${createUserError?.message}`);
+        return new Response(
+          JSON.stringify({ error: `Failed to create user account: ${createUserError?.message || 'unknown error'}`, success: false }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
       userId = newUser.user.id;
       isNewUser = true;
-      console.log('New auth user created:', userId);
 
-      // Create profile record for new user
+      // Create profile record
       const { error: profileError } = await supabase
         .from('profiles')
-        .insert({
-          id: userId,
-          first_name,
-          last_name,
-          email,
-          phone: phone || null
-        });
+        .insert({ id: userId, first_name, last_name, email, phone: phone || null });
 
       if (profileError) {
         console.error('Error creating profile:', profileError);
         await supabase.auth.admin.deleteUser(userId);
-        throw new Error(`Failed to create user profile: ${profileError.message}`);
+        return new Response(
+          JSON.stringify({ error: `Failed to create user profile: ${profileError.message}`, success: false }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
-
-      console.log('Profile created for user:', userId);
     }
 
-    // Create the sub-user record
+    // Insert sub_users record
     const { error: subUserError } = await supabase
       .from('sub_users')
       .insert({
         landlord_id: landlord.id,
         user_id: userId,
-        title,
+        title: title || null,
         permissions,
-        status: 'active'
+        status: 'active',
       });
 
     if (subUserError) {
       console.error('Error creating sub-user:', subUserError);
       if (isNewUser) {
-        // Clean up user and profile if sub-user creation fails for new user
         await supabase.auth.admin.deleteUser(userId);
         await supabase.from('profiles').delete().eq('id', userId);
       }
-      throw new Error(`Failed to create sub-user record: ${subUserError.message}`);
+      return new Response(
+        JSON.stringify({ error: `Failed to create sub-user record: ${subUserError.message}`, success: false }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    console.log('Sub-user record created');
-    
-    const responseMessage = isNewUser 
+    const responseMessage = isNewUser
       ? 'Sub-user created successfully with new account'
       : 'Sub-user created successfully with existing account';
-    
+
     return new Response(
       JSON.stringify({
         success: true,
         message: responseMessage,
         user_id: userId,
         temporary_password: tempPassword,
-        instructions: tempPassword 
+        instructions: tempPassword
           ? 'The user should change their password on first login'
-          : 'The user can log in with their existing credentials'
+          : 'The user can log in with their existing credentials',
       }),
-      { 
-        status: 200, 
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        } 
-      }
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-
   } catch (error) {
     console.error('Error in create-sub-user function:', error);
     const message = error instanceof Error ? error.message : String(error);
-    const status = (error && (error as any).status) || 500;
+    const status = (error as any)?.status || 500;
     return new Response(
-      JSON.stringify({
-        error: message,
-        success: false,
-        details: (error as any)?.details || null
-      }),
-      {
-        status: typeof status === 'number' ? status : 500,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        }
-      }
+      JSON.stringify({ error: message, success: false, details: (error as any)?.details || null }),
+      { status: typeof status === 'number' ? status : 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 };
