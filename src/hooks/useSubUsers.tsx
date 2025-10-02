@@ -105,18 +105,52 @@ export const useSubUsers = () => {
 
     try {
       // Prefer calling Supabase Edge Function directly to leverage server-side service role
-      const { data: result, error } = await (supabase.functions as any).invoke('create-sub-user', {
-        body: { ...data },
-      });
+      let invokeResult: any = null;
+      let invokeError: any = null;
 
-      if (error || !result?.success) {
-        const detail = (result && (result.error || result.details)) || error?.message || 'Unknown error';
-        throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+      try {
+        const resp = await (supabase.functions as any).invoke('create-sub-user', { body: { ...data } });
+        invokeResult = resp?.data ?? resp;
+        invokeError = resp?.error ?? null;
+      } catch (fnErr: any) {
+        // Capture thrown error details from supabase-js
+        let details = fnErr?.message || 'Edge function invocation failed';
+        try {
+          if (fnErr?.response && typeof fnErr.response.text === 'function') {
+            const txt = await fnErr.response.text();
+            try {
+              const parsed = JSON.parse(txt);
+              details = parsed.error || parsed.message || parsed.details || JSON.stringify(parsed);
+            } catch {
+              details = txt;
+            }
+          }
+        } catch {}
+        const composed = JSON.stringify({ message: fnErr?.message || null, status: fnErr?.status || null, details });
+        throw new Error(composed);
       }
 
-      if (result.temporary_password) {
+      if (invokeError || !invokeResult?.success) {
+        // Compose the most verbose error details available
+        const parts: string[] = [];
+        if (invokeError) {
+          if (typeof invokeError === 'string') parts.push(invokeError);
+          if (invokeError?.message) parts.push(invokeError.message);
+          if (invokeError?.status) parts.push(`status=${invokeError.status}`);
+          if (invokeError?.details) parts.push(typeof invokeError.details === 'string' ? invokeError.details : JSON.stringify(invokeError.details));
+          if (invokeError?.proxyFailedDetails) parts.push(`proxy=${typeof invokeError.proxyFailedDetails === 'string' ? invokeError.proxyFailedDetails : JSON.stringify(invokeError.proxyFailedDetails)}`);
+        }
+        if (invokeResult && (invokeResult.error || invokeResult.details)) {
+          const rErr = invokeResult.error || invokeResult.details;
+          parts.push(typeof rErr === 'string' ? rErr : JSON.stringify(rErr));
+        }
+        const detail = parts.filter(Boolean).join(' | ') || 'Unknown error creating sub-user';
+        throw new Error(detail);
+      }
+
+      if (invokeResult.temporary_password) {
         toast.success(
-          `Sub-user created successfully! Share these credentials: ${data.email} / ${result.temporary_password}`,
+          `Sub-user created successfully! Share these credentials: ${data.email} / ${invokeResult.temporary_password}`,
           { duration: 10000 }
         );
       } else {
@@ -127,7 +161,7 @@ export const useSubUsers = () => {
       return;
     } catch (primaryError: any) {
       console.error('create-sub-user failed:', primaryError);
-      const msg = primaryError?.message || 'Failed to create sub-user';
+      const msg = (primaryError?.message && String(primaryError.message)) || 'Failed to create sub-user';
       toast.error(msg);
       throw primaryError;
     }
