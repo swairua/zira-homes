@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Plus, UserPlus, Settings, UserX, Shield, Users } from "lucide-react";
 import { TablePaginator } from "@/components/ui/table-paginator";
 import { useForm } from "react-hook-form";
@@ -123,134 +124,136 @@ const SubUserManagement = () => {
           <DialogHeader>
             <DialogTitle className="text-primary">Create New Sub-User</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit(onCreateSubUser)} className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="first_name" className="text-primary">First Name *</Label>
-                <Input
-                  id="first_name"
-                  className="border-border bg-card"
-                  {...register("first_name", { required: "First name is required" })}
-                  placeholder="John"
-                />
-                {errors.first_name && <p className="text-xs text-destructive">{errors.first_name.message}</p>}
+          <ScrollArea className="max-h-[60vh] pr-4">
+            <form onSubmit={handleSubmit(onCreateSubUser)} className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="first_name" className="text-primary">First Name *</Label>
+                  <Input
+                    id="first_name"
+                    className="border-border bg-card"
+                    {...register("first_name", { required: "First name is required" })}
+                    placeholder="John"
+                  />
+                  {errors.first_name && <p className="text-xs text-destructive">{errors.first_name.message}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="last_name" className="text-primary">Last Name *</Label>
+                  <Input
+                    id="last_name"
+                    className="border-border bg-card"
+                    {...register("last_name", { required: "Last name is required" })}
+                    placeholder="Doe"
+                  />
+                  {errors.last_name && <p className="text-xs text-destructive">{errors.last_name.message}</p>}
+                </div>
               </div>
+              
               <div className="space-y-2">
-                <Label htmlFor="last_name" className="text-primary">Last Name *</Label>
+                <Label htmlFor="email" className="text-primary">Email *</Label>
                 <Input
-                  id="last_name"
+                  id="email"
+                  type="email"
                   className="border-border bg-card"
-                  {...register("last_name", { required: "Last name is required" })}
-                  placeholder="Doe"
+                  {...register("email", { required: "Email is required" })}
+                  placeholder="john.doe@example.com"
                 />
-                {errors.last_name && <p className="text-xs text-destructive">{errors.last_name.message}</p>}
+                {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+                <p className="text-xs text-muted-foreground">
+                  If this email exists, we'll reset their password and link them to your organization. You'll receive new credentials to share with them.
+                </p>
               </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-primary">Email *</Label>
-              <Input
-                id="email"
-                type="email"
-                className="border-border bg-card"
-                {...register("email", { required: "Email is required" })}
-                placeholder="john.doe@example.com"
-              />
-              {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
-              <p className="text-xs text-muted-foreground">
-                If this email exists, we'll reset their password and link them to your organization. You'll receive new credentials to share with them.
-              </p>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="phone" className="text-primary">Phone</Label>
-                <Input
-                  id="phone"
-                  className="border-border bg-card"
-                  {...register("phone")}
-                  placeholder="+254 700 000 000"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="text-primary">Phone</Label>
+                  <Input
+                    id="phone"
+                    className="border-border bg-card"
+                    {...register("phone")}
+                    placeholder="+254 700 000 000"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="title" className="text-primary">Title</Label>
+                  <Input
+                    id="title"
+                    className="border-border bg-card"
+                    {...register("title")}
+                    placeholder="Manager, Agent, Partner"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="title" className="text-primary">Title</Label>
-                <Input
-                  id="title"
-                  className="border-border bg-card"
-                  {...register("title")}
-                  placeholder="Manager, Agent, Partner"
-                />
-              </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-primary">Password (Optional)</Label>
-              <Input
-                id="password"
-                type="password"
-                className="border-border bg-card"
-                {...register("password", {
-                  minLength: { value: 8, message: "Password must be at least 8 characters" }
-                })}
-                placeholder="Leave empty to auto-generate"
-              />
-              {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
-              <p className="text-xs text-muted-foreground">
-                Leave empty to auto-generate a secure password. Min 8 characters if provided.
-              </p>
-            </div>
-
-            {watch("password") && (
               <div className="space-y-2">
-                <Label htmlFor="confirm_password" className="text-primary">Confirm Password</Label>
+                <Label htmlFor="password" className="text-primary">Password (Optional)</Label>
                 <Input
-                  id="confirm_password"
+                  id="password"
                   type="password"
                   className="border-border bg-card"
-                  {...register("confirm_password", {
-                    validate: (value) => value === watch("password") || "Passwords do not match"
+                  {...register("password", {
+                    minLength: { value: 8, message: "Password must be at least 8 characters" }
                   })}
-                  placeholder="Re-enter password"
+                  placeholder="Leave empty to auto-generate"
                 />
-                {errors.confirm_password && <p className="text-xs text-destructive">{errors.confirm_password.message}</p>}
+                {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+                <p className="text-xs text-muted-foreground">
+                  Leave empty to auto-generate a secure password. Min 8 characters if provided.
+                </p>
               </div>
-            )}
 
-            <div className="space-y-4">
-              <Label className="text-primary font-semibold">Permissions</Label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {Object.entries(permissions).map(([key, value]) => (
-                  <div key={key} className="flex items-center space-x-2">
-                    <Switch
-                      id={key}
-                      checked={value}
-                      onCheckedChange={(checked) => handlePermissionChange(key as keyof CreateSubUserFormData['permissions'], checked)}
-                    />
-                    <Label htmlFor={key} className="text-sm capitalize">
-                      {key.replace('_', ' ')}
-                    </Label>
-                  </div>
-                ))}
+              {watch("password") && (
+                <div className="space-y-2">
+                  <Label htmlFor="confirm_password" className="text-primary">Confirm Password</Label>
+                  <Input
+                    id="confirm_password"
+                    type="password"
+                    className="border-border bg-card"
+                    {...register("confirm_password", {
+                      validate: (value) => value === watch("password") || "Passwords do not match"
+                    })}
+                    placeholder="Re-enter password"
+                  />
+                  {errors.confirm_password && <p className="text-xs text-destructive">{errors.confirm_password.message}</p>}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <Label className="text-primary font-semibold">Permissions</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {Object.entries(permissions).map(([key, value]) => (
+                    <div key={key} className="flex items-center space-x-2">
+                      <Switch
+                        id={key}
+                        checked={value}
+                        onCheckedChange={(checked) => handlePermissionChange(key as keyof CreateSubUserFormData['permissions'], checked)}
+                      />
+                      <Label htmlFor={key} className="text-sm capitalize">
+                        {key.replace('_', ' ')}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={() => setCreateDialogOpen(false)}
-                className="w-full sm:w-auto border-primary text-primary hover:bg-primary hover:text-primary-foreground"
-              >
-                Cancel
-              </Button>
-              <Button 
-                type="submit" 
-                className="w-full sm:w-auto bg-accent hover:bg-accent/90"
-              >
-                Create Sub-User
-              </Button>
-            </div>
-          </form>
+              <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setCreateDialogOpen(false)}
+                  className="w-full sm:w-auto border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  className="w-full sm:w-auto bg-accent hover:bg-accent/90"
+                >
+                  Create Sub-User
+                </Button>
+              </div>
+            </form>
+          </ScrollArea>
         </DialogContent>
       </Dialog>
 
