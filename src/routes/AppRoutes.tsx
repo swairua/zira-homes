@@ -153,6 +153,9 @@ export const AppRoutes = () => {
                 <Route path="/billing/payment-settings" element={<Navigate to="/payment-settings" replace />} />
                 <Route path="/landlord/payment-settings" element={<Navigate to="/payment-settings" replace />} />
                 
+                {/* Legacy Sub-Users Route (redirect) */}
+                <Route path="/landlord/sub-users" element={<Navigate to="/sub-users" replace />} />
+                
                 {/* Legacy Template Routes (redirects) */}
                 <Route path="/email-templates" element={<Navigate to="/billing/email-templates" replace />} />
                 <Route path="/message-templates" element={<Navigate to="/billing/message-templates" replace />} />
