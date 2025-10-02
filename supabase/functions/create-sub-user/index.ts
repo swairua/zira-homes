@@ -215,6 +215,21 @@ const handler = async (req: Request): Promise<Response> => {
     // Assign SubUser role in user_roles table
     const { error: roleError } = await supabase
       .from('user_roles')
+      .upsert({
+        user_id: userId,
+        role: 'SubUser'
+      }, {
+        onConflict: 'user_id,role'
+      });
+
+    if (roleError) {
+      console.warn('Failed to assign SubUser role (non-critical):', roleError);
+      // Don't fail the entire operation if role assignment fails
+    }
+
+    // Assign SubUser role in user_roles table
+    const { error: roleError } = await supabase
+      .from('user_roles')
       .insert({
         user_id: userId,
         role: 'SubUser'
