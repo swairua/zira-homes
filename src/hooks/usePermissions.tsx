@@ -28,47 +28,8 @@ export const usePermissions = () => {
     }
 
     try {
-      // If user is a sub-user
+      // If user is a sub-user, use their assigned permissions
       if (isSubUser && subUserPermissions) {
-        // Check if their landlord is on trial
-        const { data: subUserData } = await supabase
-          .from('sub_users')
-          .select('landlord_id')
-          .eq('user_id', user.id)
-          .eq('status', 'active')
-          .maybeSingle();
-
-        if (subUserData?.landlord_id) {
-          const { data: landlordSubscription } = await supabase
-            .from('landlord_subscriptions')
-            .select('status, trial_end_date')
-            .eq('landlord_id', subUserData.landlord_id)
-            .eq('status', 'trial')
-            .maybeSingle();
-
-          if (landlordSubscription) {
-            const trialEndDate = new Date(landlordSubscription.trial_end_date);
-            const today = new Date();
-            
-            if (trialEndDate > today) {
-              // GRANT FULL ACCESS DURING LANDLORD'S TRIAL
-              setPermissions({
-                manage_properties: true,
-                manage_tenants: true,
-                manage_leases: true,
-                manage_maintenance: true,
-                manage_payments: true,
-                view_reports: true,
-                manage_expenses: true,
-                send_messages: true,
-              });
-              setLoading(false);
-              return;
-            }
-          }
-        }
-        
-        // Fall back to assigned permissions after trial
         setPermissions(subUserPermissions as any as SubUserPermissions);
         setLoading(false);
         return;
