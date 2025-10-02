@@ -138,26 +138,11 @@ export const useSubUsers = () => {
 
       fetchSubUsers();
       return;
-    } catch (primaryError) {
-      console.warn('Proxy create-sub-user failed, falling back to Supabase invoke:', primaryError);
-      try {
-        const { data: result, error } = await supabase.functions.invoke('create-sub-user', {
-          body: data,
-          headers: (session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined),
-        });
-        if (error || !result?.success) {
-          const msg = error?.message || (result as any)?.error || 'Failed to create sub-user';
-          throw new Error(msg);
-        }
-        toast.success('Sub-user created successfully');
-        fetchSubUsers();
-        return;
-      } catch (error) {
-        console.error('create-sub-user failed:', error);
-        const message = error instanceof Error ? error.message : 'Failed to create sub-user';
-        toast.error(message);
-        throw error;
-      }
+    } catch (primaryError: any) {
+      console.error('create-sub-user (proxy) failed:', primaryError);
+      const msg = primaryError?.message || 'Failed to create sub-user';
+      toast.error(msg);
+      throw primaryError;
     }
   };
 
