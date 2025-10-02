@@ -6,6 +6,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { PlanAccessProvider } from "@/context/PlanAccessContext";
 import { LandlordOnlyRoute } from "@/components/LandlordOnlyRoute";
 import { AdminOnlyRoute } from "@/components/AdminOnlyRoute";
+import { SubUserBlockedRoute } from "@/components/SubUserBlockedRoute";
 import NotFound from "@/pages/NotFound";
 
 // Import existing pages
@@ -133,11 +134,17 @@ export const AppRoutes = () => {
                 <Route path="/notifications" element={<Notifications />} />
                 <Route path="/leases" element={<Leases />} />
                 <Route path="/sub-users" element={
-                  <LandlordOnlyRoute>
-                    <SubUsers />
-                  </LandlordOnlyRoute>
+                  <SubUserBlockedRoute>
+                    <LandlordOnlyRoute>
+                      <SubUsers />
+                    </LandlordOnlyRoute>
+                  </SubUserBlockedRoute>
                 } />
-                <Route path="/upgrade" element={<Upgrade />} />
+                <Route path="/upgrade" element={
+                  <SubUserBlockedRoute>
+                    <Upgrade />
+                  </SubUserBlockedRoute>
+                } />
                 <Route path="/upgrade-success" element={<UpgradeSuccess />} />
                 <Route path="/knowledge-base" element={<KnowledgeBase />} />
                 <Route path="/feature-demo" element={
@@ -147,7 +154,11 @@ export const AppRoutes = () => {
                 } />
                 
                 {/* Payment Settings Route (primary) */}
-                <Route path="/payment-settings" element={<PaymentSettings />} />
+                <Route path="/payment-settings" element={
+                  <SubUserBlockedRoute>
+                    <PaymentSettings />
+                  </SubUserBlockedRoute>
+                } />
                 
                 {/* Legacy Payment Settings Routes (redirects) */}
                 <Route path="/billing/payment-settings" element={<Navigate to="/payment-settings" replace />} />
@@ -167,7 +178,11 @@ export const AppRoutes = () => {
                 
                 {/* Legacy routes for backward compatibility */}
                 <Route path="/billing/details" element={<Navigate to="/billing" replace />} />
-                <Route path="/billing/panel" element={<BillingPanel />} />
+                <Route path="/billing/panel" element={
+                  <SubUserBlockedRoute>
+                    <BillingPanel />
+                  </SubUserBlockedRoute>
+                } />
                 <Route path="/billing/settings" element={<BillingSettings />} />
                 <Route path="/billing/landlord-billing" element={<LandlordBillingPage />} />
                 
