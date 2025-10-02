@@ -7,6 +7,7 @@ import { PlanAccessProvider } from "@/context/PlanAccessContext";
 import { LandlordOnlyRoute } from "@/components/LandlordOnlyRoute";
 import { AdminOnlyRoute } from "@/components/AdminOnlyRoute";
 import { SubUserBlockedRoute } from "@/components/SubUserBlockedRoute";
+import { PermissionGuard } from "@/components/PermissionGuard";
 import NotFound from "@/pages/NotFound";
 
 // Import existing pages
@@ -121,18 +122,46 @@ export const AppRoutes = () => {
                 <Route path="/" element={<Index />} />
                 {/* Redirect from /agent/dashboard to main dashboard */}
                 <Route path="/agent/dashboard" element={<Navigate to="/" replace />} />
-                <Route path="/properties" element={<Properties />} />
+                <Route path="/properties" element={
+                  <PermissionGuard permission="manage_properties">
+                    <Properties />
+                  </PermissionGuard>
+                } />
                 <Route path="/units" element={<Units />} />
-                <Route path="/tenants" element={<Tenants />} />
+                <Route path="/tenants" element={
+                  <PermissionGuard permission="manage_tenants">
+                    <Tenants />
+                  </PermissionGuard>
+                } />
                 <Route path="/invoices" element={<Invoices />} />
-                <Route path="/payments" element={<Payments />} />
-                <Route path="/reports" element={<Reports />} />
-                <Route path="/expenses" element={<Expenses />} />
-                <Route path="/maintenance" element={<MaintenanceRequestsLandlord />} />
+                <Route path="/payments" element={
+                  <PermissionGuard permission="manage_payments">
+                    <Payments />
+                  </PermissionGuard>
+                } />
+                <Route path="/reports" element={
+                  <PermissionGuard permission="view_reports">
+                    <Reports />
+                  </PermissionGuard>
+                } />
+                <Route path="/expenses" element={
+                  <PermissionGuard permission="manage_expenses">
+                    <Expenses />
+                  </PermissionGuard>
+                } />
+                <Route path="/maintenance" element={
+                  <PermissionGuard permission="manage_maintenance">
+                    <MaintenanceRequestsLandlord />
+                  </PermissionGuard>
+                } />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/support" element={<Support />} />
                 <Route path="/notifications" element={<Notifications />} />
-                <Route path="/leases" element={<Leases />} />
+                <Route path="/leases" element={
+                  <PermissionGuard permission="manage_leases">
+                    <Leases />
+                  </PermissionGuard>
+                } />
                 <Route path="/sub-users" element={
                   <SubUserBlockedRoute>
                     <LandlordOnlyRoute>
@@ -173,8 +202,16 @@ export const AppRoutes = () => {
                 
                 {/* Unified Billing Route */}
                 <Route path="/billing" element={<Billing />} />
-                <Route path="/billing/email-templates" element={<EmailTemplates />} />
-                <Route path="/billing/message-templates" element={<MessageTemplates />} />
+                <Route path="/billing/email-templates" element={
+                  <PermissionGuard permission="send_messages">
+                    <EmailTemplates />
+                  </PermissionGuard>
+                } />
+                <Route path="/billing/message-templates" element={
+                  <PermissionGuard permission="send_messages">
+                    <MessageTemplates />
+                  </PermissionGuard>
+                } />
                 
                 {/* Legacy routes for backward compatibility */}
                 <Route path="/billing/details" element={<Navigate to="/billing" replace />} />
