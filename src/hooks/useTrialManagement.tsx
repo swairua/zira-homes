@@ -96,102 +96,69 @@ export function useTrialManagement() {
       console.log('💳 useTrialManagement: Subscription data:', subscription);
       console.log('❗ useTrialManagement: Subscription error:', subscriptionError);
 
-      // Fallback: If subscription query fails but we have RPC status, create synthetic trial status
-      if (!subscription && statusResult) {
-        console.log('🔄 useTrialManagement: No subscription found, using RPC fallback...');
-        
-        // Try to get basic subscription data without billing plan join
-        const { data: basicSubscription } = await supabase
+      // Fallback: Always try to fetch basic subscription data
+      let basicSubscription = null;
+      if (!subscription) {
+        console.log('🔄 useTrialManagement: No joined subscription, fetching basic data...');
+        const { data: basic } = await supabase
           .from('landlord_subscriptions')
           .select('*')
           .eq('landlord_id', user.id)
           .maybeSingle();
-
+        basicSubscription = basic;
         console.log('🔧 useTrialManagement: Basic subscription fallback:', basicSubscription);
+      }
 
-        if (basicSubscription || statusResult === 'trial') {
-          const isTrialRelated = ['trial', 'trial_expired', 'suspended'].includes(statusResult);
-          setIsTrialUser(isTrialRelated);
+      // Use subscription or fallback to basic subscription
+      const effectiveSubscription = subscription || basicSubscription;
 
-          let daysRemaining = 0;
-          let totalTrialDays = 30;
-
-          if (basicSubscription?.trial_end_date) {
-            const trialEndDate = new Date(basicSubscription.trial_end_date);
-            const today = new Date();
-            daysRemaining = Math.ceil((trialEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-            
-            if (basicSubscription.trial_start_date) {
-              totalTrialDays = Math.ceil((trialEndDate.getTime() - new Date(basicSubscription.trial_start_date).getTime()) / (1000 * 60 * 60 * 24));
-            }
-          }
-
-          setTrialDaysRemaining(Math.max(0, daysRemaining));
-
-          const fallbackTrialStatus = {
-            status: statusResult,
-            isActive: statusResult === 'trial' && daysRemaining > 0,
-            isExpired: statusResult === 'trial_expired',
-            isSuspended: statusResult === 'suspended',
-            hasGracePeriod: statusResult === 'trial_expired',
-            daysRemaining: Math.max(0, daysRemaining),
-            gracePeriodDays: 0,
-            totalTrialDays: totalTrialDays,
-            planName: 'Free Trial', // Default fallback
-            planId: undefined
-          };
-
-          console.log('🎯 useTrialManagement: Setting fallback trial status:', fallbackTrialStatus);
-          setTrialStatus(fallbackTrialStatus);
-
-          if (basicSubscription && !basicSubscription.onboarding_completed) {
-            setShowOnboarding(true);
-          }
-        }
-      } else if (subscription) {
+      if (!effectiveSubscription) {
+        console.log('❌ useTrialManagement: No subscription found at all');
+      } else {
         console.log('✅ useTrialManagement: Processing subscription data...');
-        const actualStatus = statusResult || subscription.status;
+        const actualStatus = statusResult || effectiveSubscription.status;
         const isTrialRelated = ['trial', 'trial_expired', 'suspended'].includes(actualStatus);
         
         console.log('🏷️ useTrialManagement: Processed status info:', {
           actualStatus,
           isTrialRelated,
-          planName: subscription.billing_plan?.name
+          hasRpcStatus: !!statusResult,
+          subscriptionStatus: effectiveSubscription.status
         });
         
         setIsTrialUser(isTrialRelated);
         
         let daysRemaining = 0;
         let gracePeriodDays = 0;
+        let totalTrialDays = 30;
         
-        if (subscription.trial_end_date) {
-          const trialEndDate = new Date(subscription.trial_end_date);
+        if (effectiveSubscription.trial_end_date) {
+          const trialEndDate = new Date(effectiveSubscription.trial_end_date);
           const today = new Date();
-          today.setHours(0, 0, 0, 0); // Reset to midnight for accurate day calculation
-          trialEndDate.setHours(23, 59, 59, 999); // Set to end of day
+          today.setHours(0, 0, 0, 0);
+          trialEndDate.setHours(23, 59, 59, 999);
           
           daysRemaining = Math.ceil((trialEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
           
           console.log('📅 useTrialManagement: Date calculations:', {
             trialEndDate: trialEndDate.toISOString(),
             today: today.toISOString(),
-            daysRemaining,
-            rawCalculation: (trialEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+            daysRemaining
           });
           
-          // Calculate grace period days remaining if in grace period
+          // Calculate grace period
           if (actualStatus === 'trial_expired') {
             const gracePeriodEnd = new Date(trialEndDate.getTime() + (7 * 24 * 60 * 60 * 1000));
             gracePeriodDays = Math.max(0, Math.ceil((gracePeriodEnd.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
           }
+
+          // Calculate total trial days
+          if (effectiveSubscription.trial_start_date) {
+            totalTrialDays = Math.ceil((trialEndDate.getTime() - new Date(effectiveSubscription.trial_start_date).getTime()) / (1000 * 60 * 60 * 24));
+          }
         }
         
         setTrialDaysRemaining(Math.max(0, daysRemaining));
-        
-        // Calculate total trial days from subscription data
-        const totalTrialDays = subscription.trial_start_date && subscription.trial_end_date
-          ? Math.ceil((new Date(subscription.trial_end_date).getTime() - new Date(subscription.trial_start_date).getTime()) / (1000 * 60 * 60 * 24))
-          : 30; // Default fallback
 
         const finalTrialStatus = {
           status: actualStatus,
@@ -202,14 +169,14 @@ export function useTrialManagement() {
           daysRemaining: Math.max(0, daysRemaining),
           gracePeriodDays: gracePeriodDays,
           totalTrialDays: totalTrialDays,
-          planName: subscription.billing_plan?.name || 'Free Trial',
-          planId: subscription.billing_plan?.id
+          planName: (subscription?.billing_plan as any)?.name || 'Free Trial',
+          planId: (subscription?.billing_plan as any)?.id
         };
 
         console.log('🎯 useTrialManagement: Setting final trial status:', finalTrialStatus);
         setTrialStatus(finalTrialStatus);
 
-        // Cache the trial status for consistent display
+        // Cache the trial status
         try {
           localStorage.setItem(`trial-status-${user.id}`, JSON.stringify({
             trialStatus: finalTrialStatus,
@@ -222,11 +189,9 @@ export function useTrialManagement() {
         }
 
         // Show onboarding if not completed
-        if (!subscription.onboarding_completed) {
+        if (!effectiveSubscription.onboarding_completed) {
           setShowOnboarding(true);
         }
-      } else {
-        console.log('❌ useTrialManagement: No subscription found and no RPC status');
       }
     } catch (error) {
       try {

@@ -56,34 +56,59 @@ serve(async (req) => {
 
     console.log('Fetching sub-users for landlord:', user.id);
 
-    // Use service role to fetch sub_users and their profiles (bypassing RLS)
+    // Step 1: Fetch sub_users
     const { data: subUsers, error: subUsersError } = await supabaseService
       .from('sub_users')
-      .select(`
-        *,
-        profiles:user_id (
-          id,
-          first_name,
-          last_name,
-          email,
-          phone
-        )
-      `)
+      .select('*')
       .eq('landlord_id', user.id)
       .eq('status', 'active')
       .order('created_at', { ascending: false });
 
     if (subUsersError) {
       console.error('Error fetching sub-users:', subUsersError);
-      throw subUsersError;
+      return new Response(
+        JSON.stringify({ success: false, error: subUsersError.message }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    console.log('Fetched sub-users:', subUsers?.length || 0);
+    console.log('Fetched sub-users count:', subUsers?.length || 0);
+
+    // Step 2: If we have sub-users, fetch their profiles separately
+    let mergedData = [];
+    if (subUsers && subUsers.length > 0) {
+      const userIds = subUsers.map(su => su.user_id).filter(Boolean);
+      
+      if (userIds.length > 0) {
+        const { data: profiles, error: profilesError } = await supabaseService
+          .from('profiles')
+          .select('id, first_name, last_name, email, phone')
+          .in('id', userIds);
+
+        if (profilesError) {
+          console.error('Error fetching profiles:', profilesError);
+          // Continue without profiles rather than failing completely
+        }
+
+        // Merge profiles into sub_users
+        mergedData = subUsers.map(subUser => {
+          const profile = profiles?.find(p => p.id === subUser.user_id);
+          return {
+            ...subUser,
+            profiles: profile || null
+          };
+        });
+      } else {
+        mergedData = subUsers;
+      }
+    }
+
+    console.log('Merged data count:', mergedData.length);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        data: subUsers || []
+        data: mergedData
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

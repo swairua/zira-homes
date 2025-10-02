@@ -64,8 +64,8 @@ export const useSubUsers = () => {
         return;
       }
 
-      // Call the Edge Function directly with Authorization header
-      const functionUrl = `https://kdpqimetajnhcqseajok.supabase.co/functions/v1/list-landlord-sub-users`;
+      // Call the Edge Function using the functions subdomain for better CORS
+      const functionUrl = `https://kdpqimetajnhcqseajok.functions.supabase.co/list-landlord-sub-users`;
       const response = await fetch(functionUrl, {
         method: 'POST',
         headers: {
@@ -85,12 +85,24 @@ export const useSubUsers = () => {
       }
 
       if (!response.ok) {
+        const errorMsg = data?.error || `Failed with status ${response.status}`;
+        console.error('Sub-users fetch failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorMsg,
+          data
+        });
+        
         if (response.status === 401) {
-          toast.error('Unauthorized', {
-            description: 'Please sign in again'
+          toast.error('Authentication Required', {
+            description: 'Please sign in again to view sub-users'
+          });
+        } else {
+          toast.error('Failed to Load Sub-Users', {
+            description: errorMsg
           });
         }
-        throw new Error(data?.error || `HTTP ${response.status}`);
+        throw new Error(errorMsg);
       }
 
       if (!data?.success) {
