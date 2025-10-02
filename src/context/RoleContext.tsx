@@ -91,7 +91,10 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
 
           // Check user roles FIRST (higher priority roles)
           if (userRolesResult.data && userRolesResult.data.length > 0) {
-            const roles = userRolesResult.data.map(r => r.role.toLowerCase());
+            // Filter out SubUser roles - they should never be primary
+            const allRoles = userRolesResult.data.map(r => r.role.toLowerCase());
+            const roles = allRoles.filter(r => r !== 'subuser' && r !== 'landlord_subuser');
+            
             setAssignedRoles(roles);
             
             // SECURITY FIX: Only trust selectedRole if it exists in server-verified roles
@@ -99,7 +102,7 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
             if (selectedRole && roles.includes(selectedRole.toLowerCase())) {
               setSelectedRole(selectedRole.toLowerCase());
             } else {
-              // Set primary role (highest priority first)
+              // Set primary role (highest priority first) - NEVER select SubUser
               if (roles.includes("admin")) {
                 setSelectedRole("admin");
                 return "admin";
@@ -121,7 +124,7 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
               }
             }
             
-            // Return the primary role for userRole state
+            // Return the primary role for userRole state - NEVER return SubUser
             if (roles.includes("admin")) return "admin";
             if (roles.includes("landlord")) return "landlord";
             if (roles.includes("manager")) return "manager";
