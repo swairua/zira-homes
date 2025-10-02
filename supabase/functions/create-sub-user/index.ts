@@ -160,7 +160,7 @@ const handler = async (req: Request): Promise<Response> => {
           first_name: first_name || existingProfile.first_name,
           last_name: last_name || existingProfile.last_name,
           phone: phone || existingProfile.phone,
-          role: 'sub_user',
+          role: 'SubUser',
         }
       });
 
@@ -200,7 +200,7 @@ const handler = async (req: Request): Promise<Response> => {
           last_name,
           phone,
           created_by: landlord.id,
-          role: 'sub_user',
+          role: 'SubUser',
         },
       });
 
@@ -215,18 +215,30 @@ const handler = async (req: Request): Promise<Response> => {
       userId = newUser.user.id;
       isNewUser = true;
 
-      // Create profile record
-      const { error: profileError } = await supabase
+      // Check if profile already exists (auth trigger may have created it)
+      const { data: existingProfileCheck } = await supabase
         .from('profiles')
-        .insert({ id: userId, first_name, last_name, email, phone: phone || null });
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
 
-      if (profileError) {
-        console.error('Error creating profile:', profileError);
-        await supabase.auth.admin.deleteUser(userId);
-        return new Response(
-          JSON.stringify({ error: `Failed to create user profile: ${profileError.message}`, success: false }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      // Create profile record only if it doesn't exist
+      if (!existingProfileCheck) {
+        console.log('Creating profile for new user:', userId);
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({ id: userId, first_name, last_name, email, phone: phone || null });
+
+        if (profileError) {
+          console.error('Error creating profile:', profileError);
+          await supabase.auth.admin.deleteUser(userId);
+          return new Response(
+            JSON.stringify({ error: `Failed to create user profile: ${profileError.message}`, success: false }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } else {
+        console.log('Profile already exists for user:', userId);
       }
     }
 

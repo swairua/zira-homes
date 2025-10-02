@@ -256,9 +256,33 @@ export const useSubUsers = () => {
         throw new Error(friendly);
       }
 
-      const msg = JSON.stringify({ error: primaryError?.message || 'Failed to create sub-user', diagnostics });
-      toast.error(msg);
-      throw new Error(msg);
+      // Show user-friendly error message
+      const errorMessage = primaryError?.message || 'Failed to create sub-user. Please try again.';
+      
+      // Extract the most relevant error detail for the user
+      let detailMessage = '';
+      try {
+        for (const d of diagnostics) {
+          if (d.body && typeof d.body === 'object' && d.body.error) {
+            detailMessage = d.body.error;
+            break;
+          }
+          if (d.message && typeof d.message === 'string') {
+            detailMessage = d.message;
+            break;
+          }
+        }
+      } catch {}
+      
+      toast.error("Failed to Create Sub-User", {
+        description: detailMessage || errorMessage,
+        duration: 8000,
+      });
+      
+      // Log full diagnostics for debugging
+      console.error('Full error diagnostics:', { error: primaryError, diagnostics });
+      
+      throw new Error(errorMessage);
     }
   };
 
