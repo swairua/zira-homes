@@ -105,8 +105,14 @@ export const useSubUsers = () => {
 
     try {
       // Use supabase.functions.invoke which already includes robust fallbacks
+      // Ensure Authorization header is sent so edge function can identify landlord
+      let access: string | null = session?.access_token || null;
+      if (!access) {
+        try { const { data: s } = await supabase.auth.getSession(); access = s?.session?.access_token || null; } catch {}
+      }
       const { data: result, error } = await supabase.functions.invoke('create-sub-user', {
         body: data,
+        headers: access ? { Authorization: `Bearer ${access}` } : undefined,
       });
 
       if (error) {
