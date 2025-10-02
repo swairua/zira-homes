@@ -13,7 +13,10 @@ export interface SubUser {
     manage_tenants: boolean;
     manage_leases: boolean;
     manage_maintenance: boolean;
+    manage_payments: boolean;
     view_reports: boolean;
+    manage_expenses: boolean;
+    send_messages: boolean;
   };
   status: string;
   created_at: string;
@@ -38,7 +41,10 @@ export interface CreateSubUserData {
     manage_tenants: boolean;
     manage_leases: boolean;
     manage_maintenance: boolean;
+    manage_payments: boolean;
     view_reports: boolean;
+    manage_expenses: boolean;
+    send_messages: boolean;
   };
 }
 
