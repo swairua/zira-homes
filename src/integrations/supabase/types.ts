@@ -3694,6 +3694,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      can_subuser_view_tenant: {
+        Args: { _tenant_id: string; _user_id: string }
+        Returns: boolean
+      }
       can_user_manage_tenant: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
