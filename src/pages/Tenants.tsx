@@ -18,6 +18,7 @@ import { KpiStatCard } from "@/components/kpi/KpiStatCard";
 import { TablePaginator } from "@/components/ui/table-paginator";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { checkBackendReady } from "@/utils/backendHealth";
+import { useRole } from "@/context/RoleContext";
 
 interface Tenant {
   id: string;
@@ -58,6 +59,7 @@ const Tenants = () => {
   const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ pageSize: 10 });
   const [backendReady, setBackendReady] = useState<boolean>(true);
   const [backendReason, setBackendReason] = useState<string>("");
+  const { isSubUser, landlordId } = useRole();
 
   useEffect(() => {
     (async () => {
@@ -93,7 +95,7 @@ const Tenants = () => {
 
         // Fallback: strictly scope to current landlord's portfolio (owner or manager)
         const { data: auth } = await supabase.auth.getUser();
-        const uid = auth?.user?.id;
+        const uid = (isSubUser && landlordId) ? landlordId : auth?.user?.id;
         if (!uid) throw new Error('Not authenticated');
 
         // 1) Get properties owned/managed by this user
@@ -264,7 +266,7 @@ const Tenants = () => {
   const fetchProperties = async () => {
     try {
       const { data: auth } = await supabase.auth.getUser();
-      const uid = auth?.user?.id;
+      const uid = (isSubUser && landlordId) ? landlordId : auth?.user?.id;
       if (!uid) throw new Error('Not authenticated');
 
       const { data, error } = await (supabase as any)
