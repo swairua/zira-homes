@@ -156,7 +156,7 @@ const SubUserManagement = () => {
               />
               {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
               <p className="text-xs text-muted-foreground">
-                If this email is already registered, we'll link them to your organization instead of creating a new account.
+                If this email exists, we'll reset their password and link them to your organization. You'll receive new credentials to share with them.
               </p>
             </div>
 

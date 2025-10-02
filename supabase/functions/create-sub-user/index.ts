@@ -111,7 +111,9 @@ const handler = async (req: Request): Promise<Response> => {
 
     let userId: string;
     let isNewUser = false;
-    let tempPassword: string | null = null;
+    let isPasswordReset = false;
+    // Always generate a temporary password for sub-users
+    const tempPassword = `SubUser${Math.floor(Math.random() * 100000)}!${Date.now().toString(36).slice(-4)}`;
 
     if (existingProfile?.id) {
       userId = existingProfile.id;
@@ -132,7 +134,30 @@ const handler = async (req: Request): Promise<Response> => {
         );
       }
 
-      // Optionally update profile fields if provided
+      // Reset password for existing user to allow landlord to share new credentials
+      console.log('Resetting password for existing user:', userId);
+      const { error: passwordResetError } = await supabase.auth.admin.updateUserById(userId, {
+        password: tempPassword,
+        user_metadata: {
+          ...existingProfile,
+          first_name: first_name || existingProfile.first_name,
+          last_name: last_name || existingProfile.last_name,
+          phone: phone || existingProfile.phone,
+          role: 'sub_user',
+        }
+      });
+
+      if (passwordResetError) {
+        console.error('Error resetting password for existing user:', passwordResetError);
+        return new Response(
+          JSON.stringify({ error: `Failed to reset password: ${passwordResetError.message}`, success: false }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      isPasswordReset = true;
+
+      // Update profile fields if provided
       const shouldUpdate = Boolean(first_name || last_name || phone);
       if (shouldUpdate) {
         const { error: profileUpdateError } = await supabase
@@ -148,8 +173,7 @@ const handler = async (req: Request): Promise<Response> => {
         }
       }
     } else {
-      // Create new auth user via Admin API
-      tempPassword = `TempPass${Math.floor(Math.random() * 10000)}!`;
+      // Create new auth user via Admin API with generated password
       const { data: newUser, error: createUserError } = await supabase.auth.admin.createUser({
         email,
         password: tempPassword,
@@ -230,7 +254,9 @@ const handler = async (req: Request): Promise<Response> => {
 
     const responseMessage = isNewUser
       ? 'Sub-user created successfully with new account'
-      : 'Sub-user created successfully with existing account';
+      : isPasswordReset 
+        ? 'Sub-user linked successfully - password has been reset'
+        : 'Sub-user created successfully with existing account';
 
     return new Response(
       JSON.stringify({
@@ -238,9 +264,10 @@ const handler = async (req: Request): Promise<Response> => {
         message: responseMessage,
         user_id: userId,
         temporary_password: tempPassword,
-        instructions: tempPassword
-          ? 'The user should change their password on first login'
-          : 'The user can log in with their existing credentials',
+        password_reset: isPasswordReset,
+        is_new_user: isNewUser,
+        email: email,
+        instructions: 'Share these credentials securely with the sub-user. They should change their password on first login.',
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

@@ -130,11 +130,15 @@ export const useSubUsers = () => {
           throw new Error('server-proxy failed');
         }
 
-        if (parsed.temporary_password) {
-          toast.success(`Sub-user created successfully! Share these credentials: ${data.email} / ${parsed.temporary_password}`, { duration: 10000 });
-        } else {
-          toast.success(`Sub-user added successfully for ${data.email}`, { duration: 6000 });
-        }
+        const title = parsed.password_reset ? "Sub-User Linked - Password Reset" : "Sub-User Created";
+        const credentialsText = parsed.temporary_password 
+          ? `Email: ${data.email}\nPassword: ${parsed.temporary_password}\n\n${parsed.instructions || 'Share these credentials securely'}`
+          : parsed.message || "Sub-user added successfully";
+        
+        toast.success(title, { 
+          description: credentialsText,
+          duration: 15000, // 15 seconds for credentials
+        });
         fetchSubUsers();
         return;
       } catch (e) {}
@@ -192,11 +196,15 @@ export const useSubUsers = () => {
         throw new Error('invoke-result failed');
       }
 
-      if (iData.temporary_password) {
-        toast.success(`Sub-user created successfully! Share these credentials: ${data.email} / ${iData.temporary_password}`, { duration: 10000 });
-      } else {
-        toast.success(`Sub-user added successfully for ${data.email}`, { duration: 6000 });
-      }
+      const title = iData.password_reset ? "Sub-User Linked - Password Reset" : "Sub-User Created";
+      const credentialsText = iData.temporary_password 
+        ? `Email: ${data.email}\nPassword: ${iData.temporary_password}\n\n${iData.instructions || 'Share these credentials securely'}`
+        : iData.message || "Sub-user added successfully";
+      
+      toast.success(title, { 
+        description: credentialsText,
+        duration: 15000, // 15 seconds for credentials
+      });
       fetchSubUsers();
       return;
     } catch (primaryError: any) {
