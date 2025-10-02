@@ -12,11 +12,10 @@ interface PermissionGuardProps {
 /**
  * Guards content based on sub-user permissions
  * - Non-sub-users: Full access
- * - Sub-users during landlord trial: Full access
- * - Sub-users after trial: Check specific permission
+ * - Sub-users: Check specific permission (always enforced)
  */
 export function PermissionGuard({ permission, children, fallback }: PermissionGuardProps) {
-  const { isSubUser, subUserPermissions, isOnLandlordTrial, loading } = useRole();
+  const { isSubUser, subUserPermissions, loading } = useRole();
 
   if (loading) {
     return (
@@ -31,12 +30,7 @@ export function PermissionGuard({ permission, children, fallback }: PermissionGu
     return <>{children}</>;
   }
 
-  // Sub-users during landlord trial have full access
-  if (isOnLandlordTrial) {
-    return <>{children}</>;
-  }
-
-  // Check specific permission for sub-users after trial
+  // Check specific permission for sub-users (always enforced)
   const hasPermission = subUserPermissions?.[permission] === true;
 
   if (!hasPermission) {
