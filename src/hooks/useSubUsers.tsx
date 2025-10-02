@@ -48,101 +48,75 @@ export const useSubUsers = () => {
   const [loading, setLoading] = useState(false);
 
   const fetchSubUsers = async () => {
-    if (!user) return;
+    if (!user) {
+      console.log('No authenticated user, skipping sub-user fetch');
+      return;
+    }
     
     setLoading(true);
+    
     try {
-      // Get the user's access token
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      const accessToken = currentSession?.access_token;
+      console.log('Fetching sub-users for landlord:', user.id);
+      
+      // Use supabase client invoke for better error handling and fallbacks
+      const { data, error } = await supabase.functions.invoke('list-landlord-sub-users', {
+        body: {}
+      });
 
-      if (!accessToken) {
-        toast.error('Authentication required', {
-          description: 'Please sign in again to view sub-users'
+      if (error) {
+        console.error('Failed to fetch sub-users:', error);
+        toast.error('Error Loading Sub-Users', {
+          description: `Failed to load sub-users. ${error.message || 'Please try again.'}`
         });
         setSubUsers([]);
         return;
       }
 
-      // Call the Edge Function using the functions subdomain for better CORS
-      const functionUrl = `https://kdpqimetajnhcqseajok.functions.supabase.co/list-landlord-sub-users`;
-      const response = await fetch(functionUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtkcHFpbWV0YWpuaGNxc2Vham9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwMDQxMTAsImV4cCI6MjA2OTU4MDExMH0.VkqXvocYAYO6RQeDaFv8wVrq2xoKKfQ8UVj41az7ZSk',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-      });
+      console.log('Sub-users fetch result:', data);
 
-      const responseText = await response.text();
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (e) {
-        console.error('Failed to parse response:', responseText);
-        throw new Error('Invalid response from server');
-      }
-
-      if (!response.ok) {
-        const errorMsg = data?.error || `Failed with status ${response.status}`;
-        console.error('Sub-users fetch failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorMsg,
-          data
+      if (data?.success && data?.data) {
+        console.log('Setting sub-users:', data.data.length);
+        
+        // Transform the data
+        const transformedData: SubUser[] = (data.data || []).map((item: any) => {
+          // Handle profiles as either a nested object or array (Supabase can return either)
+          const profile = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles;
+          
+          return {
+            ...item,
+            permissions: typeof item.permissions === 'string' 
+              ? JSON.parse(item.permissions) 
+              : item.permissions,
+            profiles: profile ? {
+              first_name: profile.first_name,
+              last_name: profile.last_name,
+              email: profile.email,
+              phone: profile.phone
+            } : undefined
+          };
         });
         
-        if (response.status === 401) {
-          toast.error('Authentication Required', {
-            description: 'Please sign in again to view sub-users'
-          });
-        } else {
-          toast.error('Failed to Load Sub-Users', {
-            description: errorMsg
+        setSubUsers(transformedData);
+        
+        // Show info toast if no sub-users found
+        if (transformedData.length === 0) {
+          toast.info('No Sub-Users', {
+            description: 'No active sub-users found for this account'
           });
         }
-        throw new Error(errorMsg);
-      }
-
-      if (!data?.success) {
-        throw new Error(data?.error || 'Failed to fetch sub-users');
-      }
-
-      // Check for empty data and provide diagnostics
-      if (!data.data || data.data.length === 0) {
-        console.log('No sub-users found for user:', user?.id);
-        toast.info('No Sub-Users', {
-          description: 'No active sub-users found for this account'
+      } else {
+        console.error('Sub-users fetch unsuccessful:', data);
+        toast.error('Error Loading Sub-Users', {
+          description: data?.error || 'Could not load sub-users'
         });
+        setSubUsers([]);
       }
-
-      // Transform the data
-      const transformedData: SubUser[] = (data.data || []).map((item: any) => {
-        // Handle profiles as either a nested object or array (Supabase can return either)
-        const profile = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles;
-        
-        return {
-          ...item,
-          permissions: typeof item.permissions === 'string' 
-            ? JSON.parse(item.permissions) 
-            : item.permissions,
-          profiles: profile ? {
-            first_name: profile.first_name,
-            last_name: profile.last_name,
-            email: profile.email,
-            phone: profile.phone
-          } : undefined
-        };
-      });
-      
-      console.log('Fetched and transformed sub-users:', transformedData);
-      setSubUsers(transformedData);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching sub-users:', error);
-      toast.error('Failed to load sub-users', {
-        description: error instanceof Error ? error.message : 'Unknown error occurred'
+      toast.error('Error', {
+        description: error.message || 'Failed to load sub-users'
       });
+      setSubUsers([]);
     } finally {
       setLoading(false);
     }

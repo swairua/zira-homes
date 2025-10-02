@@ -337,7 +337,7 @@ const SubUserManagement = () => {
                   </TableRow>
                 ) : subUsers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-4">
+                    <TableCell colSpan={6} className="text-center py-4 text-muted-foreground">
                       No sub-users found. Create your first sub-user to delegate access.
                     </TableCell>
                   </TableRow>

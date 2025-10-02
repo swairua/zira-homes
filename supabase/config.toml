@@ -24,6 +24,9 @@ verify_jwt = true
 [functions.create-sub-user]
 verify_jwt = true
 
+[functions.list-landlord-sub-users]
+verify_jwt = true
+
 [functions.get-sms-provider]
 verify_jwt = true
 
