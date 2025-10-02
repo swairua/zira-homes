@@ -151,9 +151,7 @@ export function AppSidebar() {
                   }
 
                   // Filter navigation for sub-users based on permissions
-                  if (isSubUser) {
-                    // Check specific permissions
-                    if (subUserPermissions) {
+                  if (isSubUser && subUserPermissions) {
                       const permissionMap: Record<string, keyof typeof subUserPermissions> = {
                         "Properties": "manage_properties",
                         "Tenants": "manage_tenants",
