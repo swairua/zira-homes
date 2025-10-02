@@ -104,26 +104,13 @@ export const useSubUsers = () => {
     if (!user) return;
 
     try {
-      // Use server proxy with service-role to create auth user + profile + sub_user
-      let access: string | null = session?.access_token || null;
-      if (!access) {
-        try { const { data: s } = await supabase.auth.getSession(); access = s?.session?.access_token || null; } catch {}
-      }
-
-      const res = await fetch('/api/edge/create-sub-user', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(access ? { Authorization: `Bearer ${access}` } : {}),
-        },
-        body: JSON.stringify({ ...data }),
+      // Prefer calling Supabase Edge Function directly to leverage server-side service role
+      const { data: result, error } = await (supabase.functions as any).invoke('create-sub-user', {
+        body: { ...data },
       });
 
-      const text = await res.text();
-      let result: any; try { result = JSON.parse(text); } catch { result = { success: false, error: text || 'Unknown error' }; }
-
-      if (!res.ok || !result?.success) {
-        const detail = result?.error || result?.details || `${res.status} ${res.statusText}`;
+      if (error || !result?.success) {
+        const detail = (result && (result.error || result.details)) || error?.message || 'Unknown error';
         throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
       }
 
@@ -139,7 +126,7 @@ export const useSubUsers = () => {
       fetchSubUsers();
       return;
     } catch (primaryError: any) {
-      console.error('create-sub-user (proxy) failed:', primaryError);
+      console.error('create-sub-user failed:', primaryError);
       const msg = primaryError?.message || 'Failed to create sub-user';
       toast.error(msg);
       throw primaryError;
