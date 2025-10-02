@@ -76,23 +76,18 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
             return "tenant";
           }
 
-          // Parallel queries for role resolution
-          const [tenantResult, userRolesResult] = await Promise.all([
-            supabase
-              .from("tenants")
-              .select("id")
-              .eq("user_id", user.id)
-              .maybeSingle(),
-            supabase
-              .from("user_roles")
-              .select("role")
-              .eq("user_id", user.id)
-          ]);
+          // Query user_roles FIRST (avoids tenants recursion for Admins)
+          const { data: userRolesResult, error: rolesError } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", user.id);
+
+          if (rolesError) throw rolesError;
 
           // Check user roles FIRST (higher priority roles)
-          if (userRolesResult.data && userRolesResult.data.length > 0) {
+          if (userRolesResult && userRolesResult.length > 0) {
             // Filter out SubUser roles - they should never be primary
-            const allRoles = userRolesResult.data.map(r => r.role.toLowerCase());
+            const allRoles = userRolesResult.map(r => r.role.toLowerCase());
             const roles = allRoles.filter(r => r !== 'subuser' && r !== 'landlord_subuser');
             
             setAssignedRoles(roles);
@@ -129,21 +124,21 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
             if (roles.includes("landlord")) return "landlord";
             if (roles.includes("manager")) return "manager";
             if (roles.includes("agent")) return "agent";
-            // If they have roles but none of the above, still check if they're a tenant
           }
 
-          // Check if user is a tenant (lower priority)
-          if (tenantResult.data) {
+          // Only query tenants if no roles found (avoids recursion for Admin/Landlord)
+          const { data: tenantResult } = await supabase
+            .from("tenants")
+            .select("id")
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+          if (tenantResult) {
             return "tenant";
           }
 
-          // If user has roles but not the main ones and not a tenant
-          if (userRolesResult.data && userRolesResult.data.length > 0) {
-            return "tenant"; // fallback
-          }
-
-          // Fallback to metadata or default
-          return metadataRole?.toLowerCase() || "tenant";
+          // Fallback to metadata or keep current role
+          return metadataRole?.toLowerCase() || selectedRole || "tenant";
         });
 
         // Only update if different from optimistic value
@@ -160,9 +155,12 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
         }
       } catch (error) {
         console.error("Error fetching user role:", error);
-        setUserRole("tenant");
-        setAssignedRoles(["tenant"]);
-        setSelectedRole("tenant");
+        // Don't downgrade on error - keep current role if set
+        if (!selectedRole && !userRole) {
+          setUserRole("tenant");
+          setAssignedRoles(["tenant"]);
+          setSelectedRole("tenant");
+        }
       } finally {
         setLoading(false);
       }

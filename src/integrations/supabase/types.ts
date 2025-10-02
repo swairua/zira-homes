@@ -3657,6 +3657,10 @@ export type Database = {
         Args: { _performed_by?: string; _user_id: string }
         Returns: Json
       }
+      admin_list_profiles_with_roles: {
+        Args: { p_limit?: number; p_offset?: number }
+        Returns: Json
+      }
       audit_security_exposure: {
         Args: Record<PropertyKey, never>
         Returns: string
