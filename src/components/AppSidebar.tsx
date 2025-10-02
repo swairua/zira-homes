@@ -34,9 +34,10 @@ export function AppSidebar() {
   const { allowed: hasCustomTemplates } = usePlanFeatureAccess(FEATURES.CUSTOM_EMAIL_TEMPLATES);
   const { allowed: hasAdvancedReports } = usePlanFeatureAccess(FEATURES.ADVANCED_REPORTING);
 
-  // Check if user has Professional, Enterprise, or Admin plan - these should not have locks
-  const isPremiumPlan = trialStatus?.planName && 
-    ['Professional', 'Enterprise', 'Admin', 'Pro'].includes(trialStatus.planName) ||
+  // Check if user has Professional, Enterprise, Admin plan, OR is on trial - no locks for these
+  const isPremiumPlan = (trialStatus?.planName && 
+    ['Professional', 'Enterprise', 'Admin', 'Pro'].includes(trialStatus.planName)) ||
+    trialStatus?.isActive || // TRIAL USERS GET FULL ACCESS
     isAdmin;
 
   // Show skeleton while role is loading

@@ -91,14 +91,18 @@ const Reports = () => {
         }
 
         // Fetch user's plan features for non-admin users
+        // Check both active AND trial subscriptions
         const { data: subscription } = await supabase
           .from("landlord_subscriptions")
           .select(`
-            billing_plans!inner(features)
+            billing_plans!inner(features),
+            status
           `)
           .eq("landlord_id", user.id)
-          .eq("status", "active")
-          .single();
+          .in("status", ["active", "trial"])
+          .order("status", { ascending: true }) // "active" comes before "trial"
+          .limit(1)
+          .maybeSingle();
 
         if (subscription && subscription.billing_plans) {
           const planFeatures = (subscription.billing_plans as any).features || [];
