@@ -103,62 +103,84 @@ export const useSubUsers = () => {
   const createSubUser = async (data: CreateSubUserData) => {
     if (!user) return;
 
-    try {
-      // Prefer calling Supabase Edge Function directly to leverage server-side service role
-      let invokeResult: any = null;
-      let invokeError: any = null;
+    let access: string | null = session?.access_token || null;
+    if (!access) {
+      try { const { data: s } = await supabase.auth.getSession(); access = s?.session?.access_token || null; } catch {}
+    }
 
+    const diagnostics: any[] = [];
+
+    try {
+      // 1) Server proxy (service-role) — richest error details
       try {
-        const resp = await (supabase.functions as any).invoke('create-sub-user', { body: { ...data } });
-        invokeResult = resp?.data ?? resp;
-        invokeError = resp?.error ?? null;
+        const res = await fetch('/api/edge/create-sub-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(access ? { Authorization: `Bearer ${access}` } : {}) },
+          body: JSON.stringify({ ...data })
+        });
+        const text = await res.text().catch(() => '');
+        let parsed: any; try { parsed = JSON.parse(text); } catch { parsed = null; }
+
+        if (!res.ok || !parsed?.success) {
+          diagnostics.push({ source: 'server-proxy', status: res.status, statusText: res.statusText, body: parsed ?? text });
+          throw new Error('server-proxy failed');
+        }
+
+        if (parsed.temporary_password) {
+          toast.success(`Sub-user created successfully! Share these credentials: ${data.email} / ${parsed.temporary_password}`, { duration: 10000 });
+        } else {
+          toast.success(`Sub-user added successfully for ${data.email}`, { duration: 6000 });
+        }
+        fetchSubUsers();
+        return;
+      } catch (e) {}
+
+      // 2) Supabase functions.invoke with explicit auth header
+      let invokeResp: any = null;
+      try {
+        invokeResp = await (supabase.functions as any).invoke('create-sub-user', {
+          body: { ...data },
+          headers: { ...(access ? { Authorization: `Bearer ${access}` } : {}) }
+        });
       } catch (fnErr: any) {
-        // Capture thrown error details from supabase-js
         let details = fnErr?.message || 'Edge function invocation failed';
         try {
           if (fnErr?.response && typeof fnErr.response.text === 'function') {
             const txt = await fnErr.response.text();
-            try {
-              const parsed = JSON.parse(txt);
-              details = parsed.error || parsed.message || parsed.details || JSON.stringify(parsed);
-            } catch {
-              details = txt;
-            }
+            try { const j = JSON.parse(txt); details = j.error || j.message || j.details || JSON.stringify(j); } catch { details = txt; }
           }
         } catch {}
-        const composed = JSON.stringify({ message: fnErr?.message || null, status: fnErr?.status || null, details });
-        throw new Error(composed);
+        diagnostics.push({ source: 'invoke-throw', name: fnErr?.name || null, status: fnErr?.status || null, details });
+        throw new Error('invoke-throw');
       }
 
-      if (invokeError || !invokeResult?.success) {
-        const diagnostics: any = {
-          message: (invokeError && (invokeError.message || invokeError.error)) || (invokeResult && (invokeResult.error || invokeResult.message)) || 'Unknown error',
-          status: invokeError?.status || invokeError?.context?.response?.status || invokeResult?.status || null,
-          name: invokeError?.name || null,
-          details: invokeError?.details || invokeError?.context || invokeResult?.details || null,
-          proxy: invokeError?.proxyFailedDetails || null,
-          result: invokeResult || null,
+      const iErr = invokeResp?.error || null;
+      const iData = invokeResp?.data ?? invokeResp;
+      if (iErr || !iData?.success) {
+        const detailParts: any = {
+          source: 'invoke-result',
+          name: iErr?.name || null,
+          status: iErr?.status || iErr?.context?.response?.status || iData?.status || null,
+          message: iErr?.message || iData?.error || iData?.message || null,
+          details: iErr?.details || iErr?.context || iData?.details || null,
+          raw: iData || null,
         };
-        try { console.error('create-sub-user diagnostics:', diagnostics); } catch {}
-        throw new Error(JSON.stringify(diagnostics));
+        diagnostics.push(detailParts);
+        throw new Error('invoke-result failed');
       }
 
-      if (invokeResult.temporary_password) {
-        toast.success(
-          `Sub-user created successfully! Share these credentials: ${data.email} / ${invokeResult.temporary_password}`,
-          { duration: 10000 }
-        );
+      if (iData.temporary_password) {
+        toast.success(`Sub-user created successfully! Share these credentials: ${data.email} / ${iData.temporary_password}`, { duration: 10000 });
       } else {
         toast.success(`Sub-user added successfully for ${data.email}`, { duration: 6000 });
       }
-
       fetchSubUsers();
       return;
     } catch (primaryError: any) {
-      console.error('create-sub-user failed:', primaryError);
-      const msg = (primaryError?.message && String(primaryError.message)) || 'Failed to create sub-user';
+      console.error('create-sub-user failed:', primaryError, diagnostics);
+      const msg = JSON.stringify({ error: primaryError?.message || 'Failed to create sub-user', diagnostics });
       toast.error(msg);
-      throw primaryError;
+      throw new Error(msg);
     }
   };
 
