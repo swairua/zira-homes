@@ -52,12 +52,45 @@ export const useSubUsers = () => {
     
     setLoading(true);
     try {
-      // Use edge function to fetch sub-users with profiles (bypasses RLS issues)
-      const { data, error } = await supabase.functions.invoke('list-landlord-sub-users');
+      // Get the user's access token
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      const accessToken = currentSession?.access_token;
 
-      if (error) {
-        console.error('Error from edge function:', error);
-        throw error;
+      if (!accessToken) {
+        toast.error('Authentication required', {
+          description: 'Please sign in again to view sub-users'
+        });
+        setSubUsers([]);
+        return;
+      }
+
+      // Call the Edge Function directly with Authorization header
+      const functionUrl = `https://kdpqimetajnhcqseajok.supabase.co/functions/v1/list-landlord-sub-users`;
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtkcHFpbWV0YWpuaGNxc2Vham9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwMDQxMTAsImV4cCI6MjA2OTU4MDExMH0.VkqXvocYAYO6RQeDaFv8wVrq2xoKKfQ8UVj41az7ZSk',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
+
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        console.error('Failed to parse response:', responseText);
+        throw new Error('Invalid response from server');
+      }
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          toast.error('Unauthorized', {
+            description: 'Please sign in again'
+          });
+        }
+        throw new Error(data?.error || `HTTP ${response.status}`);
       }
 
       if (!data?.success) {
@@ -87,7 +120,9 @@ export const useSubUsers = () => {
       setSubUsers(transformedData);
     } catch (error) {
       console.error('Error fetching sub-users:', error);
-      toast.error('Failed to load sub-users');
+      toast.error('Failed to load sub-users', {
+        description: error instanceof Error ? error.message : 'Unknown error occurred'
+      });
     } finally {
       setLoading(false);
     }
