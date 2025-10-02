@@ -117,15 +117,14 @@ export const useSubUsers = () => {
         throw new Error('User not found. First create the user (Settings → User Management) or use an existing email.');
       }
 
+      const payload: any = { landlord_id: user.id };
+      if (existingProfile?.id) payload.user_id = existingProfile.id;
+      if (data.title) payload.title = data.title;
+      if (data.permissions && Object.values(data.permissions).some(Boolean)) payload.permissions = data.permissions;
+
       const { error: insertErr } = await supabase
         .from('sub_users')
-        .insert({
-          landlord_id: user.id,
-          user_id: existingProfile.id,
-          title: data.title || null,
-          permissions: data.permissions,
-          status: 'active',
-        });
+        .insert(payload);
 
       if (insertErr) throw insertErr;
 
