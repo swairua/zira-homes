@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Plus, UserPlus, Settings, UserX, Shield, Users } from "lucide-react";
 import { TablePaginator } from "@/components/ui/table-paginator";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { useSubUsers } from "@/hooks/useSubUsers";
 import { DisabledActionWrapper } from "@/components/feature-access/DisabledActionWrapper";
 import { FEATURES } from "@/hooks/usePlanFeatureAccess";
@@ -40,7 +40,7 @@ const SubUserManagement = () => {
   const [selectedSubUser, setSelectedSubUser] = useState<any>(null);
   const { subUsers, loading, createSubUser, updateSubUserPermissions, deactivateSubUser } = useSubUsers();
   const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ defaultPage: 1, pageSize: 10 });
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<CreateSubUserFormData>({
+  const { register, handleSubmit, reset, watch, setValue, control, formState: { errors } } = useForm<CreateSubUserFormData>({
     defaultValues: {
       permissions: {
         manage_properties: false,
@@ -53,6 +53,7 @@ const SubUserManagement = () => {
   });
 
   const permissions = watch('permissions');
+  const passwordValue = useWatch({ control, name: "password" });
 
   const onCreateSubUser = async (data: CreateSubUserFormData) => {
     try {
@@ -124,8 +125,10 @@ const SubUserManagement = () => {
           <DialogHeader>
             <DialogTitle className="text-primary">Create New Sub-User</DialogTitle>
           </DialogHeader>
-          <ScrollArea className="max-h-[60vh] pr-4">
-            <form onSubmit={handleSubmit(onCreateSubUser)} className="space-y-6">
+          
+          <form onSubmit={handleSubmit(onCreateSubUser)} className="flex flex-col gap-4">
+            <ScrollArea className="max-h-[60vh] pr-4">
+              <div className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="first_name" className="text-primary">First Name *</Label>
@@ -202,7 +205,7 @@ const SubUserManagement = () => {
                 </p>
               </div>
 
-              {watch("password") && (
+              {passwordValue && passwordValue.length > 0 && (
                 <div className="space-y-2">
                   <Label htmlFor="confirm_password" className="text-primary">Confirm Password</Label>
                   <Input
@@ -210,7 +213,7 @@ const SubUserManagement = () => {
                     type="password"
                     className="border-border bg-card"
                     {...register("confirm_password", {
-                      validate: (value) => value === watch("password") || "Passwords do not match"
+                      validate: (value) => value === passwordValue || "Passwords do not match"
                     })}
                     placeholder="Re-enter password"
                   />
@@ -235,25 +238,27 @@ const SubUserManagement = () => {
                   ))}
                 </div>
               </div>
-
-              <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => setCreateDialogOpen(false)}
-                  className="w-full sm:w-auto border-primary text-primary hover:bg-primary hover:text-primary-foreground"
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  type="submit" 
-                  className="w-full sm:w-auto bg-accent hover:bg-accent/90"
-                >
-                  Create Sub-User
-                </Button>
               </div>
-            </form>
-          </ScrollArea>
+            </ScrollArea>
+
+            {/* Action Buttons - Outside ScrollArea but inside form */}
+            <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setCreateDialogOpen(false)}
+                className="w-full sm:w-auto border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                className="w-full sm:w-auto bg-accent hover:bg-accent/90"
+              >
+                Create Sub-User
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -340,11 +345,15 @@ const SubUserManagement = () => {
                       <TableCell>
                         <div>
                           <p className="font-medium">
-                            {subUser.profiles?.first_name} {subUser.profiles?.last_name}
+                            {subUser.profiles?.first_name && subUser.profiles?.last_name
+                              ? `${subUser.profiles.first_name} ${subUser.profiles.last_name}`
+                              : <span className="text-muted-foreground italic">Pending...</span>}
                           </p>
                         </div>
                       </TableCell>
-                      <TableCell>{subUser.profiles?.email}</TableCell>
+                      <TableCell>
+                        {subUser.profiles?.email || <span className="text-muted-foreground italic">Setting up...</span>}
+                      </TableCell>
                       <TableCell>{subUser.title || '-'}</TableCell>
                       <TableCell>
                         <div className="flex gap-1 flex-wrap">
