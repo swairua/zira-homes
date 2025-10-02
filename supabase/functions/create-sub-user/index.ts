@@ -12,6 +12,7 @@ interface CreateSubUserRequest {
   last_name: string;
   phone?: string;
   title?: string;
+  password?: string;
   permissions: {
     manage_properties: boolean;
     manage_tenants: boolean;
@@ -86,7 +87,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const requestData: CreateSubUserRequest = await req.json();
-    const { email, first_name, last_name, phone, title, permissions } = requestData;
+    const { email, first_name, last_name, phone, title, password, permissions } = requestData;
 
     if (!email || !first_name || !last_name) {
       return new Response(
@@ -95,7 +96,15 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    console.log('Creating sub-user:', { email, first_name, last_name, landlord_id: landlord.id });
+    // Validate custom password if provided
+    if (password && password.trim().length > 0 && password.trim().length < 8) {
+      return new Response(
+        JSON.stringify({ error: 'Password must be at least 8 characters', success: false }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Creating sub-user:', { email, first_name, last_name, landlord_id: landlord.id, custom_password: !!password });
 
     // Find existing user via profiles table by unique email
     const { data: existingProfile, error: profileLookupErr } = await supabase
@@ -112,8 +121,16 @@ const handler = async (req: Request): Promise<Response> => {
     let userId: string;
     let isNewUser = false;
     let isPasswordReset = false;
-    // Always generate a temporary password for sub-users
-    const tempPassword = `SubUser${Math.floor(Math.random() * 100000)}!${Date.now().toString(36).slice(-4)}`;
+    let isCustomPassword = false;
+    // Use custom password if provided, otherwise generate one
+    const tempPassword = password && password.trim().length > 0 
+      ? password.trim() 
+      : `SubUser${Math.floor(Math.random() * 100000)}!${Date.now().toString(36).slice(-4)}`;
+    
+    if (password && password.trim().length > 0) {
+      isCustomPassword = true;
+      console.log('Using custom password provided by landlord');
+    }
 
     if (existingProfile?.id) {
       userId = existingProfile.id;
@@ -263,11 +280,14 @@ const handler = async (req: Request): Promise<Response> => {
         success: true,
         message: responseMessage,
         user_id: userId,
-        temporary_password: tempPassword,
+        temporary_password: isCustomPassword ? undefined : tempPassword,
         password_reset: isPasswordReset,
         is_new_user: isNewUser,
+        is_custom_password: isCustomPassword,
         email: email,
-        instructions: 'Share these credentials securely with the sub-user. They should change their password on first login.',
+        instructions: isCustomPassword 
+          ? 'Sub-user created with your custom password.' 
+          : 'Share these credentials securely with the sub-user. They should change their password on first login.',
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

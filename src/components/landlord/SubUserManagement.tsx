@@ -22,6 +22,8 @@ interface CreateSubUserFormData {
   last_name: string;
   phone?: string;
   title?: string;
+  password?: string;
+  confirm_password?: string;
   permissions: {
     manage_properties: boolean;
     manage_tenants: boolean;
@@ -180,6 +182,39 @@ const SubUserManagement = () => {
                 />
               </div>
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-primary">Password (Optional)</Label>
+              <Input
+                id="password"
+                type="password"
+                className="border-border bg-card"
+                {...register("password", {
+                  minLength: { value: 8, message: "Password must be at least 8 characters" }
+                })}
+                placeholder="Leave empty to auto-generate"
+              />
+              {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+              <p className="text-xs text-muted-foreground">
+                Leave empty to auto-generate a secure password. Min 8 characters if provided.
+              </p>
+            </div>
+
+            {watch("password") && (
+              <div className="space-y-2">
+                <Label htmlFor="confirm_password" className="text-primary">Confirm Password</Label>
+                <Input
+                  id="confirm_password"
+                  type="password"
+                  className="border-border bg-card"
+                  {...register("confirm_password", {
+                    validate: (value) => value === watch("password") || "Passwords do not match"
+                  })}
+                  placeholder="Re-enter password"
+                />
+                {errors.confirm_password && <p className="text-xs text-destructive">{errors.confirm_password.message}</p>}
+              </div>
+            )}
 
             <div className="space-y-4">
               <Label className="text-primary font-semibold">Permissions</Label>

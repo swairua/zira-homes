@@ -32,6 +32,7 @@ export interface CreateSubUserData {
   last_name: string;
   phone?: string;
   title?: string;
+  password?: string;
   permissions: {
     manage_properties: boolean;
     manage_tenants: boolean;
@@ -113,6 +114,17 @@ export const useSubUsers = () => {
     try {
       // 1) Server proxy (service-role) — richest error details
       try {
+        const payload = {
+          email: data.email,
+          first_name: data.first_name,
+          last_name: data.last_name,
+          phone: data.phone || null,
+          title: data.title || null,
+          password: data.password || null,
+          permissions: data.permissions,
+          ...(user?.id ? { landlord_id: user.id } : {})
+        };
+        
         const res = await fetch('/api/edge/create-sub-user', {
           method: 'POST',
           headers: {
@@ -120,7 +132,7 @@ export const useSubUsers = () => {
             ...(access ? { Authorization: `Bearer ${access}` } : {}),
             ...(user?.id ? { 'x-landlord-id': user.id } : {}),
           },
-          body: JSON.stringify({ ...data, ...(user?.id ? { landlord_id: user.id } : {}) })
+          body: JSON.stringify(payload)
         });
         const text = await res.text().catch(() => '');
         let parsed: any; try { parsed = JSON.parse(text); } catch { parsed = null; }
@@ -130,10 +142,17 @@ export const useSubUsers = () => {
           throw new Error('server-proxy failed');
         }
 
+        const wasCustomPassword = data.password && data.password.trim().length > 0;
         const title = parsed.password_reset ? "Sub-User Linked - Password Reset" : "Sub-User Created";
-        const credentialsText = parsed.temporary_password 
-          ? `Email: ${data.email}\nPassword: ${parsed.temporary_password}\n\n${parsed.instructions || 'Share these credentials securely'}`
-          : parsed.message || "Sub-user added successfully";
+        
+        let credentialsText: string;
+        if (wasCustomPassword) {
+          credentialsText = `Sub-user ${parsed.password_reset ? 'linked' : 'created'} successfully with your custom password.\n\nEmail: ${data.email}`;
+        } else if (parsed.temporary_password) {
+          credentialsText = `Email: ${data.email}\nPassword: ${parsed.temporary_password}\n\n${parsed.instructions || 'Share these credentials securely'}`;
+        } else {
+          credentialsText = parsed.message || "Sub-user added successfully";
+        }
         
         toast.success(title, { 
           description: credentialsText,
@@ -196,10 +215,17 @@ export const useSubUsers = () => {
         throw new Error('invoke-result failed');
       }
 
+      const wasCustomPassword = data.password && data.password.trim().length > 0;
       const title = iData.password_reset ? "Sub-User Linked - Password Reset" : "Sub-User Created";
-      const credentialsText = iData.temporary_password 
-        ? `Email: ${data.email}\nPassword: ${iData.temporary_password}\n\n${iData.instructions || 'Share these credentials securely'}`
-        : iData.message || "Sub-user added successfully";
+      
+      let credentialsText: string;
+      if (wasCustomPassword) {
+        credentialsText = `Sub-user ${iData.password_reset ? 'linked' : 'created'} successfully with your custom password.\n\nEmail: ${data.email}`;
+      } else if (iData.temporary_password) {
+        credentialsText = `Email: ${data.email}\nPassword: ${iData.temporary_password}\n\n${iData.instructions || 'Share these credentials securely'}`;
+      } else {
+        credentialsText = iData.message || "Sub-user added successfully";
+      }
       
       toast.success(title, { 
         description: credentialsText,
