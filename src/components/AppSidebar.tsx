@@ -152,12 +152,7 @@ export function AppSidebar() {
 
                   // Filter navigation for sub-users based on permissions
                   if (isSubUser) {
-                    // During landlord trial: Grant full access to all functional items
-                    if (isOnLandlordTrial) {
-                      return true;
-                    }
-                    
-                    // After trial: Check specific permissions
+                    // Check specific permissions
                     if (subUserPermissions) {
                       const permissionMap: Record<string, keyof typeof subUserPermissions> = {
                         "Properties": "manage_properties",
