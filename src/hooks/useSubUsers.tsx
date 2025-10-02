@@ -104,63 +104,39 @@ export const useSubUsers = () => {
     if (!user) return;
 
     try {
-      // Prefer calling our server proxy to avoid FunctionsHttpError bubbling non-2xx
-      let access: string | null = session?.access_token || null;
-      if (!access) {
-        try { const { data: s } = await supabase.auth.getSession(); access = s?.session?.access_token || null; } catch {}
+      // Bypass Edge: use direct client-side insert with RLS
+      const { data: existingProfile, error: lookupErr } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', data.email)
+        .limit(1)
+        .maybeSingle();
+
+      if (lookupErr) throw lookupErr;
+      if (!existingProfile?.id) {
+        throw new Error('User not found. First create the user (Settings → User Management) or use an existing email.');
       }
 
-      const res = await fetch('/api/edge/create-sub-user', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(access ? { Authorization: `Bearer ${access}` } : {}),
-        },
-        body: JSON.stringify(data),
-      });
+      const { error: insertErr } = await supabase
+        .from('sub_users')
+        .insert({
+          landlord_id: user.id,
+          user_id: existingProfile.id,
+          title: data.title || null,
+          permissions: data.permissions,
+          status: 'active',
+        });
 
-      const text = await res.text();
-      let result: any; try { result = JSON.parse(text); } catch { result = { success: false, error: text || 'Unknown error' }; }
+      if (insertErr) throw insertErr;
 
-      if (!res.ok || !result?.success) {
-        const detail = result?.error || result?.details || `${res.status} ${res.statusText}`;
-        throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
-      }
-
-      if (result.temporary_password) {
-        toast.success(
-          `Sub-user created successfully! Share these credentials with them: Email: ${data.email}, Temporary password: ${result.temporary_password}`,
-          { duration: 10000 }
-        );
-      } else {
-        toast.success(
-          `Sub-user added successfully! They can log in using their existing credentials at ${data.email}`,
-          { duration: 6000 }
-        );
-      }
-
+      toast.success('Sub-user added successfully');
       fetchSubUsers();
       return;
-    } catch (primaryError) {
-      console.warn('Proxy create-sub-user failed, falling back to Supabase invoke:', primaryError);
-      try {
-        const { data: result, error } = await supabase.functions.invoke('create-sub-user', {
-          body: data,
-          headers: (session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined),
-        });
-        if (error || !result?.success) {
-          const msg = error?.message || (result as any)?.error || 'Failed to create sub-user';
-          throw new Error(msg);
-        }
-        toast.success('Sub-user created successfully');
-        fetchSubUsers();
-        return;
-      } catch (error) {
-        console.error('create-sub-user failed:', error);
-        const message = error instanceof Error ? error.message : 'Failed to create sub-user';
-        toast.error(message);
-        throw error;
-      }
+    } catch (error) {
+      console.error('create-sub-user failed:', error);
+      const message = (error as any)?.message || 'Failed to create sub-user';
+      toast.error(message);
+      throw error;
     }
   };
 
