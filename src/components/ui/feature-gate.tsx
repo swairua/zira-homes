@@ -2,7 +2,7 @@ import React from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Lock, Crown, Zap, ArrowRight, AlertCircle } from "lucide-react";
+import { Lock, Crown, Zap, ArrowRight, AlertCircle, Sparkles } from "lucide-react";
 import { usePlanFeatureAccess, type Feature } from "@/hooks/usePlanFeatureAccess";
 import { useNavigate } from "react-router-dom";
 
@@ -28,7 +28,7 @@ export function FeatureGate({
   readOnlyMessage = "This feature is read-only in your current plan"
 }: FeatureGateProps) {
   const navigate = useNavigate();
-  const { allowed, is_limited, limit, remaining, plan_name, loading, reason } = usePlanFeatureAccess(feature, currentCount);
+  const { allowed, is_limited, limit, remaining, plan_name, loading, reason, status } = usePlanFeatureAccess(feature, currentCount);
 
   const handleUpgrade = () => {
     navigate("/upgrade");
@@ -48,12 +48,32 @@ export function FeatureGate({
 
   // Feature is allowed - show content
   if (effectiveAllowed) {
+    // Show trial premium access badge for trial users
+    const isTrialUser = status === 'trial';
+    
     return (
       <>
+        {isTrialUser && (
+          <div className="mb-4 p-3 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950 dark:to-blue-950 border border-purple-200 dark:border-purple-800 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                <span className="text-sm font-medium text-purple-900 dark:text-purple-100">
+                  🎉 Premium Feature - Full Access During Trial
+                </span>
+              </div>
+              <Button size="sm" variant="outline" onClick={handleUpgrade}>
+                Keep This Access
+              </Button>
+            </div>
+          </div>
+        )}
+        
         {children}
-        {allowed && is_limited && limit && remaining !== undefined && remaining <= 2 && (
-          <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-            <div className="flex items-center gap-2 text-orange-700">
+        
+        {allowed && is_limited && limit && remaining !== undefined && remaining <= 2 && !isTrialUser && (
+          <div className="mt-4 p-3 bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800 rounded-lg">
+            <div className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
               <AlertCircle className="h-4 w-4" />
               <span className="text-sm font-medium">
                 {remaining === 0 
@@ -66,7 +86,7 @@ export function FeatureGate({
               <Button 
                 size="sm" 
                 variant="outline" 
-                className="mt-2 text-orange-700 border-orange-300 hover:bg-orange-100"
+                className="mt-2 text-orange-700 border-orange-300 hover:bg-orange-100 dark:text-orange-300 dark:border-orange-700 dark:hover:bg-orange-900"
                 onClick={handleUpgrade}
               >
                 Upgrade Plan
