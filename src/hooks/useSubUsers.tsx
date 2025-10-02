@@ -157,15 +157,34 @@ export const useSubUsers = () => {
       const iErr = invokeResp?.error || null;
       const iData = invokeResp?.data ?? invokeResp;
       if (iErr || !iData?.success) {
-        const detailParts: any = {
+        diagnostics.push({
           source: 'invoke-result',
           name: iErr?.name || null,
           status: iErr?.status || iErr?.context?.response?.status || iData?.status || null,
           message: iErr?.message || iData?.error || iData?.message || null,
           details: iErr?.details || iErr?.context || iData?.details || null,
           raw: iData || null,
-        };
-        diagnostics.push(detailParts);
+        });
+
+        // 3) Direct function URL fetch to capture raw body
+        try {
+          const fnUrl = `${(SUPABASE_URL || '').replace(/\/$/, '')}/functions/v1/create-sub-user`;
+          const r = await fetch(fnUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_PUBLISHABLE_KEY,
+              ...(access ? { 'Authorization': `Bearer ${access}` } : {}),
+            },
+            body: JSON.stringify({ ...data })
+          });
+          const txt = await r.text().catch(() => '');
+          let j: any; try { j = JSON.parse(txt); } catch { j = null; }
+          diagnostics.push({ source: 'direct-function', status: r.status, statusText: r.statusText, body: j ?? txt });
+        } catch (dfErr: any) {
+          diagnostics.push({ source: 'direct-function-error', message: dfErr?.message || String(dfErr) });
+        }
+
         throw new Error('invoke-result failed');
       }
 
