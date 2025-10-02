@@ -27,7 +27,7 @@
 
     const safeFetch = async (url, opts) => {
       try {
-        const res = await safeFetch(url, opts);
+        const res = await fetch(url, opts);
         return res;
       } catch (err) {
         console.error('[DEV SERVER] safeFetch network error to', url, 'opts_headers=', opts && opts.headers ? Object.keys(opts.headers) : null, 'error=', err && err.message ? err.message : String(err));
