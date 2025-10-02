@@ -137,6 +137,19 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu className="gap-0.5">
                 {group.items.filter((item) => {
+                  // Always hide administrative items from sub-users
+                  if (isSubUser) {
+                    const subUserBlockedItems = [
+                      "Sub Users",
+                      "Billing Panel", 
+                      "Payment Settings"
+                    ];
+                    
+                    if (subUserBlockedItems.includes(item.title)) {
+                      return false;
+                    }
+                  }
+
                   // Filter navigation for sub-users based on permissions
                   if (isSubUser && subUserPermissions) {
                     const permissionMap: Record<string, keyof typeof subUserPermissions> = {
@@ -215,8 +228,8 @@ export function AppSidebar() {
             <SidebarMenu className="gap-0.5">
               {accountNav.items
                 .filter((item) => {
-                  // Hide upgrade for admins only
-                  if (isAdmin && item.title === "Upgrade") {
+                  // Hide upgrade for admins and sub-users
+                  if ((isAdmin || isSubUser) && item.title === "Upgrade") {
                     return false;
                   }
                   return true;
