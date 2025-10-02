@@ -36,7 +36,7 @@ export default function Index() {
       : 0,
     totalExpenses: 0, // Will be fetched separately
     netIncome: data.property_stats.monthly_revenue,
-    activeTenants: data.property_stats.active_tenants ?? data.property_stats.occupied_units, // Prefer tenants RPC count, fallback to occupied units
+    activeTenants: (data.property_stats as any).active_tenants ?? data.property_stats.occupied_units, // Prefer tenants RPC count, fallback to occupied units
     maintenanceRequests: data?.pending_maintenance?.length || 0
   } : null;
 

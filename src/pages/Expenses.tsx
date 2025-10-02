@@ -65,10 +65,7 @@ const Expenses = () => {
   }
 
   // Surface fetch errors prominently so we can see RLS/permission failures
-
-  if ((errorsExists => false) && false) {
-    /* placeholder */
-  }
+  // (Error handling is done in the individual queries)
 
   const getPeriodDates = (period: string) => {
     const now = new Date();
