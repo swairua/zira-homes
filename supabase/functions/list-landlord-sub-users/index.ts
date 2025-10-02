@@ -14,32 +14,45 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     
-    // Get auth header from request
+    // Get auth header from request and extract token
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      throw new Error('Missing authorization header');
-    }
-
-    // Create client with service role for data fetching
-    const supabaseService = createClient(supabaseUrl, supabaseServiceKey);
-    
-    // Create client with user token for authentication
-    const supabaseClient = createClient(
-      supabaseUrl, 
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    // Verify the user is authenticated
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !user) {
-      console.error('Auth error:', userError);
+      console.error('Missing Authorization header');
       return new Response(
-        JSON.stringify({ success: false, error: 'Unauthorized' }),
+        JSON.stringify({ success: false, error: 'Unauthorized: missing token' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Extract the JWT token from "Bearer <token>"
+    const token = authHeader.replace('Bearer ', '').trim();
+    if (!token) {
+      console.error('Empty token in Authorization header');
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized: invalid token format' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Token present:', !!token);
+
+    // Create client with anon key to verify the user's JWT
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+
+    // Verify the user is authenticated by passing the token explicitly
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+    if (userError || !user) {
+      console.error('Auth error:', userError?.message || 'No user found');
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized: invalid or expired token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Create service role client for data fetching (bypasses RLS)
+    const supabaseService = createClient(supabaseUrl, supabaseServiceKey);
 
     console.log('Fetching sub-users for landlord:', user.id);
 
