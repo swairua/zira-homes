@@ -212,6 +212,23 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
+    // Assign SubUser role in user_roles table
+    const { error: roleError } = await supabase
+      .from('user_roles')
+      .insert({
+        user_id: userId,
+        role: 'SubUser'
+      })
+      .select()
+      .single();
+
+    if (roleError) {
+      console.warn('Failed to assign SubUser role (non-critical):', roleError);
+      // Don't fail the entire operation if role assignment fails
+    } else {
+      console.log('SubUser role assigned successfully to user:', userId);
+    }
+
     const responseMessage = isNewUser
       ? 'Sub-user created successfully with new account'
       : 'Sub-user created successfully with existing account';

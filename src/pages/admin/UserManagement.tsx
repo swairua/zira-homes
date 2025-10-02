@@ -41,6 +41,13 @@ interface UserProfile {
     trial_end_date?: string;
     daysRemaining: number;
   };
+  sub_user_info?: {
+    landlord_id: string;
+    landlord_name: string;
+    landlord_email: string;
+    title: string | null;
+    permissions: Record<string, boolean>;
+  };
 }
 
 interface AddUserFormData {
@@ -117,13 +124,35 @@ const UserManagement = () => {
 
       if (error) throw error;
       
-      // Fetch user roles and subscriptions only for the current page
+      // Fetch user roles, subscriptions, and sub-user info for the current page
       const usersWithRolesAndSubscriptions = await Promise.all(
         (data || []).map(async (user) => {
           const { data: roles } = await supabase
             .from("user_roles")
             .select("role")
             .eq("user_id", user.id);
+          
+          // Check if user is a sub-user
+          let subUserInfo = null;
+          const isSubUser = roles?.some(r => r.role === 'SubUser');
+          if (isSubUser) {
+            const { data: subUserData } = await supabase
+              .from("admin_sub_user_view")
+              .select("*")
+              .eq("user_id", user.id)
+              .eq("status", "active")
+              .maybeSingle();
+            
+            if (subUserData) {
+              subUserInfo = {
+                landlord_id: subUserData.landlord_id,
+                landlord_name: `${subUserData.landlord_first_name || ''} ${subUserData.landlord_last_name || ''}`.trim(),
+                landlord_email: subUserData.landlord_email,
+                title: subUserData.title,
+                permissions: subUserData.permissions as Record<string, boolean>
+              };
+            }
+          }
           
           // Check if user has property-related role
           const propertyRoles = ['Landlord', 'Manager', 'Agent'];
@@ -156,7 +185,8 @@ const UserManagement = () => {
           return {
             ...user,
             user_roles: roles || [],
-            subscription
+            subscription,
+            sub_user_info: subUserInfo
           };
         })
       );
@@ -770,6 +800,7 @@ const UserManagement = () => {
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Parent Landlord</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Trial Status</TableHead>
                   <TableHead>Actions</TableHead>
@@ -778,13 +809,13 @@ const UserManagement = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-4">
+                    <TableCell colSpan={8} className="text-center py-4">
                       Loading users...
                     </TableCell>
                   </TableRow>
                 ) : users.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-4">
+                    <TableCell colSpan={8} className="text-center py-4">
                       No users found
                     </TableCell>
                   </TableRow>
@@ -820,6 +851,21 @@ const UserManagement = () => {
                             ))}
                           </SelectContent>
                         </Select>
+                      </TableCell>
+                      <TableCell>
+                        {user.sub_user_info ? (
+                          <div className="flex flex-col gap-1">
+                            <span className="font-medium text-sm">{user.sub_user_info.landlord_name}</span>
+                            <span className="text-xs text-muted-foreground">{user.sub_user_info.landlord_email}</span>
+                            {user.sub_user_info.title && (
+                              <Badge variant="outline" className="w-fit text-xs">
+                                {user.sub_user_info.title}
+                              </Badge>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        )}
                       </TableCell>
                        <TableCell>
                          <Badge 

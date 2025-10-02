@@ -307,7 +307,7 @@ const SubUserManagement = () => {
                         </div>
                       </TableCell>
                       <TableCell>{subUser.profiles?.email}</TableCell>
-                      <TableCell>-</TableCell>
+                      <TableCell>{subUser.title || '-'}</TableCell>
                       <TableCell>
                         <div className="flex gap-1 flex-wrap">
                           <Badge variant="outline" className="text-xs">
