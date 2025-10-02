@@ -95,10 +95,14 @@ export const usePermissions = () => {
 
   const hasPermission = useCallback((permission: keyof SubUserPermissions | string) => {
     if (!permissions) return false;
+    
     // For sub-user permissions
     if (permission in permissions) {
-      return permissions[permission as keyof SubUserPermissions] === true;
+      const value = permissions[permission as keyof SubUserPermissions];
+      // Explicitly treat undefined/null as false
+      return value === true;
     }
+    
     // For admin/other permissions, always return true for non-sub-users
     return !isSubUser;
   }, [permissions, isSubUser]);

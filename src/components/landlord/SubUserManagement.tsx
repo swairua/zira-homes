@@ -38,6 +38,27 @@ interface CreateSubUserFormData {
   };
 }
 
+// Helper to normalize permissions - ensures all 8 permission keys exist
+const normalizePermissions = (permissions: Record<string, boolean>) => {
+  const allPermissions = [
+    'manage_properties',
+    'manage_tenants', 
+    'manage_leases',
+    'manage_maintenance',
+    'manage_payments',
+    'view_reports',
+    'manage_expenses',
+    'send_messages'
+  ];
+  
+  const normalized: Record<string, boolean> = {};
+  allPermissions.forEach(key => {
+    normalized[key] = permissions[key] === true;
+  });
+  
+  return normalized;
+};
+
 const SubUserManagement = () => {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [permissionsDialogOpen, setPermissionsDialogOpen] = useState(false);
@@ -65,7 +86,12 @@ const SubUserManagement = () => {
 
   const onCreateSubUser = async (data: CreateSubUserFormData) => {
     try {
-      await createSubUser(data);
+      // Normalize permissions before sending
+      const normalizedData = {
+        ...data,
+        permissions: normalizePermissions(data.permissions as any)
+      };
+      await createSubUser(normalizedData);
       setCreateDialogOpen(false);
       reset();
     } catch (error) {
@@ -86,7 +112,9 @@ const SubUserManagement = () => {
     if (!selectedSubUser) return;
     
     try {
-      await updateSubUserPermissions(selectedSubUser.id, newPermissions);
+      // Normalize permissions before updating
+      const normalizedPermissions = normalizePermissions(newPermissions);
+      await updateSubUserPermissions(selectedSubUser.id, normalizedPermissions);
       setPermissionsDialogOpen(false);
       setSelectedSubUser(null);
     } catch (error) {

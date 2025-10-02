@@ -25,7 +25,7 @@ import { useTrialManagement } from "@/hooks/useTrialManagement";
 export function AppSidebar() {
   const { signOut } = useAuth();
   const { open } = useSidebar();
-  const { isAdmin, isLandlord, isManager, isAgent, isSubUser, subUserPermissions, loading } = useRole();
+  const { isAdmin, isLandlord, isManager, isAgent, isSubUser, subUserPermissions, isOnLandlordTrial, loading } = useRole();
   const { trialStatus } = useTrialManagement();
 
   // Feature access hooks
@@ -151,22 +151,31 @@ export function AppSidebar() {
                   }
 
                   // Filter navigation for sub-users based on permissions
-                  if (isSubUser && subUserPermissions) {
-                    const permissionMap: Record<string, keyof typeof subUserPermissions> = {
-                      "Properties": "manage_properties",
-                      "Tenants": "manage_tenants",
-                      "Leases": "manage_leases",
-                      "Maintenance": "manage_maintenance",
-                      "Payments": "manage_payments",
-                      "Reports": "view_reports",
-                      "Expenses": "manage_expenses",
-                      "Email Templates": "send_messages",
-                      "Message Templates": "send_messages",
-                    };
+                  if (isSubUser) {
+                    // During landlord trial: Grant full access to all functional items
+                    if (isOnLandlordTrial) {
+                      return true;
+                    }
                     
-                    const requiredPermission = permissionMap[item.title];
-                    if (requiredPermission && !subUserPermissions[requiredPermission]) {
-                      return false;
+                    // After trial: Check specific permissions
+                    if (subUserPermissions) {
+                      const permissionMap: Record<string, keyof typeof subUserPermissions> = {
+                        "Properties": "manage_properties",
+                        "Tenants": "manage_tenants",
+                        "Leases": "manage_leases",
+                        "Maintenance": "manage_maintenance",
+                        "Payments": "manage_payments",
+                        "Reports": "view_reports",
+                        "Expenses": "manage_expenses",
+                        "Email Templates": "send_messages",
+                        "Message Templates": "send_messages",
+                      };
+                      
+                      const requiredPermission = permissionMap[item.title];
+                      // Explicitly check for true (treat undefined/missing as false)
+                      if (requiredPermission && subUserPermissions[requiredPermission] !== true) {
+                        return false;
+                      }
                     }
                   }
                   return true;
