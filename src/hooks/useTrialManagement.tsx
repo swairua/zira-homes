@@ -31,7 +31,8 @@ export function useTrialManagement() {
   }, [user]);
 
   const checkTrialStatus = async () => {
-    console.log('🔄 useTrialManagement: Starting checkTrialStatus for user:', user?.id);
+    const timestamp = new Date().toISOString();
+    console.log(`🔄 [${timestamp}] useTrialManagement: Starting checkTrialStatus for user:`, user?.id);
     
     if (!user) {
       console.log('❌ useTrialManagement: No user found');
@@ -40,6 +41,19 @@ export function useTrialManagement() {
     }
 
     try {
+      // Try to load cached trial status for immediate display
+      const cachedStatus = localStorage.getItem(`trial-status-${user.id}`);
+      if (cachedStatus) {
+        try {
+          const parsed = JSON.parse(cachedStatus);
+          console.log('📦 useTrialManagement: Loaded cached status:', parsed);
+          setTrialStatus(parsed.trialStatus);
+          setTrialDaysRemaining(parsed.trialDaysRemaining);
+          setIsTrialUser(parsed.isTrialUser);
+        } catch (e) {
+          console.error('❌ Failed to parse cached trial status:', e);
+        }
+      }
       console.log('🔍 useTrialManagement: Checking user role...');
       // Check user role first
       const { data: userRoles } = await supabase
@@ -194,6 +208,18 @@ export function useTrialManagement() {
 
         console.log('🎯 useTrialManagement: Setting final trial status:', finalTrialStatus);
         setTrialStatus(finalTrialStatus);
+
+        // Cache the trial status for consistent display
+        try {
+          localStorage.setItem(`trial-status-${user.id}`, JSON.stringify({
+            trialStatus: finalTrialStatus,
+            trialDaysRemaining: Math.max(0, daysRemaining),
+            isTrialUser: isTrialRelated,
+            timestamp: new Date().toISOString()
+          }));
+        } catch (e) {
+          console.error('❌ Failed to cache trial status:', e);
+        }
 
         // Show onboarding if not completed
         if (!subscription.onboarding_completed) {
