@@ -410,15 +410,9 @@ const SubUserManagement = () => {
                       <TableCell>{subUser.title || '-'}</TableCell>
                       <TableCell>
                         <div className="flex gap-1 flex-wrap">
-                          {trialStatus?.isActive ? (
-                            <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-700">
-                              Full Access (Trial)
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-xs">
-                              {getPermissionCount(subUser.permissions)} permissions
-                            </Badge>
-                          )}
+                          <Badge variant="outline" className="text-xs">
+                            {getPermissionCount(subUser.permissions)} permissions
+                          </Badge>
                         </div>
                       </TableCell>
                       <TableCell className="text-sm">

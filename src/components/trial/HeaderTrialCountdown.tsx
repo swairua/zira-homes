@@ -33,8 +33,8 @@ export function HeaderTrialCountdown() {
             className={`px-2 py-0.5 text-[10px] sm:text-xs shadow-md bg-gradient-to-r from-purple-600 to-blue-600 text-white border-0 ${isUrgent ? 'animate-pulse' : ''}`}
           >
             <Crown className="h-3 w-3 mr-1 animate-pulse" />
-            <span className="sm:hidden">{trialDaysRemaining}d Premium</span>
-            <span className="hidden sm:inline">{trialDaysRemaining} {trialDaysRemaining === 1 ? 'Day' : 'Days'} Premium Trial</span>
+            <span className="sm:hidden">{trialDaysRemaining}d Trial</span>
+            <span className="hidden sm:inline">{trialDaysRemaining} {trialDaysRemaining === 1 ? 'Day' : 'Days'} Trial</span>
           </Badge>
         </button>
       </div>
