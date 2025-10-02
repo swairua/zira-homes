@@ -18,6 +18,7 @@ import {
   CheckCircle2
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { formatAmount } from "@/utils/currency";
 import { format, differenceInDays } from "date-fns";
 import { DisabledActionWrapper } from "@/components/feature-access/DisabledActionWrapper";
@@ -34,6 +35,10 @@ interface LeaseData {
   tenant_email?: string;
   days_until_expiry: number;
   status: string;
+  // Optional metadata used for filtering visibility
+  tenant_user_id?: string;
+  property_owner_id?: string;
+  property_manager_id?: string;
 }
 
 interface LeaseExpiryManagerProps {
@@ -52,6 +57,7 @@ export function LeaseExpiryManager({
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedTimeframe, setSelectedTimeframe] = useState(timeframe);
   const [selectedLeases, setSelectedLeases] = useState<string[]>([]);
+  const { user } = useAuth();
 
   const timeframes = [
     { days: 30, label: "30 days", urgent: true },
@@ -105,21 +111,55 @@ export function LeaseExpiryManager({
         leasesData = Array.isArray(reportData?.table) ? reportData.table : [];
         if (!Array.isArray(leasesData) || leasesData.length === 0) {
           const filters = { gte: startDate, lte: endDate } as const;
-          const { data: d2, error: e2 } = await (supabase as any)
+          // 1) Fetch leases only (no heavy joins)
+          const { data: leaseRows, error: leaseErr } = await (supabase as any)
             .from('leases')
-            .select('id, lease_end_date, monthly_rent, status, unit_id, tenant_id, tenants:tenants!leases_tenant_id_fkey(first_name,last_name,email), units:units!leases_unit_id_fkey(unit_number, properties:properties!units_property_id_fkey(name))')
+            .select('id, lease_end_date, monthly_rent, status, unit_id, tenant_id')
             .gte('lease_end_date', filters.gte)
-            .lte('lease_end_date', filters.lte);
-          if (!e2) {
-            leasesData = (d2 || []).map((l: any) => ({
-              property_name: l.units?.properties?.name,
-              unit_number: l.units?.unit_number,
-              tenant_name: `${l.tenants?.first_name || ''} ${l.tenants?.last_name || ''}`.trim(),
-              tenant_email: l.tenants?.email,
-              lease_end_date: l.lease_end_date,
-              monthly_rent: l.monthly_rent,
-              status: l.status
-            }));
+            .lte('lease_end_date', filters.lte)
+            .order('lease_end_date', { ascending: true })
+            .limit(500);
+          if (!leaseErr) {
+            const tenantIds = [...new Set((leaseRows || []).map((l: any) => l.tenant_id).filter(Boolean))];
+            const unitIds = [...new Set((leaseRows || []).map((l: any) => l.unit_id).filter(Boolean))];
+
+            // 2) Batch fetch tenants and units (include tenant.user_id)
+            const [tenantsRes, unitsRes] = await Promise.all([
+              (supabase as any).from('tenants').select('id, user_id, first_name, last_name, email').in('id', tenantIds),
+              (supabase as any).from('units').select('id, unit_number, property_id').in('id', unitIds)
+            ]);
+
+            const tenantsMap = new Map((tenantsRes?.data || []).map((t: any) => [t.id, t]));
+            const unitsData = unitsRes?.data || [];
+            const propertyIds = [...new Set(unitsData.map((u: any) => u.property_id).filter(Boolean))];
+
+            // 3) Batch fetch properties (include owner/manager)
+            const { data: propsData } = await (supabase as any)
+              .from('properties')
+              .select('id, name, owner_id, manager_id')
+              .in('id', propertyIds);
+            const propsMap = new Map((propsData || []).map((p: any) => [p.id, p]));
+
+            // 4) Compose results
+            const unitsMap = new Map(unitsData.map((u: any) => [u.id, u]));
+            leasesData = (leaseRows || []).map((l: any) => {
+              const tenant = tenantsMap.get(l.tenant_id);
+              const unit = unitsMap.get(l.unit_id);
+              const prop = unit ? propsMap.get(unit.property_id) : null;
+              return {
+                id: l.id,
+                property_name: prop?.name,
+                unit_number: unit?.unit_number,
+                tenant_name: `${tenant?.first_name || ''} ${tenant?.last_name || ''}`.trim(),
+                tenant_email: tenant?.email,
+                tenant_user_id: tenant?.user_id,
+                lease_end_date: l.lease_end_date,
+                monthly_rent: l.monthly_rent,
+                status: l.status,
+                property_owner_id: prop?.owner_id,
+                property_manager_id: prop?.manager_id
+              };
+            });
           }
         }
       } catch (rpcErr) {
@@ -127,28 +167,87 @@ export function LeaseExpiryManager({
         try {
           const filters = { gte: startDate, lte: endDate } as const;
 
-          const { data, error } = await (supabase as any)
+          const { data: leaseRows, error: leaseErr } = await (supabase as any)
             .from('leases')
-            .select('id, lease_end_date, monthly_rent, status, unit_id, tenant_id, tenants:tenants!leases_tenant_id_fkey(first_name,last_name,email), units:units!leases_unit_id_fkey(unit_number, properties:properties!units_property_id_fkey(name))')
+            .select('id, lease_end_date, monthly_rent, status, unit_id, tenant_id')
             .gte('lease_end_date', filters.gte)
-            .lte('lease_end_date', filters.lte);
-          if (error) throw error;
-          leasesData = (data || []).map((l: any) => ({
-            property_name: l.units?.properties?.name,
-            unit_number: l.units?.unit_number,
-            tenant_name: `${l.tenants?.first_name || ''} ${l.tenants?.last_name || ''}`.trim(),
-            tenant_email: l.tenants?.email,
-            lease_end_date: l.lease_end_date,
-            monthly_rent: l.monthly_rent,
-            status: l.status
-          }));
+            .lte('lease_end_date', filters.lte)
+            .order('lease_end_date', { ascending: true })
+            .limit(500);
+          if (leaseErr) throw leaseErr;
+
+          const tenantIds = [...new Set((leaseRows || []).map((l: any) => l.tenant_id).filter(Boolean))];
+          const unitIds = [...new Set((leaseRows || []).map((l: any) => l.unit_id).filter(Boolean))];
+
+          const [tenantsRes, unitsRes] = await Promise.all([
+            (supabase as any).from('tenants').select('id, user_id, first_name, last_name, email').in('id', tenantIds),
+            (supabase as any).from('units').select('id, unit_number, property_id').in('id', unitIds)
+          ]);
+
+          const tenantsMap = new Map((tenantsRes?.data || []).map((t: any) => [t.id, t]));
+          const unitsData = unitsRes?.data || [];
+          const propertyIds = [...new Set(unitsData.map((u: any) => u.property_id).filter(Boolean))];
+          const { data: propsData } = await (supabase as any)
+            .from('properties')
+            .select('id, name, owner_id, manager_id')
+            .in('id', propertyIds);
+          const propsMap = new Map((propsData || []).map((p: any) => [p.id, p]));
+          const unitsMap = new Map(unitsData.map((u: any) => [u.id, u]));
+
+          leasesData = (leaseRows || []).map((l: any) => {
+            const tenant = tenantsMap.get(l.tenant_id);
+            const unit = unitsMap.get(l.unit_id);
+            const prop = unit ? propsMap.get(unit.property_id) : null;
+            return {
+              id: l.id,
+              property_name: prop?.name,
+              unit_number: unit?.unit_number,
+              tenant_name: `${tenant?.first_name || ''} ${tenant?.last_name || ''}`.trim(),
+              tenant_email: tenant?.email,
+              tenant_user_id: tenant?.user_id,
+              lease_end_date: l.lease_end_date,
+              monthly_rent: l.monthly_rent,
+              status: l.status,
+              property_owner_id: prop?.owner_id,
+              property_manager_id: prop?.manager_id
+            };
+          });
         } catch (srvErr) {
           throw srvErr;
         }
       }
 
+      // If RPC returned rows without IDs, fetch a lightweight list of leases in the same window
+      // and map IDs by (property_name, unit_number, lease_end_date)
+      if (Array.isArray(leasesData) && leasesData.length > 0 && !leasesData.some((l: any) => l.id)) {
+        const filters = { gte: startDate, lte: endDate } as const;
+        const { data: leaseList } = await (supabase as any)
+          .from('leases')
+          .select('id, lease_end_date, units:units!leases_unit_id_fkey(unit_number, properties:properties!units_property_id_fkey(name))')
+          .gte('lease_end_date', filters.gte)
+          .lte('lease_end_date', filters.lte);
+
+        const makeKey = (p?: string, u?: string, d?: string) => {
+          const dd = d ? new Date(d).toISOString().split('T')[0] : '';
+          return `${(p || '').trim()}|${(u || '').trim()}|${dd}`;
+        };
+
+        const idMap = new Map<string, string>();
+        (leaseList || []).forEach((row: any) => {
+          const key = makeKey(row?.units?.properties?.name, row?.units?.unit_number, row?.lease_end_date);
+          if (row?.id) idMap.set(key, row.id);
+        });
+
+        leasesData = leasesData.map((l: any) => {
+          const key = makeKey(l.property_name || l.property, l.unit_number || l.unit, l.lease_end_date);
+          const found = idMap.get(key);
+          return found ? { ...l, id: found } : l;
+        });
+      }
+
       const today = new Date();
       const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
       let normalized = leasesData
         .map((l: any) => {
           const end = l?.lease_end_date ? new Date(l.lease_end_date) : null;
@@ -162,12 +261,25 @@ export function LeaseExpiryManager({
             unit_number: l.unit_number || l.unit || '',
             tenant_name: l.tenant_name || `${l.first_name || ''} ${l.last_name || ''}`.trim(),
             tenant_email: l.tenant_email || l.email || undefined,
+            tenant_user_id: (l as any).tenant_user_id || undefined,
+            property_owner_id: (l as any).property_owner_id || undefined,
+            property_manager_id: (l as any).property_manager_id || undefined,
             days_until_expiry: days,
             status: l.status || 'active'
-          } as LeaseData;
+          } as any as LeaseData;
         })
-        .filter((l: LeaseData) => l.days_until_expiry >= 0 && l.days_until_expiry <= selectedTimeframe);
+        .filter((l: any) => l.days_until_expiry >= 0 && l.days_until_expiry <= selectedTimeframe);
 
+      // Restrict to leases visible to the authenticated user: tenant's own leases or properties they own/manage
+      if (user) {
+        normalized = normalized.filter((l: any) => (
+          l.tenant_user_id === user.id ||
+          l.property_owner_id === user.id ||
+          l.property_manager_id === user.id
+        ));
+      } else {
+        normalized = [];
+      }
 
       normalized.sort((a: LeaseData, b: LeaseData) => a.days_until_expiry - b.days_until_expiry);
       setLeases(normalized);

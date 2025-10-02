@@ -16,13 +16,23 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
   }
 });
 
+// Detect offline state in browsers to provide clearer errors for network failures
+const isBrowser = typeof window !== 'undefined' && typeof navigator !== 'undefined';
+function isOffline(): boolean {
+  try {
+    return isBrowser && 'onLine' in navigator && !navigator.onLine;
+  } catch (e) {
+    return false;
+  }
+}
+
 // Enhance functions.invoke with multi-fallback and detailed error reporting
 try {
   const originalInvoke = (supabase.functions as any).invoke.bind(supabase.functions);
   (supabase.functions as any).invoke = async (name: string, options?: any) => {
     const body = options?.body ?? {};
 
-    // Prepare headers BEFORE first attempt so the function receives correct auth/force flags
+    // Prepare headers BEFORE attempts so the function receives correct auth/force flags
     const extraHeaders: Record<string, string> = { ...(options?.headers || {}) };
     let proxyFailedDetails: any = null;
     try {
@@ -32,19 +42,36 @@ try {
         extraHeaders['Authorization'] = `Bearer ${access}`;
       }
       if (body?.force || name === 'create-tenant-account' || name === 'create-user-with-role') {
-        // Always include force header for these flows to avoid anon-key-as-JWT issues
         extraHeaders['x-force-create'] = 'true';
       }
     } catch {}
 
+    // For create-sub-user, prefer server proxy first (ensures service-role operations)
+    if (name === 'create-sub-user') {
+      try {
+        if (isOffline()) return { data: null, error: { message: 'Network offline — check your connection' } } as any;
+        const res = await fetch(`/api/edge/${name}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...extraHeaders },
+          body: JSON.stringify(body)
+        });
+        const text = await res.text();
+        let data: any; try { data = JSON.parse(text); } catch { data = text; }
+        if (res.ok) return { data, error: null } as any;
+        proxyFailedDetails = { status: res.status, details: data };
+      } catch (e: any) {
+        proxyFailedDetails = e?.message || String(e);
+      }
+    }
+
     try {
+      if (isOffline()) return { data: null, error: { message: 'Network offline — check your connection' } } as any;
       const result = await originalInvoke(name, { ...(options || {}), headers: { ...(options?.headers || {}), ...extraHeaders } });
       if (result?.error) throw result.error;
       return result;
     } catch (err: any) {
       // Try server proxy fallback using service role or anon
       try {
-        const body = options?.body ?? {};
         const res = await fetch(`/api/edge/${name}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...extraHeaders },
@@ -55,13 +82,13 @@ try {
         if (res.ok) {
           return { data, error: null } as any;
         } else {
-          proxyFailedDetails = { status: res.status, details: data };
+          proxyFailedDetails = proxyFailedDetails || { status: res.status, details: data };
         }
       } catch (fallbackErr: any) {
-        proxyFailedDetails = fallbackErr?.message || String(fallbackErr);
+        proxyFailedDetails = proxyFailedDetails || (fallbackErr?.message || String(fallbackErr));
       }
 
-      // 2) Direct call to Supabase Edge Function with publishable key
+      // Direct call to Supabase Edge Function with publishable key
       try {
         const fnUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/${name}`;
         const res = await fetch(fnUrl, {
@@ -69,7 +96,6 @@ try {
           headers: {
             'Content-Type': 'application/json',
             'apikey': SUPABASE_PUBLISHABLE_KEY,
-            // Prefer user JWT if available; else use anon
             'Authorization': extraHeaders['Authorization'] || `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
             ...extraHeaders,
           },
@@ -99,6 +125,143 @@ try {
   (supabase as any).rpc = (fn: string, params?: any) => {
     const exec = async () => {
       try {
+        if (isOffline()) return { data: null, error: { message: 'Network offline — check your connection' } };
+        const res = await origRpc(fn, params);
+        if (res?.error && String(res.error?.message || '').toLowerCase().includes('failed to fetch')) {
+          throw res.error;
+        }
+        return res;
+      } catch (err: any) {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const access = sessionData?.session?.access_token;
+          const r = await fetch(`/api/rpc/${encodeURIComponent(fn)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(access ? { Authorization: `Bearer ${access}` } : {}) },
+            body: JSON.stringify(params || {})
+          });
+          const text = await r.text();
+          let data: any; try { data = JSON.parse(text); } catch { data = text; }
+          if (r.ok) return { data, error: null };
+          return { data: null, error: data?.error || data };
+        } catch (e) {
+          return { data: null, error: err || e };
+        }
+      }
+    };
+
+    const wrapper: any = {
+      maybeSingle: () => exec(),
+      single: () => exec(),
+      then: (onFulfilled: any, onRejected: any) => exec().then(onFulfilled, onRejected),
+      catch: (onRejected: any) => exec().catch(onRejected),
+      finally: (onFinally: any) => exec().finally(onFinally),
+    };
+
+    return wrapper;
+  };
+} catch {}
+
+// Enhance functions.invoke with multi-fallback and detailed error reporting
+try {
+  const originalInvoke = (supabase.functions as any).invoke.bind(supabase.functions);
+  (supabase.functions as any).invoke = async (name: string, options?: any) => {
+    const body = options?.body ?? {};
+
+    // Prepare headers BEFORE attempts so the function receives correct auth/force flags
+    const extraHeaders: Record<string, string> = { ...(options?.headers || {}) };
+    let proxyFailedDetails: any = null;
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const access = sessionData?.session?.access_token;
+      if (access) {
+        extraHeaders['Authorization'] = `Bearer ${access}`;
+      }
+      if (body?.force || name === 'create-tenant-account' || name === 'create-user-with-role') {
+        extraHeaders['x-force-create'] = 'true';
+      }
+    } catch {}
+
+    // For create-sub-user, prefer server proxy first (ensures service-role operations)
+    if (name === 'create-sub-user') {
+      try {
+        if (isOffline()) return { data: null, error: { message: 'Network offline — check your connection' } } as any;
+        const res = await fetch(`/api/edge/${name}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...extraHeaders },
+          body: JSON.stringify(body)
+        });
+        const text = await res.text();
+        let data: any; try { data = JSON.parse(text); } catch { data = text; }
+        if (res.ok) return { data, error: null } as any;
+        proxyFailedDetails = { status: res.status, details: data };
+      } catch (e: any) {
+        proxyFailedDetails = e?.message || String(e);
+      }
+    }
+
+    try {
+      if (isOffline()) return { data: null, error: { message: 'Network offline — check your connection' } } as any;
+      const result = await originalInvoke(name, { ...(options || {}), headers: { ...(options?.headers || {}), ...extraHeaders } });
+      if (result?.error) throw result.error;
+      return result;
+    } catch (err: any) {
+      // Try server proxy fallback using service role or anon
+      try {
+        const res = await fetch(`/api/edge/${name}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...extraHeaders },
+          body: JSON.stringify(body)
+        });
+        const text = await res.text();
+        let data: any; try { data = JSON.parse(text); } catch { data = text; }
+        if (res.ok) {
+          return { data, error: null } as any;
+        } else {
+          proxyFailedDetails = proxyFailedDetails || { status: res.status, details: data };
+        }
+      } catch (fallbackErr: any) {
+        proxyFailedDetails = proxyFailedDetails || (fallbackErr?.message || String(fallbackErr));
+      }
+
+      // Direct call to Supabase Edge Function with publishable key
+      try {
+        const fnUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/${name}`;
+        const res = await fetch(fnUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_PUBLISHABLE_KEY,
+            'Authorization': extraHeaders['Authorization'] || `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+            ...extraHeaders,
+          },
+          body: JSON.stringify(body)
+        });
+        const text = await res.text();
+        let data: any; try { data = JSON.parse(text); } catch { data = text; }
+        if (res.ok) {
+          return { data, error: null } as any;
+        } else {
+          return { data: null as any, error: { message: 'Edge function fetch failed', status: res.status, details: data, proxyFailedDetails } };
+        }
+      } catch (directErr: any) {
+        const parts: string[] = [];
+        const e = directErr || err;
+        if (e?.message) parts.push(e.message);
+        if (e?.details) parts.push(e.details);
+        if (e?.hint) parts.push(`hint: ${e.hint}`);
+        if (proxyFailedDetails) parts.push(`proxy: ${typeof proxyFailedDetails === 'string' ? proxyFailedDetails : JSON.stringify(proxyFailedDetails)}`);
+        return { data: null as any, error: { message: parts.join(' | ') || String(e) } };
+      }
+    }
+  };
+
+  // RPC fallback via proxy to bypass browser CORS and keep builder-like API
+  const origRpc = (supabase as any).rpc.bind(supabase);
+  (supabase as any).rpc = (fn: string, params?: any) => {
+    const exec = async () => {
+      try {
+        if (isOffline()) return { data: null, error: { message: 'Network offline — check your connection' } };
         const res = await origRpc(fn, params);
         if (res?.error && String(res.error?.message || '').toLowerCase().includes('failed to fetch')) {
           throw res.error;

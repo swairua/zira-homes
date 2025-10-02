@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
@@ -42,7 +42,7 @@ export interface CreateSubUserData {
 }
 
 export const useSubUsers = () => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [subUsers, setSubUsers] = useState<SubUser[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -103,43 +103,128 @@ export const useSubUsers = () => {
   const createSubUser = async (data: CreateSubUserData) => {
     if (!user) return;
 
+    let access: string | null = session?.access_token || null;
+    if (!access) {
+      try { const { data: s } = await supabase.auth.getSession(); access = s?.session?.access_token || null; } catch {}
+    }
+
+    const diagnostics: any[] = [];
+
     try {
-      console.log('Creating sub-user with edge function:', data);
-      
-      const { data: result, error } = await supabase.functions.invoke('create-sub-user', {
-        body: data
-      });
+      // 1) Server proxy (service-role) — richest error details
+      try {
+        const res = await fetch('/api/edge/create-sub-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(access ? { Authorization: `Bearer ${access}` } : {}),
+            ...(user?.id ? { 'x-landlord-id': user.id } : {}),
+          },
+          body: JSON.stringify({ ...data, ...(user?.id ? { landlord_id: user.id } : {}) })
+        });
+        const text = await res.text().catch(() => '');
+        let parsed: any; try { parsed = JSON.parse(text); } catch { parsed = null; }
 
-      if (error) {
-        console.error('Edge function error:', error);
-        throw new Error(error.message || 'Failed to create sub-user');
+        if (!res.ok || !parsed?.success) {
+          diagnostics.push({ source: 'server-proxy', status: res.status, statusText: res.statusText, body: parsed ?? text });
+          throw new Error('server-proxy failed');
+        }
+
+        if (parsed.temporary_password) {
+          toast.success(`Sub-user created successfully! Share these credentials: ${data.email} / ${parsed.temporary_password}`, { duration: 10000 });
+        } else {
+          toast.success(`Sub-user added successfully for ${data.email}`, { duration: 6000 });
+        }
+        fetchSubUsers();
+        return;
+      } catch (e) {}
+
+      // 2) Supabase functions.invoke with explicit auth header
+      let invokeResp: any = null;
+      try {
+        invokeResp = await (supabase.functions as any).invoke('create-sub-user', {
+          body: { ...data },
+          headers: { ...(access ? { Authorization: `Bearer ${access}` } : {}) }
+        });
+      } catch (fnErr: any) {
+        let details = fnErr?.message || 'Edge function invocation failed';
+        try {
+          if (fnErr?.response && typeof fnErr.response.text === 'function') {
+            const txt = await fnErr.response.text();
+            try { const j = JSON.parse(txt); details = j.error || j.message || j.details || JSON.stringify(j); } catch { details = txt; }
+          }
+        } catch {}
+        diagnostics.push({ source: 'invoke-throw', name: fnErr?.name || null, status: fnErr?.status || null, details });
+        throw new Error('invoke-throw');
       }
 
-      if (!result?.success) {
-        throw new Error(result?.error || 'Failed to create sub-user');
+      const iErr = invokeResp?.error || null;
+      const iData = invokeResp?.data ?? invokeResp;
+      if (iErr || !iData?.success) {
+        diagnostics.push({
+          source: 'invoke-result',
+          name: iErr?.name || null,
+          status: iErr?.status || iErr?.context?.response?.status || iData?.status || null,
+          message: iErr?.message || iData?.error || iData?.message || null,
+          details: iErr?.details || iErr?.context || iData?.details || null,
+          raw: iData || null,
+        });
+
+        // 3) Direct function URL fetch to capture raw body
+        try {
+          const fnUrl = `${(SUPABASE_URL || '').replace(/\/$/, '')}/functions/v1/create-sub-user`;
+          const r = await fetch(fnUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_PUBLISHABLE_KEY,
+              ...(access ? { 'Authorization': `Bearer ${access}` } : {}),
+            },
+            body: JSON.stringify({ ...data })
+          });
+          const txt = await r.text().catch(() => '');
+          let j: any; try { j = JSON.parse(txt); } catch { j = null; }
+          diagnostics.push({ source: 'direct-function', status: r.status, statusText: r.statusText, body: j ?? txt });
+        } catch (dfErr: any) {
+          diagnostics.push({ source: 'direct-function-error', message: dfErr?.message || String(dfErr) });
+        }
+
+        throw new Error('invoke-result failed');
       }
 
-      console.log('Sub-user created successfully:', result);
-      
-      // Show appropriate message based on whether temporary password was provided
-      if (result.temporary_password) {
-        toast.success(
-          `Sub-user created successfully! Share these credentials with them: Email: ${data.email}, Temporary password: ${result.temporary_password}`,
-          { duration: 10000 }
-        );
+      if (iData.temporary_password) {
+        toast.success(`Sub-user created successfully! Share these credentials: ${data.email} / ${iData.temporary_password}`, { duration: 10000 });
       } else {
-        toast.success(
-          `Sub-user added successfully! They can log in using their existing credentials at ${data.email}`,
-          { duration: 6000 }
-        );
+        toast.success(`Sub-user added successfully for ${data.email}`, { duration: 6000 });
       }
-      
       fetchSubUsers();
-    } catch (error) {
-      console.error('Error creating sub-user:', error);
-      const message = error instanceof Error ? error.message : 'Failed to create sub-user';
-      toast.error(message);
-      throw error;
+      return;
+    } catch (primaryError: any) {
+      console.error('create-sub-user failed:', primaryError, diagnostics);
+
+      // Friendly ACL hint if backend enforces landlord role
+      let friendly: string | null = null;
+      try {
+        for (const d of diagnostics) {
+          const msg = (d && (d.message || d.statusText)) ? String(d.message || d.statusText) : '';
+          if (/only\s+landlords\s+can\s+create\s+sub-users/i.test(msg)) { friendly = 'Only landlords can create sub-users. Switch to a Landlord account or have an admin assign you the Landlord role.'; break; }
+          const body = (d && d.body) as any;
+          if (typeof body === 'string' && /only\s+landlords\s+can\s+create\s+sub-users/i.test(body)) { friendly = 'Only landlords can create sub-users. Switch to a Landlord account or have an admin assign you the Landlord role.'; break; }
+          if (body && typeof body === 'object') {
+            const inner = (body.error || body.message || body.details || '') + '';
+            if (/only\s+landlords\s+can\s+create\s+sub-users/i.test(inner)) { friendly = 'Only landlords can create sub-users. Switch to a Landlord account or have an admin assign you the Landlord role.'; break; }
+          }
+        }
+      } catch {}
+
+      if (friendly) {
+        toast.error(friendly);
+        throw new Error(friendly);
+      }
+
+      const msg = JSON.stringify({ error: primaryError?.message || 'Failed to create sub-user', diagnostics });
+      toast.error(msg);
+      throw new Error(msg);
     }
   };
 

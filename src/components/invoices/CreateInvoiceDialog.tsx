@@ -234,7 +234,7 @@ export const CreateInvoiceDialog = ({ onInvoiceCreated }: CreateInvoiceDialogPro
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange} modal={false}>
       <DialogTrigger asChild>
         <Button className="bg-accent hover:bg-accent/90">
           <Plus className="h-4 w-4 mr-2" />
@@ -311,6 +311,7 @@ export const CreateInvoiceDialog = ({ onInvoiceCreated }: CreateInvoiceDialogPro
                     <PopoverTrigger asChild>
                       <FormControl>
                         <Button
+                          type="button"
                           variant={"outline"}
                           className={cn(
                             "w-full pl-3 text-left font-normal",

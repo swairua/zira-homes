@@ -25,6 +25,16 @@
       req.on('error', () => resolve(null));
     });
 
+    const safeFetch = async (url, opts) => {
+      try {
+        const res = await fetch(url, opts);
+        return res;
+      } catch (err) {
+        console.error('[DEV SERVER] safeFetch network error to', url, 'opts_headers=', opts && opts.headers ? Object.keys(opts.headers) : null, 'error=', err && err.message ? err.message : String(err));
+        throw err;
+      }
+    };
+
     const handleRpcProxy = async (rpcPath, req, res, mapBody = (b)=>b) => {
       try {
         // Load runtime for defaults
@@ -53,7 +63,7 @@
         };
         if (!headers.Authorization) delete headers.Authorization;
 
-        const response = await fetch(rpcUrl, {
+        const response = await safeFetch(rpcUrl, {
           method: req.method || 'POST',
           headers,
           body: JSON.stringify(rpcBody),
@@ -93,7 +103,7 @@
             if (!serviceRole) return sendJSON(res, 500, { error: 'Supabase service role key not configured' });
 
             const testUrl = supabaseUrl.replace(/\/$/, '') + '/rest/v1/invoices?select=id&limit=1';
-            const response = await fetch(testUrl, { headers: { 'apikey': serviceRole, 'Authorization': `Bearer ${serviceRole}` } });
+            const response = await safeFetch(testUrl, { headers: { 'apikey': serviceRole, 'Authorization': `Bearer ${serviceRole}` } });
             const text = await response.text();
             let data;
             try { data = JSON.parse(text); } catch (e) { data = text; }
@@ -143,6 +153,117 @@
             if (!fnName) return sendJSON(res, 400, { error: 'Function name is required' });
             const body = await parseJSONBody(req) || {};
 
+            // Special-case handling for create-sub-user: implement server-side flow using service role
+            if (fnName === 'create-sub-user') {
+              try {
+                console.log('[DEV SERVER] create-sub-user body:', body);
+                // Validate input
+                const email = (body && body.email) ? String(body.email) : null;
+                const first_name = body?.first_name || '';
+                const last_name = body?.last_name || '';
+                const phone = body?.phone || '0000000000';
+                const permissions = body?.permissions || {};
+                if (!email) return sendJSON(res, 200, { success: false, status: 400, error: 'email is required' });
+
+                // Determine landlord (caller) from Authorization header if present
+                const callerAuth = req.headers['authorization'] || req.headers['Authorization'];
+                let landlordId = null;
+                if (callerAuth) {
+                  try {
+                    const userUrl = supabaseUrl.replace(/\/$/, '') + '/auth/v1/user';
+                    const userRes = await safeFetch(userUrl, { headers: { 'apikey': key, 'Authorization': String(callerAuth) } });
+                    const userText = await userRes.text();
+                    const userData = (() => { try { return JSON.parse(userText); } catch { return null; } })();
+                    landlordId = userData?.id || null;
+                  } catch (e) { console.warn('Failed to fetch caller user info:', e); }
+                }
+
+                // Dev fallback: allow supplying landlord_id in request body or x-landlord-id header
+                if (!landlordId) {
+                  if (body?.landlord_id) {
+                    landlordId = String(body.landlord_id);
+                    console.warn('Using landlord_id from request body as dev fallback:', landlordId);
+                  } else if (req.headers['x-landlord-id']) {
+                    landlordId = String(req.headers['x-landlord-id']);
+                    console.warn('Using x-landlord-id header as dev fallback:', landlordId);
+                  }
+                }
+
+                if (!landlordId) return sendJSON(res, 200, { success: false, status: 401, error: 'Unauthorized: landlord token required' });
+
+                // 1) Check for existing profile by email
+                const profilesUrl = supabaseUrl.replace(/\/$/, '') + `/rest/v1/profiles?select=id,email&email=eq.${encodeURIComponent(email)}`;
+                const profilesRes = await safeFetch(profilesUrl, { headers: { 'apikey': key, 'Authorization': `Bearer ${key}` } });
+                const profilesText = await profilesRes.text();
+                let profilesData; try { profilesData = JSON.parse(profilesText); } catch { profilesData = null; }
+
+                let userId = null;
+                let tempPassword = null;
+                if (Array.isArray(profilesData) && profilesData.length > 0 && profilesData[0]?.id) {
+                  userId = profilesData[0].id;
+                } else {
+                  // 2) Create auth user via Admin API
+                  const adminCreateUrl = supabaseUrl.replace(/\/$/, '') + '/auth/v1/admin/users';
+                  tempPassword = `TempPass${Math.floor(Math.random() * 10000)}!`;
+                  const createResp = await safeFetch(adminCreateUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}` },
+                    body: JSON.stringify({ email, password: tempPassword, email_confirm: true, user_metadata: { first_name, last_name, phone, created_by: landlordId, role: 'sub_user' } })
+                  });
+                  const createText = await createResp.text();
+                  let createData; try { createData = JSON.parse(createText); } catch { createData = null; }
+                  if (!createResp.ok) {
+                    return sendJSON(res, 200, { success: false, status: createResp.status, error: 'Failed to create auth user', details: createData });
+                  }
+                  // createData should contain id
+                  userId = createData?.id || createData?.user?.id || null;
+                  if (!userId) return sendJSON(res, 200, { success: false, status: 500, error: 'Auth user created but no id returned', details: createData });
+
+                  // 3) Create profile record
+                  const profilesInsertUrl = supabaseUrl.replace(/\/$/, '') + '/rest/v1/profiles';
+                  const profilePayload = { id: userId, first_name, last_name, email, phone };
+                  console.log('[DEV SERVER] Creating profile with payload:', profilePayload);
+                  const profileResp = await safeFetch(profilesInsertUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}`, 'Prefer': 'return=representation' },
+                    body: JSON.stringify(profilePayload)
+                  });
+                  const profileText = await profileResp.text();
+                  let profileData; try { profileData = JSON.parse(profileText); } catch { profileData = null; }
+                  if (!profileResp.ok) {
+                    console.warn('[DEV SERVER] Profile creation failed, continuing with created auth user. Details:', profileData);
+                    // Do not abort; continue to create sub_user record even if profile creation failed in dev
+                  }
+                }
+
+                // 4) Insert sub_users record
+                const subUsersUrl = supabaseUrl.replace(/\/$/, '') + '/rest/v1/sub_users';
+                const insertPayload = {
+                  landlord_id: landlordId,
+                  user_id: userId,
+                  title: body.title || null,
+                  permissions: permissions,
+                  status: 'active'
+                };
+                const subResp = await safeFetch(subUsersUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}`, 'Prefer': 'return=representation' },
+                  body: JSON.stringify(insertPayload)
+                });
+                const subText = await subResp.text();
+                let subData; try { subData = JSON.parse(subText); } catch { subData = null; }
+                if (!subResp.ok) {
+                  return sendJSON(res, 200, { success: false, status: subResp.status, error: 'Failed to create sub_user record', details: subData });
+                }
+
+                return sendJSON(res, 200, { success: true, message: 'Sub-user created', user_id: userId, temporary_password: tempPassword || null });
+
+              } catch (err) {
+                console.error('Error handling create-sub-user proxy:', err);
+                return sendJSON(res, 200, { success: false, status: 500, error: 'Internal server error handling create-sub-user', details: String(err) });
+              }
+            }
+
             const fnUrl = supabaseUrl.replace(/\/$/, '') + `/functions/v1/${fnName}`;
             const headers = {
               'Content-Type': 'application/json',
@@ -152,7 +273,7 @@
             // pass through force header when creating tenant
             if (fnName === 'create-tenant-account' || body.force) headers['x-force-create'] = 'true';
 
-            const response = await fetch(fnUrl, {
+            const response = await safeFetch(fnUrl, {
               method: 'POST',
               headers,
               body: JSON.stringify(body),
@@ -203,7 +324,7 @@
               description: description || null
             };
 
-            const response = await fetch(insertUrl, {
+            const response = await safeFetch(insertUrl, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -223,6 +344,53 @@
           } catch (err) {
             console.error('Error in /api/invoices/create:', err);
             return sendJSON(res, 500, { error: 'Internal server error' });
+          }
+        }
+
+        // Generic proxy for Supabase REST/RPC requests from the browser during dev
+        if (url === '/api/proxy' && req.method === 'POST') {
+          try {
+            const body = await parseJSONBody(req) || {};
+            const targetUrl = body.url || '';
+            const method = body.method || 'POST';
+            const payload = body.body ? JSON.stringify(body.body) : body.rawBody || null;
+            const incomingAuth = req.headers['authorization'] || req.headers['Authorization'];
+
+            // Allow only requests to the configured Supabase URL
+            // Load runtime defaults if present
+            let runtimeConf = {};
+            try {
+              const runtimePath = path.join(__dirname, 'supabase', 'runtime.json');
+              if (fs.existsSync(runtimePath)) runtimeConf = JSON.parse(fs.readFileSync(runtimePath, 'utf-8'));
+            } catch (e) {}
+
+            // Resolve Supabase URL and service key from environment (fallback to known runtime value)
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://kdpqimetajnhcqseajok.supabase.co';
+            if (!supabaseUrl) return sendJSON(res, 500, { error: 'Supabase URL not configured' });
+            if (!targetUrl || !targetUrl.startsWith(supabaseUrl.replace(/\/$/, ''))) return sendJSON(res, 400, { error: 'Invalid target URL' });
+
+            // Use service role for apikey; prefer explicit env
+            const key = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+            if (!key) return sendJSON(res, 500, { error: 'Supabase key not configured' });
+
+            const headers = {
+              'Content-Type': 'application/json',
+              'apikey': key,
+              'Authorization': incomingAuth ? String(incomingAuth) : `Bearer ${key}`
+            };
+
+            const response = await safeFetch(targetUrl, {
+              method,
+              headers,
+              body: payload
+            });
+
+            const text = await response.text();
+            let data; try { data = JSON.parse(text); } catch { data = text; }
+            return sendJSON(res, response.status, data);
+          } catch (err) {
+            console.error('Error in /api/proxy:', err);
+            return sendJSON(res, 500, { error: 'Internal proxy error', details: String(err) });
           }
         }
 
