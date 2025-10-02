@@ -115,8 +115,12 @@ export const useSubUsers = () => {
       try {
         const res = await fetch('/api/edge/create-sub-user', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(access ? { Authorization: `Bearer ${access}` } : {}) },
-          body: JSON.stringify({ ...data })
+          headers: {
+            'Content-Type': 'application/json',
+            ...(access ? { Authorization: `Bearer ${access}` } : {}),
+            ...(user?.id ? { 'x-landlord-id': user.id } : {}),
+          },
+          body: JSON.stringify({ ...data, ...(user?.id ? { landlord_id: user.id } : {}) })
         });
         const text = await res.text().catch(() => '');
         let parsed: any; try { parsed = JSON.parse(text); } catch { parsed = null; }
