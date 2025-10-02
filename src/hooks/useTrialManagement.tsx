@@ -13,6 +13,8 @@ interface TrialStatus {
   totalTrialDays?: number;
   planName?: string;
   planId?: string;
+  isSubUserOnLandlordTrial?: boolean;
+  landlordName?: string;
 }
 
 export function useTrialManagement() {
@@ -73,6 +75,73 @@ export function useTrialManagement() {
       setUserRole(currentUserRole);
       
       console.log('👤 useTrialManagement: Current user role:', currentUserRole);
+
+      // Check if user is a sub-user and fetch landlord's trial status
+      const { data: subUserData } = await supabase
+        .from('sub_users')
+        .select('landlord_id')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      let landlordTrialStatus = null;
+      let landlordName = null;
+
+      if (subUserData?.landlord_id) {
+        console.log('👥 useTrialManagement: User is a sub-user, fetching landlord trial status...');
+        
+        // Fetch landlord's subscription status
+        const { data: landlordSubscription } = await supabase
+          .from('landlord_subscriptions')
+          .select(`
+            *,
+            billing_plan:billing_plans(*)
+          `)
+          .eq('landlord_id', subUserData.landlord_id)
+          .in('status', ['active', 'trial'])
+          .maybeSingle();
+
+        // Fetch landlord's name
+        const { data: landlordProfile } = await supabase
+          .from('profiles')
+          .select('first_name, last_name')
+          .eq('id', subUserData.landlord_id)
+          .maybeSingle();
+
+        if (landlordProfile) {
+          landlordName = `${landlordProfile.first_name} ${landlordProfile.last_name}`;
+        }
+
+        if (landlordSubscription && landlordSubscription.status === 'trial') {
+          console.log('🎯 useTrialManagement: Sub-user landlord is on trial!');
+          const trialEndDate = new Date(landlordSubscription.trial_end_date);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          trialEndDate.setHours(23, 59, 59, 999);
+          
+          const daysRemaining = Math.ceil((trialEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+          landlordTrialStatus = {
+            status: 'trial',
+            isActive: daysRemaining > 0,
+            isExpired: false,
+            isSuspended: false,
+            hasGracePeriod: false,
+            daysRemaining: Math.max(0, daysRemaining),
+            planName: (landlordSubscription.billing_plan as any)?.name || 'Enterprise',
+            planId: (landlordSubscription.billing_plan as any)?.id,
+            isSubUserOnLandlordTrial: true,
+            landlordName: landlordName
+          };
+
+          // For sub-users, use landlord's trial status
+          setTrialStatus(landlordTrialStatus);
+          setTrialDaysRemaining(Math.max(0, daysRemaining));
+          setIsTrialUser(true);
+          setLoading(false);
+          return; // Exit early for sub-users on landlord trial
+        }
+      }
 
       console.log('🎯 useTrialManagement: Getting trial status via RPC...');
       // Get actual trial status using the database function

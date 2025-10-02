@@ -16,6 +16,8 @@ interface RoleContextType {
   isAgent: boolean;
   isSubUser: boolean;
   subUserPermissions: Record<string, boolean> | null;
+  landlordId?: string | null;
+  isOnLandlordTrial?: boolean;
   loading: boolean;
   switchRole: (role: string) => void;
 }
@@ -41,6 +43,8 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
   const [assignedRoles, setAssignedRoles] = useState<string[]>([]);
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [subUserPermissions, setSubUserPermissions] = useState<Record<string, boolean> | null>(null);
+  const [landlordId, setLandlordId] = useState<string | null>(null);
+  const [isOnLandlordTrial, setIsOnLandlordTrial] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Optimistic role hydration from localStorage and metadata
@@ -104,6 +108,25 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
               
               if (subUserData?.permissions) {
                 setSubUserPermissions(subUserData.permissions as Record<string, boolean>);
+                setLandlordId(subUserData.landlord_id);
+                
+                // Check if landlord is on trial
+                if (subUserData.landlord_id) {
+                  const { data: landlordSubscription } = await supabase
+                    .from('landlord_subscriptions')
+                    .select('status, trial_end_date')
+                    .eq('landlord_id', subUserData.landlord_id)
+                    .eq('status', 'trial')
+                    .maybeSingle();
+                  
+                  if (landlordSubscription) {
+                    const trialEndDate = new Date(landlordSubscription.trial_end_date);
+                    const today = new Date();
+                    const isActive = trialEndDate > today;
+                    setIsOnLandlordTrial(isActive);
+                  }
+                }
+                
                 setSelectedRole("subuser");
                 return "subuser";
               }
@@ -219,6 +242,8 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
     isAgent,
     isSubUser,
     subUserPermissions,
+    landlordId,
+    isOnLandlordTrial,
     loading,
     switchRole,
   };

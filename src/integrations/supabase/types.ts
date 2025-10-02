@@ -3952,6 +3952,10 @@ export type Database = {
         }
         Returns: Json
       }
+      get_landlord_trial_status: {
+        Args: { _landlord_id: string }
+        Returns: boolean
+      }
       get_lease_expiry_report: {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: Json

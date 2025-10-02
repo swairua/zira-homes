@@ -16,6 +16,7 @@ import { useSubUsers } from "@/hooks/useSubUsers";
 import { DisabledActionWrapper } from "@/components/feature-access/DisabledActionWrapper";
 import { FEATURES } from "@/hooks/usePlanFeatureAccess";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
+import { useTrialManagement } from "@/hooks/useTrialManagement";
 
 interface CreateSubUserFormData {
   email: string;
@@ -40,6 +41,7 @@ const SubUserManagement = () => {
   const [selectedSubUser, setSelectedSubUser] = useState<any>(null);
   const { subUsers, loading, createSubUser, updateSubUserPermissions, deactivateSubUser } = useSubUsers();
   const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ defaultPage: 1, pageSize: 10 });
+  const { trialStatus } = useTrialManagement();
   const { register, handleSubmit, reset, watch, setValue, getValues, control, formState: { errors } } = useForm<CreateSubUserFormData>({
     defaultValues: {
       permissions: {
@@ -359,9 +361,15 @@ const SubUserManagement = () => {
                       <TableCell>{subUser.title || '-'}</TableCell>
                       <TableCell>
                         <div className="flex gap-1 flex-wrap">
-                          <Badge variant="outline" className="text-xs">
-                            {getPermissionCount(subUser.permissions)} permissions
-                          </Badge>
+                          {trialStatus?.isActive ? (
+                            <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-700">
+                              Full Access (Trial)
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs">
+                              {getPermissionCount(subUser.permissions)} permissions
+                            </Badge>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="text-sm">

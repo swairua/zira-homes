@@ -1,10 +1,10 @@
 import { useRole } from "@/context/RoleContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield } from "lucide-react";
+import { Shield, Sparkles } from "lucide-react";
 
 export function SubUserBanner() {
-  const { isSubUser } = useRole();
+  const { isSubUser, isOnLandlordTrial } = useRole();
 
   const { data: landlordName } = useQuery({
     queryKey: ["sub-user-landlord"],
@@ -33,6 +33,20 @@ export function SubUserBanner() {
   });
 
   if (!isSubUser) return null;
+
+  // Show trial banner if landlord is on trial
+  if (isOnLandlordTrial) {
+    return (
+      <div className="bg-gradient-to-r from-purple-500 to-pink-500 border-b">
+        <div className="flex items-center justify-center gap-2 text-sm px-4 py-2">
+          <Sparkles className="h-4 w-4 text-white animate-pulse" />
+          <span className="text-white font-medium">
+            🎉 Full Premium Access - Your organization is on trial{landlordName && ` (${landlordName})`}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-primary/10 border-b border-primary/20 px-4 py-2">
