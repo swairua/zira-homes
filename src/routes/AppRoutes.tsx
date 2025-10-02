@@ -5,6 +5,7 @@ import { RoleBasedRoute } from "@/components/RoleBasedRoute";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PlanAccessProvider } from "@/context/PlanAccessContext";
 import { LandlordOnlyRoute } from "@/components/LandlordOnlyRoute";
+import { AdminOnlyRoute } from "@/components/AdminOnlyRoute";
 import NotFound from "@/pages/NotFound";
 
 // Import existing pages
@@ -185,7 +186,8 @@ export const AppRoutes = () => {
         element={
           <RequireAuth>
             <RoleBasedRoute>
-              <Routes>
+              <AdminOnlyRoute>
+                <Routes>
                 <Route path="/" element={<AdminDashboard />} />
                 <Route path="/invoices" element={<AdminInvoicesManagement />} />
                 <Route path="/audit-logs" element={<AuditLogs />} />
@@ -207,6 +209,7 @@ export const AppRoutes = () => {
                 <Route path="/billing-plans" element={<BillingPlanManager />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              </AdminOnlyRoute>
             </RoleBasedRoute>
           </RequireAuth>
         }
