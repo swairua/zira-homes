@@ -101,40 +101,53 @@ const UserManagement = () => {
 
   const fetchUsers = async () => {
     try {
-      // First get total count
-      const { count } = await supabase
-        .from("profiles")
-        .select('*', { count: 'exact', head: true });
-
-      setTotalUsers(count || 0);
-
-      // Then get paginated data
-      const { data, error } = await supabase
-        .from("profiles")
-        .select(`
-          id,
-          first_name,
-          last_name,
-          email,
-          phone,
-          created_at
-        `)
-        .order("created_at", { ascending: false })
-        .range(offset, offset + pageSize - 1);
+      // Use the optimized RPC function to fetch users with all related data
+      const { data: result, error } = await supabase.rpc('admin_list_profiles_with_roles', {
+        p_limit: pageSize,
+        p_offset: offset
+      });
 
       if (error) throw error;
+
+      const response = result as any;
+      if (!response?.success) {
+        throw new Error("Failed to fetch users");
+      }
+
+      setTotalUsers(response.total_count || 0);
       
-      // Fetch user roles, subscriptions, and sub-user info for the current page
-      const usersWithRolesAndSubscriptions = await Promise.all(
-        (data || []).map(async (user) => {
-          const { data: roles } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", user.id);
+      // Fetch subscriptions and sub-user info for users with property roles
+      const usersWithSubscriptions = await Promise.all(
+        (response.users || []).map(async (user: any) => {
+          const propertyRoles = ['Landlord', 'Manager', 'Agent'];
+          const hasPropertyRole = user.user_roles?.some((r: any) => propertyRoles.includes(r.role));
           
-          // Check if user is a sub-user
+          let subscription = null;
+          if (hasPropertyRole) {
+            const { data: subscriptionData } = await supabase
+              .from("landlord_subscriptions")
+              .select("status, trial_end_date")
+              .eq("landlord_id", user.id)
+              .maybeSingle();
+            
+            if (subscriptionData) {
+              let daysRemaining = 0;
+              if (subscriptionData.trial_end_date) {
+                const trialEndDate = new Date(subscriptionData.trial_end_date);
+                const today = new Date();
+                daysRemaining = Math.max(0, Math.ceil((trialEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+              }
+              
+              subscription = {
+                ...subscriptionData,
+                daysRemaining
+              };
+            }
+          }
+          
+          // Check if user is a sub-user and fetch their info
           let subUserInfo = null;
-          const isSubUser = roles?.some(r => r.role === 'SubUser');
+          const isSubUser = user.user_roles?.some((r: any) => r.role === 'SubUser');
           if (isSubUser) {
             const { data: subUserData } = await supabase
               .from("admin_sub_user_view")
@@ -154,44 +167,15 @@ const UserManagement = () => {
             }
           }
           
-          // Check if user has property-related role
-          const propertyRoles = ['Landlord', 'Manager', 'Agent'];
-          const hasPropertyRole = roles?.some(r => propertyRoles.includes(r.role));
-          
-          let subscription = null;
-          if (hasPropertyRole) {
-            const { data: subscriptionData } = await supabase
-              .from("landlord_subscriptions")
-              .select("status, trial_end_date")
-              .eq("landlord_id", user.id)
-              .single();
-            
-            if (subscriptionData) {
-              // Calculate trial days remaining
-              let daysRemaining = 0;
-              if (subscriptionData.trial_end_date) {
-                const trialEndDate = new Date(subscriptionData.trial_end_date);
-                const today = new Date();
-                daysRemaining = Math.max(0, Math.ceil((trialEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
-              }
-              
-              subscription = {
-                ...subscriptionData,
-                daysRemaining
-              };
-            }
-          }
-          
           return {
             ...user,
-            user_roles: roles || [],
             subscription,
             sub_user_info: subUserInfo
           };
         })
       );
       
-      setUsers(usersWithRolesAndSubscriptions as UserProfile[]);
+      setUsers(usersWithSubscriptions as UserProfile[]);
     } catch (error) {
       console.error("Error fetching users:", error);
       toast({
