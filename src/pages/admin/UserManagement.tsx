@@ -86,6 +86,13 @@ const UserManagement = () => {
     phone: "",
     role: ""
   });
+  
+  // Filter states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [subscriptionFilter, setSubscriptionFilter] = useState<string>("all");
+  
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
   const { hasPermission } = usePermissions();
@@ -97,7 +104,14 @@ const UserManagement = () => {
 
   useEffect(() => {
     fetchUsers();
-  }, [page, pageSize]);
+  }, [page, pageSize, searchQuery, roleFilter, statusFilter, subscriptionFilter]);
+  
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    if (page !== 1) {
+      setPage(1);
+    }
+  }, [searchQuery, roleFilter, statusFilter, subscriptionFilter]);
 
   const fetchUsers = async () => {
     try {
@@ -186,7 +200,42 @@ const UserManagement = () => {
         })
       );
       
-      setUsers(usersWithSubscriptions as UserProfile[]);
+      // Apply client-side filters (since RPC doesn't support filtering yet)
+      let filteredUsers = usersWithSubscriptions as UserProfile[];
+      
+      // Search filter
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        filteredUsers = filteredUsers.filter(user => 
+          (user.first_name?.toLowerCase().includes(query) || false) ||
+          (user.last_name?.toLowerCase().includes(query) || false) ||
+          (user.email?.toLowerCase().includes(query) || false) ||
+          (user.phone?.toLowerCase().includes(query) || false)
+        );
+      }
+      
+      // Role filter
+      if (roleFilter !== "all") {
+        filteredUsers = filteredUsers.filter(user => getUserRole(user) === roleFilter);
+      }
+      
+      // Status filter
+      if (statusFilter !== "all") {
+        filteredUsers = filteredUsers.filter(user => getUserStatus(user) === statusFilter);
+      }
+      
+      // Subscription filter
+      if (subscriptionFilter !== "all") {
+        filteredUsers = filteredUsers.filter(user => {
+          if (subscriptionFilter === "trial") return user.subscription?.status === "trial";
+          if (subscriptionFilter === "active") return user.subscription?.status === "active";
+          if (subscriptionFilter === "expired") return user.subscription?.status === "trial_expired";
+          if (subscriptionFilter === "no_subscription") return !user.subscription;
+          return true;
+        });
+      }
+      
+      setUsers(filteredUsers);
     } catch (error) {
       console.error("Error fetching users:", error);
       toast({
@@ -197,6 +246,14 @@ const UserManagement = () => {
     } finally {
       setLoading(false);
     }
+  };
+  
+  const handleClearFilters = () => {
+    setSearchQuery("");
+    setRoleFilter("all");
+    setStatusFilter("all");
+    setSubscriptionFilter("all");
+    setPage(1);
   };
 
   const onAddUser = async (data: AddUserFormData) => {
@@ -725,6 +782,101 @@ const UserManagement = () => {
 
         {/* Data Integrity Monitor */}
         <DataIntegrityMonitor />
+        
+        {/* Filters Section */}
+        <Card className="bg-card border-border">
+          <CardHeader>
+            <CardTitle className="text-primary flex items-center justify-between">
+              <span>Filter Users</span>
+              {(searchQuery || roleFilter !== "all" || statusFilter !== "all" || subscriptionFilter !== "all") && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={handleClearFilters}
+                  className="text-muted-foreground hover:text-primary"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Clear Filters
+                </Button>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Search */}
+              <div className="space-y-2">
+                <Label className="text-primary text-sm">Search</Label>
+                <Input
+                  placeholder="Name, email, or phone..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="border-border bg-card"
+                />
+              </div>
+              
+              {/* Role Filter */}
+              <div className="space-y-2">
+                <Label className="text-primary text-sm">Role</Label>
+                <Select value={roleFilter} onValueChange={setRoleFilter}>
+                  <SelectTrigger className="border-border bg-card">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="all">All Roles</SelectItem>
+                    {roles.map((role) => (
+                      <SelectItem key={role} value={role}>{role}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Status Filter */}
+              <div className="space-y-2">
+                <Label className="text-primary text-sm">Status</Label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="border-border bg-card">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Subscription Filter */}
+              <div className="space-y-2">
+                <Label className="text-primary text-sm">Subscription</Label>
+                <Select value={subscriptionFilter} onValueChange={setSubscriptionFilter}>
+                  <SelectTrigger className="border-border bg-card">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="all">All Subscriptions</SelectItem>
+                    <SelectItem value="trial">Trial</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="expired">Expired</SelectItem>
+                    <SelectItem value="no_subscription">No Subscription</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            {/* Active filters summary */}
+            {(searchQuery || roleFilter !== "all" || statusFilter !== "all" || subscriptionFilter !== "all") && (
+              <div className="mt-4 p-3 bg-muted/50 rounded-md">
+                <p className="text-sm text-muted-foreground">
+                  Showing {users.length} of {totalUsers} users
+                  {searchQuery && ` matching "${searchQuery}"`}
+                  {roleFilter !== "all" && ` • Role: ${roleFilter}`}
+                  {statusFilter !== "all" && ` • Status: ${statusFilter}`}
+                  {subscriptionFilter !== "all" && ` • Subscription: ${subscriptionFilter}`}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Summary Stats */}
         <div className="grid gap-6 md:grid-cols-4">
