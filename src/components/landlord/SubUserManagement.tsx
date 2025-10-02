@@ -31,7 +31,10 @@ interface CreateSubUserFormData {
     manage_tenants: boolean;
     manage_leases: boolean;
     manage_maintenance: boolean;
+    manage_payments: boolean;
     view_reports: boolean;
+    manage_expenses: boolean;
+    send_messages: boolean;
   };
 }
 
@@ -45,11 +48,14 @@ const SubUserManagement = () => {
   const { register, handleSubmit, reset, watch, setValue, getValues, control, formState: { errors } } = useForm<CreateSubUserFormData>({
     defaultValues: {
       permissions: {
-        manage_properties: false,
-        manage_tenants: false,
-        manage_leases: false,
-        manage_maintenance: false,
+        manage_properties: true,
+        manage_tenants: true,
+        manage_leases: true,
+        manage_maintenance: true,
+        manage_payments: true,
         view_reports: true,
+        manage_expenses: true,
+        send_messages: true,
       }
     }
   });
@@ -226,18 +232,61 @@ const SubUserManagement = () => {
               </div>
 
               <div className="space-y-4">
-                <Label className="text-primary font-semibold">Permissions</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {Object.entries(permissions).map(([key, value]) => (
-                    <div key={key} className="flex items-center space-x-2">
+                <div className="flex justify-between items-center">
+                  <Label className="text-primary font-semibold">Permissions</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        Object.keys(permissions).forEach(key => {
+                          handlePermissionChange(key as keyof CreateSubUserFormData['permissions'], true);
+                        });
+                      }}
+                    >
+                      Select All
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        Object.keys(permissions).forEach(key => {
+                          handlePermissionChange(key as keyof CreateSubUserFormData['permissions'], false);
+                        });
+                      }}
+                    >
+                      Clear All
+                    </Button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3">
+                  {Object.entries({
+                    manage_properties: { label: "Manage Properties", description: "Create, edit, and delete properties" },
+                    manage_tenants: { label: "Manage Tenants", description: "Add, edit, and view tenant information" },
+                    manage_leases: { label: "Manage Leases", description: "Create and modify lease agreements" },
+                    manage_maintenance: { label: "Manage Maintenance", description: "View and respond to maintenance requests" },
+                    manage_payments: { label: "Manage Payments", description: "Record and track rent payments" },
+                    view_reports: { label: "View Reports", description: "Access analytics and financial reports" },
+                    manage_expenses: { label: "Manage Expenses", description: "Add and track property expenses" },
+                    send_messages: { label: "Send Messages", description: "Send emails and SMS to tenants" },
+                  }).map(([key, { label, description }]) => (
+                    <div key={key} className="flex items-start space-x-3 p-3 rounded-lg border border-border bg-card/50">
                       <Switch
                         id={key}
-                        checked={value}
+                        checked={permissions[key as keyof typeof permissions]}
                         onCheckedChange={(checked) => handlePermissionChange(key as keyof CreateSubUserFormData['permissions'], checked)}
+                        className="mt-1"
                       />
-                      <Label htmlFor={key} className="text-sm capitalize">
-                        {key.replace('_', ' ')}
-                      </Label>
+                      <div className="flex-1">
+                        <Label htmlFor={key} className="text-sm font-medium cursor-pointer">
+                          {label}
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {description}
+                        </p>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -436,26 +485,82 @@ const SubUserManagement = () => {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              {Object.entries(selectedSubUser.permissions).map(([key, value]) => (
-                <div key={key} className="flex items-center justify-between">
-                  <Label className="text-sm capitalize">
-                    {key.replace('_', ' ')}
-                  </Label>
-                  <Switch
-                    checked={value as boolean}
-                    onCheckedChange={(checked) => {
-                      const updatedPermissions = {
-                        ...selectedSubUser.permissions,
-                        [key]: checked
-                      };
-                      setSelectedSubUser({
-                        ...selectedSubUser,
-                        permissions: updatedPermissions
-                      });
-                    }}
-                  />
-                </div>
-              ))}
+              <div className="flex justify-end gap-2 pb-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const updatedPermissions = Object.keys(selectedSubUser.permissions).reduce((acc, key) => ({
+                      ...acc,
+                      [key]: true
+                    }), {});
+                    setSelectedSubUser({
+                      ...selectedSubUser,
+                      permissions: updatedPermissions
+                    });
+                  }}
+                >
+                  Select All
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const updatedPermissions = Object.keys(selectedSubUser.permissions).reduce((acc, key) => ({
+                      ...acc,
+                      [key]: false
+                    }), {});
+                    setSelectedSubUser({
+                      ...selectedSubUser,
+                      permissions: updatedPermissions
+                    });
+                  }}
+                >
+                  Clear All
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {Object.entries({
+                  manage_properties: { label: "Manage Properties", description: "Create, edit, and delete properties" },
+                  manage_tenants: { label: "Manage Tenants", description: "Add, edit, and view tenant information" },
+                  manage_leases: { label: "Manage Leases", description: "Create and modify lease agreements" },
+                  manage_maintenance: { label: "Manage Maintenance", description: "View and respond to maintenance requests" },
+                  manage_payments: { label: "Manage Payments", description: "Record and track rent payments" },
+                  view_reports: { label: "View Reports", description: "Access analytics and financial reports" },
+                  manage_expenses: { label: "Manage Expenses", description: "Add and track property expenses" },
+                  send_messages: { label: "Send Messages", description: "Send emails and SMS to tenants" },
+                }).map(([key, { label, description }]) => {
+                  const hasPermission = selectedSubUser.permissions[key as keyof typeof selectedSubUser.permissions];
+                  return (
+                    <div key={key} className="flex items-start space-x-3 p-3 rounded-lg border border-border bg-card/50">
+                      <Switch
+                        checked={hasPermission as boolean}
+                        onCheckedChange={(checked) => {
+                          const updatedPermissions = {
+                            ...selectedSubUser.permissions,
+                            [key]: checked
+                          };
+                          setSelectedSubUser({
+                            ...selectedSubUser,
+                            permissions: updatedPermissions
+                          });
+                        }}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <Label className="text-sm font-medium cursor-pointer">
+                          {label}
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {description}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
             <div className="flex justify-end gap-3 pt-4">
               <Button 
