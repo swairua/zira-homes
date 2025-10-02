@@ -201,6 +201,27 @@ export const useSubUsers = () => {
       return;
     } catch (primaryError: any) {
       console.error('create-sub-user failed:', primaryError, diagnostics);
+
+      // Friendly ACL hint if backend enforces landlord role
+      let friendly: string | null = null;
+      try {
+        for (const d of diagnostics) {
+          const msg = (d && (d.message || d.statusText)) ? String(d.message || d.statusText) : '';
+          if (/only\s+landlords\s+can\s+create\s+sub-users/i.test(msg)) { friendly = 'Only landlords can create sub-users. Switch to a Landlord account or have an admin assign you the Landlord role.'; break; }
+          const body = (d && d.body) as any;
+          if (typeof body === 'string' && /only\s+landlords\s+can\s+create\s+sub-users/i.test(body)) { friendly = 'Only landlords can create sub-users. Switch to a Landlord account or have an admin assign you the Landlord role.'; break; }
+          if (body && typeof body === 'object') {
+            const inner = (body.error || body.message || body.details || '') + '';
+            if (/only\s+landlords\s+can\s+create\s+sub-users/i.test(inner)) { friendly = 'Only landlords can create sub-users. Switch to a Landlord account or have an admin assign you the Landlord role.'; break; }
+          }
+        }
+      } catch {}
+
+      if (friendly) {
+        toast.error(friendly);
+        throw new Error(friendly);
+      }
+
       const msg = JSON.stringify({ error: primaryError?.message || 'Failed to create sub-user', diagnostics });
       toast.error(msg);
       throw new Error(msg);
