@@ -40,7 +40,7 @@ const SubUserManagement = () => {
   const [selectedSubUser, setSelectedSubUser] = useState<any>(null);
   const { subUsers, loading, createSubUser, updateSubUserPermissions, deactivateSubUser } = useSubUsers();
   const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ defaultPage: 1, pageSize: 10 });
-  const { register, handleSubmit, reset, watch, setValue, control, formState: { errors } } = useForm<CreateSubUserFormData>({
+  const { register, handleSubmit, reset, watch, setValue, getValues, control, formState: { errors } } = useForm<CreateSubUserFormData>({
     defaultValues: {
       permissions: {
         manage_properties: false,
@@ -127,7 +127,7 @@ const SubUserManagement = () => {
           </DialogHeader>
           
           <form onSubmit={handleSubmit(onCreateSubUser)} className="flex flex-col gap-4">
-            <ScrollArea className="max-h-[60vh] pr-4">
+            <ScrollArea className="h-[60vh] pr-4">
               <div className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -205,21 +205,23 @@ const SubUserManagement = () => {
                 </p>
               </div>
 
-              {passwordValue && passwordValue.length > 0 && (
-                <div className="space-y-2">
-                  <Label htmlFor="confirm_password" className="text-primary">Confirm Password</Label>
-                  <Input
-                    id="confirm_password"
-                    type="password"
-                    className="border-border bg-card"
-                    {...register("confirm_password", {
-                      validate: (value) => value === passwordValue || "Passwords do not match"
-                    })}
-                    placeholder="Re-enter password"
-                  />
-                  {errors.confirm_password && <p className="text-xs text-destructive">{errors.confirm_password.message}</p>}
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label htmlFor="confirm_password" className="text-primary">Confirm Password</Label>
+                <Input
+                  id="confirm_password"
+                  type="password"
+                  className="border-border bg-card"
+                  {...register("confirm_password", {
+                    validate: (value) => {
+                      const password = getValues("password");
+                      if (!password || password.length === 0) return true;
+                      return value === password || "Passwords do not match";
+                    }
+                  })}
+                  placeholder="Re-enter password to confirm"
+                />
+                {errors.confirm_password && <p className="text-xs text-destructive">{errors.confirm_password.message}</p>}
+              </div>
 
               <div className="space-y-4">
                 <Label className="text-primary font-semibold">Permissions</Label>

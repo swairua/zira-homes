@@ -52,32 +52,23 @@ export const useSubUsers = () => {
     
     setLoading(true);
     try {
-      // Fetch sub-users first
-      const { data: subUsersData, error: subUsersError } = await supabase
-        .from('sub_users')
-        .select('*')
-        .eq('landlord_id', user.id)
-        .eq('status', 'active');
+      // Use edge function to fetch sub-users with profiles (bypasses RLS issues)
+      const { data, error } = await supabase.functions.invoke('list-landlord-sub-users');
 
-      if (subUsersError) throw subUsersError;
-
-      // Then fetch profiles for those who have user_id
-      const userIds = subUsersData?.filter(su => su.user_id).map(su => su.user_id) || [];
-      let profilesData: any[] = [];
-      
-      if (userIds.length > 0) {
-        const { data: profiles, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name, email, phone')
-          .in('id', userIds);
-
-        if (profilesError) throw profilesError;
-        profilesData = profiles || [];
+      if (error) {
+        console.error('Error from edge function:', error);
+        throw error;
       }
 
-      // Transform and merge the data
-      const transformedData: SubUser[] = (subUsersData || []).map(item => {
-        const profile = profilesData.find(p => p.id === item.user_id);
+      if (!data?.success) {
+        throw new Error(data?.error || 'Failed to fetch sub-users');
+      }
+
+      // Transform the data
+      const transformedData: SubUser[] = (data.data || []).map((item: any) => {
+        // Handle profiles as either a nested object or array (Supabase can return either)
+        const profile = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles;
+        
         return {
           ...item,
           permissions: typeof item.permissions === 'string' 
@@ -92,6 +83,7 @@ export const useSubUsers = () => {
         };
       });
       
+      console.log('Fetched and transformed sub-users:', transformedData);
       setSubUsers(transformedData);
     } catch (error) {
       console.error('Error fetching sub-users:', error);
