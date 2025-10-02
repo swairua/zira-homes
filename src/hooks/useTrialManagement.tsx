@@ -27,6 +27,12 @@ export function useTrialManagement() {
   useEffect(() => {
     if (user) {
       checkTrialStatus();
+    } else {
+      // Reset state when no user
+      setTrialStatus(null);
+      setIsTrialUser(false);
+      setTrialDaysRemaining(0);
+      setShowOnboarding(false);
     }
   }, [user]);
 
@@ -67,13 +73,6 @@ export function useTrialManagement() {
       setUserRole(currentUserRole);
       
       console.log('👤 useTrialManagement: Current user role:', currentUserRole);
-      
-      // Only check trial status for property-related roles
-      if (!currentUserRole || !['Landlord', 'Manager', 'Agent'].includes(currentUserRole)) {
-        console.log('❌ useTrialManagement: User role not property-related, exiting');
-        setLoading(false);
-        return;
-      }
 
       console.log('🎯 useTrialManagement: Getting trial status via RPC...');
       // Get actual trial status using the database function
@@ -82,7 +81,7 @@ export function useTrialManagement() {
 
       console.log('📊 useTrialManagement: RPC status result:', statusResult);
 
-      // Try to fetch subscription with robust error handling
+      // Always try to fetch subscription data directly (with fallback if RPC fails)
       console.log('🔍 useTrialManagement: Fetching subscription data with maybeSingle...');
       const { data: subscription, error: subscriptionError } = await supabase
         .from('landlord_subscriptions')
@@ -91,15 +90,15 @@ export function useTrialManagement() {
           billing_plan:billing_plans(*)
         `)
         .eq('landlord_id', user.id)
-        .maybeSingle(); // Use maybeSingle instead of single to handle zero results
+        .maybeSingle();
 
       console.log('💳 useTrialManagement: Subscription data:', subscription);
       console.log('❗ useTrialManagement: Subscription error:', subscriptionError);
 
-      // Fallback: Always try to fetch basic subscription data
+      // Fallback: Always try to fetch basic subscription data if joined query failed
       let basicSubscription = null;
-      if (!subscription) {
-        console.log('🔄 useTrialManagement: No joined subscription, fetching basic data...');
+      if (!subscription && subscriptionError) {
+        console.log('🔄 useTrialManagement: Joined query failed, fetching basic data...');
         const { data: basic } = await supabase
           .from('landlord_subscriptions')
           .select('*')

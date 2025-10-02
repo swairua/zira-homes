@@ -111,7 +111,18 @@ const UserManagement = () => {
 
       const response = result as any;
       if (!response?.success) {
-        throw new Error("Failed to fetch users");
+        if (response?.error === 'forbidden') {
+          toast({
+            title: "Access Denied",
+            description: "Admin privileges required to view users",
+            variant: "destructive",
+          });
+          setUsers([]);
+          setTotalUsers(0);
+          setLoading(false);
+          return;
+        }
+        throw new Error(response?.error || "Failed to fetch users");
       }
 
       setTotalUsers(response.total_count || 0);

@@ -56,10 +56,10 @@ serve(async (req) => {
 
     console.log('Fetching sub-users for landlord:', user.id);
 
-    // Step 1: Fetch sub_users
+    // Step 1: Fetch sub_users with explicit columns
     const { data: subUsers, error: subUsersError } = await supabaseService
       .from('sub_users')
-      .select('*')
+      .select('id, landlord_id, user_id, title, permissions, status, created_at, updated_at')
       .eq('landlord_id', user.id)
       .eq('status', 'active')
       .order('created_at', { ascending: false });
@@ -72,7 +72,7 @@ serve(async (req) => {
       );
     }
 
-    console.log('Fetched sub-users count:', subUsers?.length || 0);
+    console.log('Landlord:', user.id, 'Sub-users count:', subUsers?.length || 0);
 
     // Step 2: If we have sub-users, fetch their profiles separately
     let mergedData = [];

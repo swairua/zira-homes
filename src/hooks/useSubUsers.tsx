@@ -109,6 +109,14 @@ export const useSubUsers = () => {
         throw new Error(data?.error || 'Failed to fetch sub-users');
       }
 
+      // Check for empty data and provide diagnostics
+      if (!data.data || data.data.length === 0) {
+        console.log('No sub-users found for user:', user?.id);
+        toast.info('No Sub-Users', {
+          description: 'No active sub-users found for this account'
+        });
+      }
+
       // Transform the data
       const transformedData: SubUser[] = (data.data || []).map((item: any) => {
         // Handle profiles as either a nested object or array (Supabase can return either)
