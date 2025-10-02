@@ -131,21 +131,16 @@ export const useSubUsers = () => {
       }
 
       if (invokeError || !invokeResult?.success) {
-        // Compose the most verbose error details available
-        const parts: string[] = [];
-        if (invokeError) {
-          if (typeof invokeError === 'string') parts.push(invokeError);
-          if (invokeError?.message) parts.push(invokeError.message);
-          if (invokeError?.status) parts.push(`status=${invokeError.status}`);
-          if (invokeError?.details) parts.push(typeof invokeError.details === 'string' ? invokeError.details : JSON.stringify(invokeError.details));
-          if (invokeError?.proxyFailedDetails) parts.push(`proxy=${typeof invokeError.proxyFailedDetails === 'string' ? invokeError.proxyFailedDetails : JSON.stringify(invokeError.proxyFailedDetails)}`);
-        }
-        if (invokeResult && (invokeResult.error || invokeResult.details)) {
-          const rErr = invokeResult.error || invokeResult.details;
-          parts.push(typeof rErr === 'string' ? rErr : JSON.stringify(rErr));
-        }
-        const detail = parts.filter(Boolean).join(' | ') || 'Unknown error creating sub-user';
-        throw new Error(detail);
+        const diagnostics: any = {
+          message: (invokeError && (invokeError.message || invokeError.error)) || (invokeResult && (invokeResult.error || invokeResult.message)) || 'Unknown error',
+          status: invokeError?.status || invokeError?.context?.response?.status || invokeResult?.status || null,
+          name: invokeError?.name || null,
+          details: invokeError?.details || invokeError?.context || invokeResult?.details || null,
+          proxy: invokeError?.proxyFailedDetails || null,
+          result: invokeResult || null,
+        };
+        try { console.error('create-sub-user diagnostics:', diagnostics); } catch {}
+        throw new Error(JSON.stringify(diagnostics));
       }
 
       if (invokeResult.temporary_password) {
