@@ -6,8 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 export type GettingStartedStep = 
   | "add_property"
   | "add_units"
-  | "add_tenants"
-  | "generate_invoice";
+  | "add_tenants";
 
 interface StepProgress {
   step_name: string;
@@ -31,7 +30,6 @@ const STEPS_ORDER: GettingStartedStep[] = [
   "add_property",
   "add_units",
   "add_tenants",
-  "generate_invoice",
 ];
 
 export function useGettingStarted(): UseGettingStartedReturn {
@@ -40,7 +38,6 @@ export function useGettingStarted(): UseGettingStartedReturn {
     properties: 0,
     units: 0,
     tenants: 0,
-    invoices: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -64,18 +61,16 @@ export function useGettingStarted(): UseGettingStartedReturn {
       setStepProgress((progressData || []) as StepProgress[]);
 
       // Fetch entity counts
-      const [propertiesRes, unitsRes, tenantsRes, invoicesRes] = await Promise.all([
+      const [propertiesRes, unitsRes, tenantsRes] = await Promise.all([
         supabase.from("properties").select("id", { count: "exact", head: true }),
         supabase.from("units").select("id", { count: "exact", head: true }),
         supabase.from("tenants").select("id", { count: "exact", head: true }),
-        supabase.from("invoices").select("id", { count: "exact", head: true }),
       ]);
 
       setCounts({
         properties: propertiesRes.count || 0,
         units: unitsRes.count || 0,
         tenants: tenantsRes.count || 0,
-        invoices: invoicesRes.count || 0,
       });
     } catch (error) {
       console.error("Error fetching getting started progress:", error);
@@ -110,11 +105,6 @@ export function useGettingStarted(): UseGettingStartedReturn {
       return "add_tenants";
     }
 
-    // If tenants but no invoices
-    if (counts.tenants > 0 && counts.invoices === 0 && !dismissedSteps.includes("generate_invoice")) {
-      return "generate_invoice";
-    }
-
     return null; // All done!
   };
 
@@ -130,8 +120,6 @@ export function useGettingStarted(): UseGettingStartedReturn {
           return counts.units > 0;
         case "add_tenants":
           return counts.tenants > 0;
-        case "generate_invoice":
-          return counts.invoices > 0;
         default:
           return false;
       }
@@ -151,8 +139,6 @@ export function useGettingStarted(): UseGettingStartedReturn {
         return counts.units > 0;
       case "add_tenants":
         return counts.tenants > 0;
-      case "generate_invoice":
-        return counts.invoices > 0;
       default:
         return false;
     }

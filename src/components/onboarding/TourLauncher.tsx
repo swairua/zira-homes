@@ -8,9 +8,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { HelpCircle, PlayCircle } from 'lucide-react';
+import { HelpCircle, PlayCircle, Loader2 } from 'lucide-react';
 import { useTour } from '@/hooks/useTour';
 import { useLocation } from 'react-router-dom';
+import { useToast } from '@/hooks/use-toast';
 
 interface TourOption {
   id: string;
@@ -55,6 +56,7 @@ const AVAILABLE_TOURS: TourOption[] = [
 export function TourLauncher() {
   const { startTour, loading } = useTour();
   const location = useLocation();
+  const { toast } = useToast();
 
   const currentPageTours = AVAILABLE_TOURS.filter(
     tour => tour.page === location.pathname
@@ -65,7 +67,15 @@ export function TourLauncher() {
   );
 
   const handleTourStart = (tourId: string) => {
-    startTour(tourId);
+    try {
+      startTour(tourId);
+    } catch (error) {
+      toast({
+        title: "Tour unavailable",
+        description: "This tour is not configured yet. Please check back later.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -75,9 +85,15 @@ export function TourLauncher() {
           variant="outline"
           size="icon"
           className="fixed bottom-20 right-6 h-12 w-12 rounded-full shadow-lg z-40 hover:scale-105 transition-transform"
-          title="Interactive Tours"
+          title="Interactive Tours & Help"
+          aria-label="Open interactive tours menu"
+          disabled={loading}
         >
-          <HelpCircle className="h-5 w-5" />
+          {loading ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <HelpCircle className="h-5 w-5" />
+          )}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">

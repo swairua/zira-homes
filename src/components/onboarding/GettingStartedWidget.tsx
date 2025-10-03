@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useNavigate } from "react-router-dom";
 import { useGettingStarted, GettingStartedStep } from "@/hooks/useGettingStarted";
-import { Rocket, Building2, LayoutGrid, Users, FileText, CheckCircle2, X } from "lucide-react";
+import { Rocket, Building2, LayoutGrid, Users, CheckCircle2, X } from "lucide-react";
 
 const STEP_CONFIG: Record<
   GettingStartedStep,
@@ -13,7 +13,6 @@ const STEP_CONFIG: Record<
   add_property: { label: "Add your first property", route: "/properties", icon: Building2 },
   add_units: { label: "Create units", route: "/units", icon: LayoutGrid },
   add_tenants: { label: "Add tenants", route: "/tenants", icon: Users },
-  generate_invoice: { label: "Generate first invoice", route: "/invoices", icon: FileText },
 };
 
 export function GettingStartedWidget() {
