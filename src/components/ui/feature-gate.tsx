@@ -50,6 +50,7 @@ export function FeatureGate({
   if (effectiveAllowed) {
     // Show trial premium access badge for trial users
     const isTrialUser = status === 'trial';
+    const isSubUserPermitted = reason === 'sub_user_permitted_during_landlord_trial';
     
     return (
       <>
@@ -59,7 +60,9 @@ export function FeatureGate({
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                 <span className="text-sm font-medium text-purple-900 dark:text-purple-100">
-                  🎉 Premium Feature - Full Access During Trial
+                  {isSubUserPermitted 
+                    ? '🎉 Permitted Access (Trial) - Your landlord has granted you access to this premium feature'
+                    : '🎉 Premium Feature - Full Access During Trial'}
                 </span>
               </div>
               <Button size="sm" variant="outline" onClick={handleUpgrade}>
@@ -96,6 +99,45 @@ export function FeatureGate({
           </div>
         )}
       </>
+    );
+  }
+
+  // Handle permission denied by landlord during trial
+  if (reason === 'permission_denied_by_landlord') {
+    return (
+      <Card className="p-6 border-2 border-muted">
+        <CardHeader>
+          <div className="flex items-center gap-2 mb-2">
+            <Lock className="h-5 w-5 text-muted-foreground" />
+            <CardTitle>{fallbackTitle || getFeatureTitle(feature)}</CardTitle>
+          </div>
+          <CardDescription>
+            Your landlord hasn't granted you permission for this feature. Contact them to request access.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <Button onClick={() => navigate('/support')} variant="outline">
+            Contact Support
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+  
+  // Handle landlord-only features
+  if (reason === 'landlord_only_feature') {
+    return (
+      <Card className="p-6 border-2 border-muted">
+        <CardHeader>
+          <div className="flex items-center gap-2 mb-2">
+            <Lock className="h-5 w-5 text-muted-foreground" />
+            <CardTitle>{fallbackTitle || getFeatureTitle(feature)}</CardTitle>
+          </div>
+          <CardDescription>
+            This feature is only available to account owners, not sub-users.
+          </CardDescription>
+        </CardHeader>
+      </Card>
     );
   }
 

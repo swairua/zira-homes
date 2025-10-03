@@ -4284,6 +4284,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      map_feature_to_permission: {
+        Args: { _feature: string }
+        Returns: string
+      }
       mask_sensitive_data: {
         Args: { data: string; visible_chars?: number }
         Returns: string
