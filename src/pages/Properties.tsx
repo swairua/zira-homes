@@ -147,6 +147,7 @@ const Properties = () => {
           <div className="flex items-center gap-3 self-stretch sm:self-auto">
             <FeatureGate 
               feature={FEATURES.BULK_OPERATIONS}
+              variant="compact"
               fallbackTitle="Bulk Operations"
               fallbackDescription="Upload multiple properties at once with CSV import."
             >
