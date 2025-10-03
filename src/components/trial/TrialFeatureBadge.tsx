@@ -35,13 +35,16 @@ export function TrialFeatureBadge({
     return <>{children}</>;
   }
 
-  // Feature locked - show with badge
+  // Feature locked - show with floating badge
   if (!showTooltip) {
     return (
-      <div className="relative inline-flex items-center gap-2">
+      <div className="relative inline-block">
         {children}
-        <Badge variant="outline" className="gap-1 text-xs border-primary/30 bg-primary/5">
-          <Crown className="h-3 w-3" />
+        <Badge 
+          variant="outline" 
+          className="absolute -top-2 -right-2 gap-1 text-[10px] h-5 px-1.5 border-primary/30 bg-primary/10 backdrop-blur-sm shadow-sm"
+        >
+          <Crown className="h-2.5 w-2.5" />
           Pro
         </Badge>
       </div>
@@ -52,10 +55,13 @@ export function TrialFeatureBadge({
     <TooltipProvider>
       <Tooltip delayDuration={200}>
         <TooltipTrigger asChild>
-          <div className="relative inline-flex items-center gap-2 cursor-not-allowed opacity-60">
+          <div className="relative inline-block cursor-pointer">
             {children}
-            <Badge variant="outline" className="gap-1 text-xs border-primary/30 bg-primary/5">
-              <Crown className="h-3 w-3" />
+            <Badge 
+              variant="outline" 
+              className="absolute -top-2 -right-2 gap-1 text-[10px] h-5 px-1.5 border-primary/30 bg-primary/10 backdrop-blur-sm shadow-sm hover:bg-primary/20 transition-colors"
+            >
+              <Crown className="h-2.5 w-2.5" />
               Pro
             </Badge>
           </div>
