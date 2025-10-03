@@ -4086,7 +4086,7 @@ export type Database = {
         Returns: Json
       }
       get_tenant_property_ids: {
-        Args: { _user_id: string }
+        Args: { _tenant_id: string }
         Returns: string[]
       }
       get_tenant_unit_ids: {
@@ -4312,12 +4312,20 @@ export type Database = {
         Args: { p_unit_id: string }
         Returns: undefined
       }
+      tenant_belongs_to_user: {
+        Args: { _tenant_id: string; _user_id: string }
+        Returns: boolean
+      }
       tenant_has_lease_on_property: {
         Args: { _property_id: string; _user_id: string }
         Returns: boolean
       }
       user_can_access_lease: {
         Args: { _lease_id: string; _user_id: string }
+        Returns: boolean
+      }
+      user_can_access_property: {
+        Args: { _property_id: string; _user_id: string }
         Returns: boolean
       }
       user_owns_property: {
