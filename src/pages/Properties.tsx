@@ -145,14 +145,7 @@ const Properties = () => {
             </p>
           </div>
           <div className="flex items-center gap-3 self-stretch sm:self-auto">
-            <FeatureGate 
-              feature={FEATURES.BULK_OPERATIONS}
-              variant="compact"
-              fallbackTitle="Bulk Operations"
-              fallbackDescription="Upload multiple properties at once with CSV import."
-            >
-              <BulkUploadDropdown type="properties" onSuccess={fetchProperties} />
-            </FeatureGate>
+            <BulkUploadDropdown type="properties" onSuccess={fetchProperties} />
             <PropertyUnitsWizard onPropertyAdded={fetchProperties} />
           </div>
         </div>

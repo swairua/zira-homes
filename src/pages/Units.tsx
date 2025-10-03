@@ -224,14 +224,7 @@ const Units = () => {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <FeatureGate 
-              feature={FEATURES.BULK_OPERATIONS}
-              variant="compact"
-              fallbackTitle="Bulk Operations"
-              fallbackDescription="Upload multiple units at once with CSV import."
-            >
-              <BulkUploadDropdown type="units" onSuccess={fetchUnits} />
-            </FeatureGate>
+            <BulkUploadDropdown type="units" onSuccess={fetchUnits} />
             <AddUnitDialog onUnitAdded={fetchUnits} />
           </div>
         </div>
