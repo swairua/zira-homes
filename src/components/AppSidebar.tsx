@@ -151,7 +151,7 @@ export function AppSidebar() {
                   }
 
                   // Filter navigation for sub-users based on permissions (SECURE BY DEFAULT)
-                  if (isSubUser && subUserPermissions) {
+                  if (isSubUser) {
                     // Whitelist of always-visible items for sub-users
                     const alwaysVisibleForSubUsers = ["Dashboard", "Settings", "Support", "Knowledge Base"];
                     
@@ -161,30 +161,34 @@ export function AppSidebar() {
                     }
                     
                     // Map menu items to required permissions
-                    const permissionMap: Record<string, keyof typeof subUserPermissions> = {
+                    const permissionMap: Record<string, string> = {
                       "Properties": "manage_properties",
                       "Units": "manage_properties",
                       "Tenants": "manage_tenants",
                       "Leases": "manage_leases",
-                      "Maintenance": "manage_maintenance",
                       "Payments": "manage_payments",
                       "Invoices": "manage_payments",
                       "Reports": "view_reports",
+                      "Maintenance": "manage_maintenance",
                       "Expenses": "manage_expenses",
                       "Email Templates": "send_messages",
                       "Message Templates": "send_messages",
-                      "Notifications": "view_reports", // Notifications are informational, require view_reports
+                      "Notifications": "view_reports",
+                      "Sub Users": "never", // Never show this to sub-users
+                      "Billing Panel": "never",
+                      "Payment Settings": "never",
+                      "Upgrade": "never",
                     };
                     
                     const requiredPermission = permissionMap[item.title];
                     
-                    // SECURE BY DEFAULT: If item has no permission mapping, hide it for sub-users
-                    if (!requiredPermission) {
+                    // SECURE BY DEFAULT: If item has no permission mapping or marked as "never", hide it
+                    if (!requiredPermission || requiredPermission === "never") {
                       return false;
                     }
                     
-                    // Explicitly check for true (treat undefined/missing as false)
-                    if (subUserPermissions[requiredPermission] !== true) {
+                    // FAIL CLOSED: If permissions not loaded yet or permission is false, hide item
+                    if (!subUserPermissions || subUserPermissions[requiredPermission] !== true) {
                       return false;
                     }
                   }

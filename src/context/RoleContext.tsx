@@ -97,25 +97,32 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
             
             setAssignedRoles(allRoles);
             
-            // Check if user is a SubUser and fetch permissions
+            // Check if user is a SubUser - IMMEDIATELY set role before fetching permissions
             if (allRoles.includes("subuser") || allRoles.includes("landlord_subuser")) {
-              const { data: subUserData } = await supabase
-                .from("sub_users")
-                .select("permissions, landlord_id")
-                .eq("user_id", user.id)
-                .eq("status", "active")
-                .maybeSingle();
+              // SECURITY FIX: Set role immediately to prevent bypass
+              setSelectedRole("subuser");
               
-              if (subUserData?.permissions) {
-                setSubUserPermissions(subUserData.permissions as Record<string, boolean>);
-                setLandlordId(subUserData.landlord_id);
+              // Fetch permissions via secure RPC (bypasses RLS issues)
+              const { data: subUserData, error: subUserError } = await supabase
+                .rpc("get_my_sub_user_permissions");
+              
+              if (subUserError) {
+                console.error("Error fetching sub-user permissions:", subUserError);
+              }
+              
+              // Type-safe access to RPC response
+              const subUserInfo = subUserData as { permissions?: Record<string, boolean>; landlord_id?: string; status?: string } | null;
+              
+              if (subUserInfo?.permissions) {
+                setSubUserPermissions(subUserInfo.permissions);
+                setLandlordId(subUserInfo.landlord_id || null);
                 
                 // Check if landlord is on trial
-                if (subUserData.landlord_id) {
+                if (subUserInfo.landlord_id) {
                   const { data: landlordSubscription } = await supabase
                     .from('landlord_subscriptions')
                     .select('status, trial_end_date')
-                    .eq('landlord_id', subUserData.landlord_id)
+                    .eq('landlord_id', subUserInfo.landlord_id)
                     .eq('status', 'trial')
                     .maybeSingle();
                   
@@ -126,10 +133,12 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
                     setIsOnLandlordTrial(isActive);
                   }
                 }
-                
-                setSelectedRole("subuser");
-                return "subuser";
+              } else {
+                // No permissions found - set to empty object (deny all)
+                setSubUserPermissions({});
               }
+              
+              return "subuser";
             }
             
             // SECURITY FIX: Only trust selectedRole if it exists in server-verified roles

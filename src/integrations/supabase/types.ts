@@ -4004,6 +4004,10 @@ export type Database = {
           updated_at: string
         }[]
       }
+      get_my_sub_user_permissions: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       get_occupancy_report: {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: Json

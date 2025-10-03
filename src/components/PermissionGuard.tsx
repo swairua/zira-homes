@@ -30,7 +30,8 @@ export function PermissionGuard({ permission, children, fallback }: PermissionGu
     return <>{children}</>;
   }
 
-  // Check specific permission for sub-users (always enforced)
+  // SECURE BY DEFAULT: Check specific permission for sub-users
+  // Fail closed: If permissions not loaded or undefined, deny access
   const hasPermission = subUserPermissions?.[permission] === true;
 
   if (!hasPermission) {
