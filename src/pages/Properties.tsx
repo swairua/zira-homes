@@ -19,6 +19,7 @@ import { ContextualUpgradePrompt } from "@/components/feature-access/ContextualU
 import { FEATURES } from "@/hooks/usePlanFeatureAccess";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { TablePaginator } from "@/components/ui/table-paginator";
+import { InteractiveTour } from "@/components/onboarding/InteractiveTour";
 
 interface Property {
   id: string;
@@ -136,8 +137,11 @@ const Properties = () => {
   return (
     <DashboardLayout>
       <div className="bg-tint-gray p-3 sm:p-4 lg:p-6 space-y-6 sm:space-y-8">
+        {/* Tour Prompt */}
+        <InteractiveTour tourId="add_property_tour" showPrompt={properties.length === 0} />
+        
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" data-tour="properties-header">
           <div>
             <h1 className="text-3xl font-bold text-primary">Properties</h1>
             <p className="text-muted-foreground">
@@ -145,8 +149,12 @@ const Properties = () => {
             </p>
           </div>
           <div className="flex items-center gap-3 self-stretch sm:self-auto">
-            <BulkUploadDropdown type="properties" onSuccess={fetchProperties} />
-            <PropertyUnitsWizard onPropertyAdded={fetchProperties} />
+            <div data-tour="bulk-upload-btn">
+              <BulkUploadDropdown type="properties" onSuccess={fetchProperties} />
+            </div>
+            <div data-tour="add-property-btn">
+              <PropertyUnitsWizard onPropertyAdded={fetchProperties} />
+            </div>
           </div>
         </div>
 
@@ -185,7 +193,7 @@ const Properties = () => {
         {/* Search, Filters & View Toggle */}
         <Card className="bg-card p-6">
           <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-            <div className="flex flex-col sm:flex-row gap-4 flex-1">
+            <div className="flex flex-col sm:flex-row gap-4 flex-1" data-tour="search-filter">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -210,7 +218,7 @@ const Properties = () => {
             </div>
             
             {/* View Toggle */}
-            <div className="flex items-center space-x-2 bg-secondary rounded-lg p-1">
+            <div className="flex items-center space-x-2 bg-secondary rounded-lg p-1" data-tour="view-toggle">
               <Button
                 variant={viewMode === "kanban" ? "default" : "ghost"}
                 size="sm"

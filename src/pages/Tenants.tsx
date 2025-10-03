@@ -19,6 +19,7 @@ import { TablePaginator } from "@/components/ui/table-paginator";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { checkBackendReady } from "@/utils/backendHealth";
 import { useRole } from "@/context/RoleContext";
+import { InteractiveTour } from "@/components/onboarding/InteractiveTour";
 
 interface Tenant {
   id: string;
@@ -354,8 +355,11 @@ const Tenants = () => {
     <DashboardLayout>
       <div className="bg-tint-gray p-6 space-y-8">
         <div className="space-y-6">
+            {/* Tour Prompt */}
+            <InteractiveTour tourId="add_tenant_tour" showPrompt={tenants.length === 0} />
+            
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" data-tour="tenants-header">
               <div>
                 <h1 className="text-3xl font-bold text-primary">Tenants</h1>
                 <p className="text-muted-foreground">
@@ -371,7 +375,9 @@ const Tenants = () => {
                   {viewMode === 'grid' ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
                 </Button>
                 <BulkUploadDropdown type="tenants" onSuccess={fetchTenants} />
-                <AddTenantDialog onTenantAdded={fetchTenants} />
+                <div data-tour="add-tenant-btn">
+                  <AddTenantDialog onTenantAdded={fetchTenants} />
+                </div>
               </div>
             </div>
 
