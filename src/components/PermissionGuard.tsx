@@ -1,7 +1,7 @@
 import { Navigate } from "react-router-dom";
 import { useRole } from "@/context/RoleContext";
 import { SubUserPermissions } from "@/hooks/usePermissions";
-import { Loader2 } from "lucide-react";
+import { Loader2, Lock } from "lucide-react";
 
 interface PermissionGuardProps {
   permission: keyof SubUserPermissions;
@@ -35,7 +35,30 @@ export function PermissionGuard({ permission, children, fallback }: PermissionGu
   const hasPermission = subUserPermissions?.[permission] === true;
 
   if (!hasPermission) {
-    return fallback || <Navigate to="/" replace />;
+    if (fallback) {
+      return <>{fallback}</>;
+    }
+    
+    // Default fallback with helpful message
+    return (
+      <div className="flex items-center justify-center min-h-screen p-4">
+        <div className="max-w-md text-center space-y-4">
+          <div className="mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center">
+            <Lock className="h-6 w-6 text-muted-foreground" />
+          </div>
+          <h2 className="text-xl font-semibold">Permission Required</h2>
+          <p className="text-muted-foreground">
+            You don't have permission to access this feature. Please contact your account owner to request access.
+          </p>
+          <button 
+            onClick={() => window.history.back()} 
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return <>{children}</>;

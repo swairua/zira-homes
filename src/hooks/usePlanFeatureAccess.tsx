@@ -10,6 +10,7 @@ interface FeatureAccessResult {
   reason?: string;
   status?: string;
   plan_name?: string;
+  required_permission?: string;
 }
 
 interface UsePlanFeatureAccessResult extends FeatureAccessResult {
