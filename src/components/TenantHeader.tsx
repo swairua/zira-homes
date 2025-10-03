@@ -10,6 +10,7 @@ import { Bell, User, Sun, Moon, Monitor, Settings, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
 import { supabase } from "@/integrations/supabase/client";
 import { NotificationsPopover } from "@/components/notifications/NotificationsPopover";
+import { TourLauncher } from "@/components/onboarding/TourLauncher";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -92,6 +93,8 @@ export function TenantHeader() {
         
         <div className="flex items-center gap-2">
           <NotificationsPopover />
+          
+          <TourLauncher />
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

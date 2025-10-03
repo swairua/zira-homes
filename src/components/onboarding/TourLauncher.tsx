@@ -82,18 +82,20 @@ export function TourLauncher() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          variant="outline"
+          variant="ghost"
           size="icon"
-          className="fixed bottom-20 right-6 h-12 w-12 rounded-full shadow-lg z-40 hover:scale-105 transition-transform"
+          className="text-white hover:bg-white/20"
           title="Interactive Tours & Help"
           aria-label="Open interactive tours menu"
           disabled={loading}
         >
-          {loading ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <HelpCircle className="h-5 w-5" />
-          )}
+          <div className="w-6 h-6 bg-white/30 rounded-full flex items-center justify-center backdrop-blur-sm">
+            {loading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <HelpCircle className="h-3 w-3" />
+            )}
+          </div>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
