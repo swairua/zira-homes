@@ -27,7 +27,15 @@ export function TrialFeatureBadge({
 
   const handleUpgrade = (e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
     navigate("/upgrade");
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (!allowed && reason !== 'network_error' && reason !== 'rpc_error' && reason !== 'error') {
+      e.stopPropagation();
+      e.preventDefault();
+    }
   };
 
   // If feature is allowed, show children without badge
@@ -38,11 +46,14 @@ export function TrialFeatureBadge({
   // Feature locked - show with floating badge
   if (!showTooltip) {
     return (
-      <div className="relative inline-block">
-        {children}
+      <div className="relative inline-block" onClick={handleClick}>
+        <div className="opacity-60 pointer-events-none">
+          {children}
+        </div>
         <Badge 
           variant="outline" 
-          className="absolute -top-2 -right-2 gap-1 text-[10px] h-5 px-1.5 border-primary/30 bg-primary/10 backdrop-blur-sm shadow-sm"
+          className="absolute -top-2 -right-2 gap-1 text-[10px] h-5 px-1.5 border-primary/30 bg-primary/10 backdrop-blur-sm shadow-sm pointer-events-auto cursor-pointer"
+          onClick={handleUpgrade}
         >
           <Crown className="h-2.5 w-2.5" />
           Pro
@@ -55,11 +66,13 @@ export function TrialFeatureBadge({
     <TooltipProvider>
       <Tooltip delayDuration={200}>
         <TooltipTrigger asChild>
-          <div className="relative inline-block cursor-pointer">
-            {children}
+          <div className="relative inline-block" onClick={handleClick}>
+            <div className="opacity-60 pointer-events-none">
+              {children}
+            </div>
             <Badge 
               variant="outline" 
-              className="absolute -top-2 -right-2 gap-1 text-[10px] h-5 px-1.5 border-primary/30 bg-primary/10 backdrop-blur-sm shadow-sm hover:bg-primary/20 transition-colors"
+              className="absolute -top-2 -right-2 gap-1 text-[10px] h-5 px-1.5 border-primary/30 bg-primary/10 backdrop-blur-sm shadow-sm hover:bg-primary/20 transition-colors pointer-events-auto cursor-pointer z-10"
             >
               <Crown className="h-2.5 w-2.5" />
               Pro
