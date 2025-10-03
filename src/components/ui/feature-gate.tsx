@@ -15,6 +15,7 @@ interface FeatureGateProps {
   showUpgradePrompt?: boolean;
   allowReadOnly?: boolean;
   readOnlyMessage?: string;
+  variant?: "full" | "compact" | "inline";
 }
 
 export function FeatureGate({ 
@@ -25,7 +26,8 @@ export function FeatureGate({
   fallbackDescription,
   showUpgradePrompt = true,
   allowReadOnly = false,
-  readOnlyMessage = "This feature is read-only in your current plan"
+  readOnlyMessage = "This feature is read-only in your current plan",
+  variant = "full"
 }: FeatureGateProps) {
   const navigate = useNavigate();
   const { allowed, is_limited, limit, remaining, plan_name, loading, reason, status } = usePlanFeatureAccess(feature, currentCount);
@@ -54,7 +56,7 @@ export function FeatureGate({
     
     return (
       <>
-        {isTrialUser && (
+        {isTrialUser && variant === "full" && (
           <div className="mb-4 p-3 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950 dark:to-blue-950 border border-purple-200 dark:border-purple-800 rounded-lg">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -74,7 +76,7 @@ export function FeatureGate({
         
         {children}
         
-        {allowed && is_limited && limit && remaining !== undefined && remaining <= 2 && !isTrialUser && (
+        {allowed && is_limited && limit && remaining !== undefined && remaining <= 2 && !isTrialUser && variant === "full" && (
           <div className="mt-4 p-3 bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800 rounded-lg">
             <div className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
               <AlertCircle className="h-4 w-4" />
@@ -166,7 +168,17 @@ export function FeatureGate({
     );
   }
 
-  // Feature completely blocked - show upgrade card
+  // Feature completely blocked
+  // For compact/inline variants, show minimal UI
+  if (variant === "compact" || variant === "inline") {
+    return (
+      <div className="relative inline-flex items-center gap-2 opacity-60 cursor-not-allowed">
+        {children}
+      </div>
+    );
+  }
+
+  // Full variant - show upgrade card
   return (
     <Card className="border-2 border-dashed border-muted-foreground/25">
       <CardHeader className="text-center pb-4">
