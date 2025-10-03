@@ -150,8 +150,17 @@ export function AppSidebar() {
                     }
                   }
 
-                  // Filter navigation for sub-users based on permissions
+                  // Filter navigation for sub-users based on permissions (SECURE BY DEFAULT)
                   if (isSubUser && subUserPermissions) {
+                    // Whitelist of always-visible items for sub-users
+                    const alwaysVisibleForSubUsers = ["Dashboard", "Settings", "Support", "Knowledge Base"];
+                    
+                    // Always show whitelisted items
+                    if (alwaysVisibleForSubUsers.includes(item.title)) {
+                      return true;
+                    }
+                    
+                    // Map menu items to required permissions
                     const permissionMap: Record<string, keyof typeof subUserPermissions> = {
                       "Properties": "manage_properties",
                       "Units": "manage_properties",
@@ -164,11 +173,18 @@ export function AppSidebar() {
                       "Expenses": "manage_expenses",
                       "Email Templates": "send_messages",
                       "Message Templates": "send_messages",
+                      "Notifications": "view_reports", // Notifications are informational, require view_reports
                     };
                     
                     const requiredPermission = permissionMap[item.title];
+                    
+                    // SECURE BY DEFAULT: If item has no permission mapping, hide it for sub-users
+                    if (!requiredPermission) {
+                      return false;
+                    }
+                    
                     // Explicitly check for true (treat undefined/missing as false)
-                    if (requiredPermission && subUserPermissions[requiredPermission] !== true) {
+                    if (subUserPermissions[requiredPermission] !== true) {
                       return false;
                     }
                   }

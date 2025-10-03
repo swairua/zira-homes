@@ -164,7 +164,11 @@ export const AppRoutes = () => {
                 } />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/support" element={<Support />} />
-                <Route path="/notifications" element={<Notifications />} />
+                <Route path="/notifications" element={
+                  <PermissionGuard permission="view_reports">
+                    <Notifications />
+                  </PermissionGuard>
+                } />
                 <Route path="/leases" element={
                   <PermissionGuard permission="manage_leases">
                     <Leases />
