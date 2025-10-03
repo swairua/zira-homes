@@ -120,7 +120,7 @@ export const CreateMaintenanceDialog: React.FC<{ onCreated?: () => void }> = ({ 
 
         <div className="space-y-4">
           <div>
-            <label className="text-sm font-medium">Lease</label>
+            <label className="text-sm font-medium">Lease <span className="text-destructive ml-1">*</span></label>
             <Select value={selectedLeaseId || ''} onValueChange={(v) => setSelectedLeaseId(v || null)}>
               <SelectTrigger>
                 <SelectValue placeholder="Select lease" />
@@ -136,7 +136,7 @@ export const CreateMaintenanceDialog: React.FC<{ onCreated?: () => void }> = ({ 
           </div>
 
           <div>
-            <label className="text-sm font-medium">Title</label>
+            <label className="text-sm font-medium">Title <span className="text-destructive ml-1">*</span></label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g., Leaking faucet in kitchen" />
           </div>
 

@@ -128,7 +128,7 @@ export function UnitEditForm({ unit, onSave, onCancel }: UnitEditFormProps) {
               name="unit_number"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Unit Number</FormLabel>
+                  <FormLabel>Unit Number <span className="text-destructive ml-1">*</span></FormLabel>
                   <FormControl>
                     <Input placeholder="e.g., 101" {...field} />
                   </FormControl>
@@ -142,7 +142,7 @@ export function UnitEditForm({ unit, onSave, onCancel }: UnitEditFormProps) {
               name="unit_type"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Unit Type</FormLabel>
+                  <FormLabel>Unit Type <span className="text-destructive ml-1">*</span></FormLabel>
                   <FormControl>
                     <UnitTypeSelect
                       value={field.value}
