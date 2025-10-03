@@ -147,6 +147,8 @@ export const FEATURES = {
   MAINTENANCE_TRACKING: 'maintenance.tracking',
   TENANT_PORTAL: 'tenant.portal',
   INVOICING: 'invoicing.basic',
+  ADVANCED_INVOICING: 'invoicing.advanced',
+  MANAGE_PAYMENTS: 'payments.management',
   EXPENSE_TRACKING: 'expenses.tracking',
   
   // Integrations
