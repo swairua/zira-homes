@@ -4182,6 +4182,10 @@ export type Database = {
         Args: { p_lease_id: string }
         Returns: boolean
       }
+      is_lease_owned_by_tenant_user: {
+        Args: { _lease_id: string; _user_id: string }
+        Returns: boolean
+      }
       is_sub_user_of_landlord: {
         Args: { _landlord_id: string; _user_id: string }
         Returns: boolean
@@ -4318,6 +4322,10 @@ export type Database = {
       }
       tenant_has_lease_on_property: {
         Args: { _property_id: string; _user_id: string }
+        Returns: boolean
+      }
+      unit_belongs_to_tenant_user: {
+        Args: { _unit_id: string; _user_id: string }
         Returns: boolean
       }
       user_can_access_lease: {
