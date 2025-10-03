@@ -20,6 +20,8 @@ import { FEATURES } from "@/hooks/usePlanFeatureAccess";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { TablePaginator } from "@/components/ui/table-paginator";
 import { InteractiveTour } from "@/components/onboarding/InteractiveTour";
+import { GettingStartedCard } from "@/components/onboarding/GettingStartedCard";
+import { useGettingStarted } from "@/hooks/useGettingStarted";
 
 interface Property {
   id: string;
@@ -46,6 +48,7 @@ const Properties = () => {
   const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
   const [isMobile, setIsMobile] = useState(false);
   const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ pageSize: 12 });
+  const { currentStep, dismissStep } = useGettingStarted();
 
   useEffect(() => {
     fetchProperties();
@@ -137,6 +140,24 @@ const Properties = () => {
   return (
     <DashboardLayout>
       <div className="bg-tint-gray p-3 sm:p-4 lg:p-6 space-y-6 sm:space-y-8">
+        {/* Getting Started Card */}
+        {currentStep === "add_property" && properties.length === 0 && (
+          <GettingStartedCard
+            stepId="add_property"
+            title="Let's add your first property"
+            description="Start by adding a property to manage your real estate portfolio. This is the foundation of your property management system."
+            icon={Building2}
+            actionLabel="Add Property"
+            onAction={() => {
+              const addButton = document.querySelector('[data-tour="add-property-btn"] button') as HTMLButtonElement;
+              addButton?.click();
+            }}
+            onDismiss={() => dismissStep("add_property")}
+            currentStep={1}
+            totalSteps={4}
+          />
+        )}
+        
         {/* Tour Prompt */}
         <InteractiveTour tourId="add_property_tour" showPrompt={properties.length === 0} />
         

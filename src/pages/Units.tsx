@@ -21,6 +21,8 @@ import { FeatureGate } from "@/components/ui/feature-gate";
 import { FEATURES } from "@/hooks/usePlanFeatureAccess";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { TablePaginator } from "@/components/ui/table-paginator";
+import { GettingStartedCard } from "@/components/onboarding/GettingStartedCard";
+import { useGettingStarted } from "@/hooks/useGettingStarted";
 
 interface Unit {
   id: string;
@@ -61,6 +63,7 @@ const Units = () => {
   const [filterProperty, setFilterProperty] = useState("all");
   const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
   const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ pageSize: 12 });
+  const { currentStep, dismissStep } = useGettingStarted();
 
   const fetchUnits = async () => {
     try {
@@ -215,6 +218,24 @@ const Units = () => {
   return (
     <DashboardLayout>
       <div className="bg-tint-gray p-6 space-y-8">
+        {/* Getting Started Card */}
+        {currentStep === "add_units" && units.length === 0 && (
+          <GettingStartedCard
+            stepId="add_units"
+            title="Create your first unit"
+            description="Units are the individual rental spaces within your properties. Add units to start managing rentals and tenants."
+            icon={LayoutGrid}
+            actionLabel="Add Unit"
+            onAction={() => {
+              const addButton = document.querySelector('.flex.items-center.gap-3 button:last-child') as HTMLButtonElement;
+              addButton?.click();
+            }}
+            onDismiss={() => dismissStep("add_units")}
+            currentStep={2}
+            totalSteps={4}
+          />
+        )}
+        
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>

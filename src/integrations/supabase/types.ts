@@ -3402,6 +3402,39 @@ export type Database = {
         }
         Relationships: []
       }
+      user_getting_started_progress: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          dismissed_at: string | null
+          id: string
+          status: string
+          step_name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          dismissed_at?: string | null
+          id?: string
+          status?: string
+          step_name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          dismissed_at?: string | null
+          id?: string
+          status?: string
+          step_name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_onboarding_progress: {
         Row: {
           completed_at: string | null

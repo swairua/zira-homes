@@ -8,6 +8,7 @@ import { OptimizedChartsSection } from "@/components/optimized/OptimizedChartsSe
 import { GatedOptimizedStatsCards } from "@/components/optimized/GatedOptimizedStatsCards";
 import { GatedOptimizedChartsSection } from "@/components/optimized/GatedOptimizedChartsSection";
 import { GatedFloatingActionMenu } from "@/components/dashboard/GatedFloatingActionMenu";
+import { GettingStartedWidget } from "@/components/onboarding/GettingStartedWidget";
 import { useLandlordDashboard } from "@/hooks/useLandlordDashboard";
 import { LoadingSkeleton } from "@/components/ui/loading-skeleton";
 import { useRouteTitle } from "@/hooks/useRouteTitle";
@@ -117,6 +118,8 @@ export default function Index() {
         )}
 
         {/* KPI Summary Cards - Using optimized version with actual data */}
+        <GettingStartedWidget />
+        
         <Suspense fallback={<LoadingSkeleton type="card" count={4} />}>
           <GatedOptimizedStatsCards stats={stats} isLoading={loading} />
         </Suspense>

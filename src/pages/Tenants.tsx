@@ -20,6 +20,8 @@ import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { checkBackendReady } from "@/utils/backendHealth";
 import { useRole } from "@/context/RoleContext";
 import { InteractiveTour } from "@/components/onboarding/InteractiveTour";
+import { GettingStartedCard } from "@/components/onboarding/GettingStartedCard";
+import { useGettingStarted } from "@/hooks/useGettingStarted";
 
 interface Tenant {
   id: string;
@@ -61,6 +63,7 @@ const Tenants = () => {
   const [backendReady, setBackendReady] = useState<boolean>(true);
   const [backendReason, setBackendReason] = useState<string>("");
   const { isSubUser, landlordId } = useRole();
+  const { currentStep, dismissStep } = useGettingStarted();
 
   useEffect(() => {
     (async () => {
@@ -355,6 +358,24 @@ const Tenants = () => {
     <DashboardLayout>
       <div className="bg-tint-gray p-6 space-y-8">
         <div className="space-y-6">
+            {/* Getting Started Card */}
+            {currentStep === "add_tenants" && tenants.length === 0 && (
+              <GettingStartedCard
+                stepId="add_tenants"
+                title="Add your first tenant"
+                description="Start managing your tenants by adding their information. You can link them to units and generate invoices."
+                icon={Users}
+                actionLabel="Add Tenant"
+                onAction={() => {
+                  const addButton = document.querySelector('[data-tour="add-tenant-btn"] button') as HTMLButtonElement;
+                  addButton?.click();
+                }}
+                onDismiss={() => dismissStep("add_tenants")}
+                currentStep={3}
+                totalSteps={4}
+              />
+            )}
+            
             {/* Tour Prompt */}
             <InteractiveTour tourId="add_tenant_tour" showPrompt={tenants.length === 0} />
             
