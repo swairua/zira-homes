@@ -26,6 +26,8 @@ import { ReportKpiCards } from "@/components/reports/ReportKpiCards";
 import { QuickExpiryCheck } from "@/components/reports/QuickExpiryCheck";
 import { PDFGenerationProgress } from "@/components/ui/pdf-generation-progress";
 import { useRole } from "@/context/RoleContext";
+import { TrialFeatureBadge } from "@/components/trial/TrialFeatureBadge";
+import type { Feature } from "@/hooks/usePlanFeatureAccess";
 
 const Reports = () => {
   const [selectedReport, setSelectedReport] = useState<any>(null);
@@ -205,14 +207,7 @@ const Reports = () => {
         filters={{ periodPreset: 'current_period' }}
       />
       <div className="bg-tint-gray p-3 sm:p-4 lg:p-6 space-y-8">
-        <FeatureGate 
-          feature={FEATURES.BASIC_REPORTING}
-          fallbackTitle="Advanced Reporting"
-          fallbackDescription="Generate comprehensive financial and operational reports with advanced analytics."
-          allowReadOnly={true}
-          readOnlyMessage="Basic reports only - upgrade for advanced features"
-        >
-          {/* Header */}
+        {/* Header */}
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-primary">Reports</h1>
@@ -397,7 +392,12 @@ const Reports = () => {
                     .map((config) => {
                       const Icon = getReportIcon(config.id);
                       return (
-                        <Card key={config.id} className="hover:shadow-elevated transition-all duration-300 border-border/20 bg-gradient-to-br from-background to-background/80 overflow-hidden relative group">
+                        <TrialFeatureBadge 
+                          key={config.id}
+                          feature={getReportFeature(config.id) as Feature}
+                          showTooltip={true}
+                        >
+                          <Card className="hover:shadow-elevated transition-all duration-300 border-border/20 bg-gradient-to-br from-background to-background/80 overflow-hidden relative group">
                           <div className="absolute inset-0 bg-gradient-to-br from-primary/3 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                           <CardHeader className="pb-3 relative">
                             <div className="flex items-start justify-between">
@@ -441,6 +441,7 @@ const Reports = () => {
                             </div>
                           </CardContent>
                         </Card>
+                        </TrialFeatureBadge>
                       );
                     })}
                 </div>
@@ -457,7 +458,12 @@ const Reports = () => {
                     .map((config) => {
                       const Icon = getReportIcon(config.id);
                       return (
-                        <Card key={config.id} className="relative overflow-hidden opacity-75 cursor-not-allowed">
+                        <TrialFeatureBadge 
+                          key={config.id}
+                          feature={getReportFeature(config.id) as Feature}
+                          showTooltip={true}
+                        >
+                          <Card className="relative overflow-hidden opacity-75 cursor-not-allowed">
                            {/* Enhanced blur overlay */}
                            <div className="absolute inset-0 bg-background/60 backdrop-blur-[1px] z-10 flex items-center justify-center">
                              <div className="text-center p-4">
@@ -508,6 +514,7 @@ const Reports = () => {
                             </div>
                           </CardContent>
                         </Card>
+                        </TrialFeatureBadge>
                       );
                     })}
                 </div>
@@ -536,7 +543,6 @@ const Reports = () => {
             isComplete={false}
             reportTitle={currentGeneratingReport}
           />
-        </FeatureGate>
       </div>
     </DashboardLayout>
   );

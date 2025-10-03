@@ -50,9 +50,9 @@ export function FeatureGate({
 
   // Feature is allowed - show content
   if (effectiveAllowed) {
-    // Show trial premium access badge for trial users
-    const isTrialUser = status === 'trial';
-    const isSubUserPermitted = reason === 'sub_user_permitted_during_landlord_trial';
+    // Show trial premium access badge for trial users (including sub-users on landlord trial)
+    const isTrialUser = status === 'trial' || reason === 'sub_user_on_landlord_trial';
+    const isSubUserPermitted = reason === 'sub_user_on_landlord_trial';
     
     return (
       <>
