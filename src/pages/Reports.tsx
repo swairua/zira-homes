@@ -18,7 +18,6 @@ import { usePlanFeatureAccess } from "@/hooks/usePlanFeatureAccess";
 import { PlanUpgradeButton } from "@/components/feature-access/PlanUpgradeButton";
 import { useReportPrefetch } from "@/hooks/useReportPrefetch";
 import { supabase } from "@/integrations/supabase/client";
-import { normalizeFeatures } from "@/utils/featureNormalization";
 import { useExecutiveSummary } from "@/hooks/useExecutiveSummary";
 import { ReportPreloadManager } from "@/components/reporting/ReportPreloadManager";
 import { fmtCurrency, fmtCurrencyCompact } from "@/lib/format";
@@ -26,16 +25,16 @@ import { DisabledActionWrapper } from "@/components/feature-access/DisabledActio
 import { ReportKpiCards } from "@/components/reports/ReportKpiCards";
 import { QuickExpiryCheck } from "@/components/reports/QuickExpiryCheck";
 import { PDFGenerationProgress } from "@/components/ui/pdf-generation-progress";
+import { useRole } from "@/context/RoleContext";
 
 const Reports = () => {
   const [selectedReport, setSelectedReport] = useState<any>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [progressOpen, setProgressOpen] = useState(false);
   const [currentGeneratingReport, setCurrentGeneratingReport] = useState<string>("");
-  const [userRole, setUserRole] = useState<string>('landlord');
-  const [userFeatures, setUserFeatures] = useState<string[]>([]);
   
   const { user } = useAuth();
+  const { effectiveRole, isSubUser } = useRole();
   const { 
     generateOptimizedReport, 
     isActive: isGenerating, 
@@ -45,82 +44,13 @@ const Reports = () => {
   } = useOptimizedReportGeneration();
   const { prefetchReportData } = useReportPrefetch();
 
-  // Fetch user role and features
-  useEffect(() => {
-    const fetchUserRoleAndFeatures = async () => {
-      if (!user) return;
+  // Check plan access for the three feature tiers
+  const basicReporting = usePlanFeatureAccess(FEATURES.BASIC_REPORTING);
+  const advancedReporting = usePlanFeatureAccess(FEATURES.ADVANCED_REPORTING);
+  const financialReports = usePlanFeatureAccess(FEATURES.FINANCIAL_REPORTS);
 
-      try {
-        // Check if user is a tenant first
-        const { data: tenant } = await supabase
-          .from("tenants")
-          .select("id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (tenant) {
-          setUserRole("tenant");
-          setUserFeatures([FEATURES.BASIC_REPORTING]); // Tenants get basic reporting
-          return;
-        }
-
-        // Check user roles table
-        const { data: userRoles } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id);
-
-        if (userRoles && userRoles.length > 0) {
-          const roles = userRoles.map(r => r.role);
-          if (roles.includes("Admin")) {
-            setUserRole("admin");
-            // Admins get all features
-            setUserFeatures(Object.values(FEATURES));
-            return;
-          } else if (roles.includes("Landlord")) {
-            setUserRole("landlord");
-          } else if (roles.includes("Manager")) {
-            setUserRole("manager");
-          } else if (roles.includes("Agent")) {
-            setUserRole("agent");
-          } else {
-            setUserRole("landlord"); // Default fallback
-          }
-        } else {
-          setUserRole("landlord"); // Default fallback
-        }
-
-        // Fetch user's plan features for non-admin users
-        // Check both active AND trial subscriptions
-        const { data: subscription } = await supabase
-          .from("landlord_subscriptions")
-          .select(`
-            billing_plans!inner(features),
-            status
-          `)
-          .eq("landlord_id", user.id)
-          .in("status", ["active", "trial"])
-          .order("status", { ascending: true }) // "active" comes before "trial"
-          .limit(1)
-          .maybeSingle();
-
-        if (subscription && subscription.billing_plans) {
-          const planFeatures = (subscription.billing_plans as any).features || [];
-          // Normalize feature names to match our constants
-          setUserFeatures(normalizeFeatures(planFeatures));
-        } else {
-          // Default to basic features for users without active subscriptions
-          setUserFeatures([FEATURES.BASIC_REPORTING]);
-        }
-      } catch (error) {
-        console.error("Error fetching user role and features:", error);
-        setUserRole("landlord"); // Default fallback
-        setUserFeatures([FEATURES.BASIC_REPORTING]);
-      }
-    };
-
-    fetchUserRoleAndFeatures();
-  }, [user]);
+  // Determine display role - sub-users see landlord reports in grid but permission gates will control access
+  const displayRole = isSubUser ? 'landlord' : effectiveRole;
 
   // Auto-close progress dialog when PDF generation is complete
   useEffect(() => {
@@ -154,23 +84,26 @@ const Reports = () => {
     canonical.href = window.location.href;
   }, []);
 
-  // Get all reports for user role (don't filter by features - we want to show locked ones too)
+  // Get all reports for display role
   const allReportsForRole = reportConfigs
-    .filter(config => config.roles.includes(userRole as any));
+    .filter(config => config.roles.includes(displayRole as any));
   
+  // Build allowed features array based on plan checks
+  const allowedFeatures: string[] = [];
+  if (basicReporting.allowed) allowedFeatures.push(FEATURES.BASIC_REPORTING);
+  if (advancedReporting.allowed) allowedFeatures.push(FEATURES.ADVANCED_REPORTING);
+  if (financialReports.allowed) allowedFeatures.push(FEATURES.FINANCIAL_REPORTS);
+
   // Separate available and locked reports
   const availableReports = allReportsForRole
-    .filter(config => userFeatures.includes(getReportFeature(config.id)));
+    .filter(config => allowedFeatures.includes(getReportFeature(config.id)));
   
   const lockedReports = allReportsForRole
-    .filter(config => !userFeatures.includes(getReportFeature(config.id)));
+    .filter(config => !allowedFeatures.includes(getReportFeature(config.id)));
 
-  // Debug logging for counts
-  console.log(`Reports: ${availableReports.length} available, ${lockedReports.length} locked, ${allReportsForRole.length} total`);
-  console.log('User Role:', userRole);
-  console.log('User Features:', userFeatures);
-  console.log('Available Reports:', availableReports.map(r => r.id));
-  console.log('Locked Reports:', lockedReports.map(r => r.id));
+  // Console logs for debugging
+  console.log(`Reports: ${availableReports.length} available, ${lockedReports.length} locked`);
+  console.log('Allowed features:', allowedFeatures);
 
   const handlePreviewReport = (config: any) => {
     setSelectedReport(config);
@@ -525,7 +458,7 @@ const Reports = () => {
                       const Icon = getReportIcon(config.id);
                       return (
                         <Card key={config.id} className="relative overflow-hidden opacity-75 cursor-not-allowed">
-                          {/* Enhanced blur overlay */}
+                           {/* Enhanced blur overlay */}
                            <div className="absolute inset-0 bg-background/60 backdrop-blur-[1px] z-10 flex items-center justify-center">
                              <div className="text-center p-4">
                                <Lock className="h-6 w-6 mx-auto mb-2 text-primary" />
@@ -533,7 +466,11 @@ const Reports = () => {
                                <p className="text-xs text-muted-foreground mb-3">
                                  Advanced {config.id.includes('financial') || config.id.includes('profit') || config.id.includes('cash') ? 'financial' : 'operational'} insights & analytics
                                </p>
-                               <PlanUpgradeButton size="sm" className="text-xs">
+                               <PlanUpgradeButton 
+                                 feature={getReportFeature(config.id) as any}
+                                 size="sm" 
+                                 className="text-xs"
+                               >
                                  <Crown className="h-3 w-3 mr-1" />
                                  Unlock Pro
                                </PlanUpgradeButton>
