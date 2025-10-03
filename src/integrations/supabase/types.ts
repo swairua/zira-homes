@@ -3892,6 +3892,10 @@ export type Database = {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: Json
       }
+      get_feature_usage: {
+        Args: { p_feature_name: string; p_user_id: string }
+        Returns: number
+      }
       get_financial_summary_report: {
         Args:
           | {
@@ -4092,6 +4096,10 @@ export type Database = {
       get_tenant_unit_ids: {
         Args: { _user_id: string }
         Returns: string[]
+      }
+      get_tour_status: {
+        Args: { p_tour_name: string; p_user_id: string }
+        Returns: string
       }
       get_transaction_status: {
         Args: { p_checkout_request_id: string }
@@ -4327,6 +4335,15 @@ export type Database = {
       unit_belongs_to_tenant_user: {
         Args: { _unit_id: string; _user_id: string }
         Returns: boolean
+      }
+      upsert_feature_discovery: {
+        Args: {
+          p_feature_name: string
+          p_first_used_at?: string
+          p_usage_count?: number
+          p_user_id: string
+        }
+        Returns: undefined
       }
       user_can_access_lease: {
         Args: { _lease_id: string; _user_id: string }
