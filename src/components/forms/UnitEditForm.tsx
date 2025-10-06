@@ -85,21 +85,17 @@ export function UnitEditForm({ unit, onSave, onCancel }: UnitEditFormProps) {
   const onSubmit = async (data: UnitFormData) => {
     setIsLoading(true);
     try {
-      // Only allow setting maintenance status manually
-      // Occupancy (vacant/occupied) is handled by the database
-      const finalStatus = data.status === 'maintenance' ? 'maintenance' : undefined;
+      // Handle status updates: 
+      // - Set to 'maintenance' when explicitly requested
+      // - Set to 'vacant' when returning from maintenance (DB will update to 'occupied' if active lease exists)
+      const finalStatus = data.status === 'maintenance' ? 'maintenance' : 'vacant';
       
       // Combine form data with unit specifications
       const combinedData = {
         ...data,
-        status: finalStatus, // Only update status if it's maintenance
+        status: finalStatus,
         ...unitSpecifications,
       };
-      
-      // Remove status from combinedData if it's not maintenance (let DB handle it)
-      if (finalStatus === undefined) {
-        delete combinedData.status;
-      }
       
       await onSave(combinedData);
       toast.success("Unit updated successfully");
