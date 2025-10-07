@@ -92,3 +92,6 @@ verify_jwt = false
 
 [functions.test-sms]
 verify_jwt = false
+
+[functions.admin-assign-plan]
+verify_jwt = true
