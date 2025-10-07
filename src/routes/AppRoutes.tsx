@@ -23,6 +23,7 @@ const TenantPayments = React.lazy(() => import("@/pages/tenant/TenantPayments"))
 const TenantProfile = React.lazy(() => import("@/pages/tenant/TenantProfile"));
 const TenantSupport = React.lazy(() => import("@/pages/tenant/TenantSupport"));
 const FeatureDemo = React.lazy(() => import("@/pages/FeatureDemo"));
+const TestSMS = React.lazy(() => import("@/pages/TestSMS"));
 
 // Existing landlord pages
 import Properties from "@/pages/Properties";
@@ -87,6 +88,11 @@ export const AppRoutes = () => {
     <Routes>
       {/* Public routes */}
       <Route path="/auth" element={<Auth />} />
+      <Route path="/test-sms" element={
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <TestSMS />
+        </React.Suspense>
+      } />
       
       {/* Tenant routes with lazy loading */}
       <Route
