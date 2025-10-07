@@ -2381,6 +2381,72 @@ export type Database = {
         }
         Relationships: []
       }
+      sms_logs: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          delivered_at: string | null
+          error_message: string | null
+          failed_at: string | null
+          id: string
+          landlord_id: string | null
+          last_retry_at: string | null
+          message_content: string
+          message_type: string | null
+          phone_number: string
+          phone_number_formatted: string
+          provider_name: string | null
+          provider_response: Json | null
+          retry_count: number | null
+          sent_at: string | null
+          status: string
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          delivered_at?: string | null
+          error_message?: string | null
+          failed_at?: string | null
+          id?: string
+          landlord_id?: string | null
+          last_retry_at?: string | null
+          message_content: string
+          message_type?: string | null
+          phone_number: string
+          phone_number_formatted: string
+          provider_name?: string | null
+          provider_response?: Json | null
+          retry_count?: number | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          delivered_at?: string | null
+          error_message?: string | null
+          failed_at?: string | null
+          id?: string
+          landlord_id?: string | null
+          last_retry_at?: string | null
+          message_content?: string
+          message_type?: string | null
+          phone_number?: string
+          phone_number_formatted?: string
+          provider_name?: string | null
+          provider_response?: Json | null
+          retry_count?: number | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       sms_providers: {
         Row: {
           authorization_token: string | null
