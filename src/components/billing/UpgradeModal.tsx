@@ -176,9 +176,10 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
           throw new Error("Failed to create checkout session");
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Upgrade error:', error);
-      toast.error("Upgrade failed. Please try again.");
+      const msg = error?.message || (typeof error === 'string' ? error : 'Upgrade failed. Please try again.');
+      toast.error(msg);
     } finally {
       setIsProcessing(false);
     }

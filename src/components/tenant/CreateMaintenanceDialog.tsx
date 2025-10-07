@@ -80,9 +80,8 @@ export const CreateMaintenanceDialog: React.FC<{ onCreated?: () => void }> = ({ 
         status: 'pending',
         submitted_date: new Date().toISOString(),
         tenant_id: lease.tenant_id,
-        lease_id: lease.id,
-        property_id: lease.property_id || lease.unit?.property_id || null,
-        unit_id: lease.unit_id || null
+        property_id: lease.property_id ?? lease.unit?.property_id ?? null,
+        unit_id: lease.unit_id ?? null
       };
 
       const { error } = await supabase.from('maintenance_requests').insert(insertPayload);
