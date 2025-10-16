@@ -157,24 +157,67 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
           window.location.reload();
         }, 1000);
       } else {
-        // For other billing models that require upfront payment, use Stripe
-        console.log('💳 Creating Stripe checkout session...');
-        
-        const { data, error } = await supabase.functions.invoke('create-billing-checkout', {
-          body: { planId: selectedPlan }
-        });
+        // For other billing models, use M-Pesa STK push
+        console.log('💳 Initiating M-Pesa payment for plan upgrade...');
 
-        if (error) {
-          console.error('❌ Stripe checkout error:', error);
-          throw error;
+        if (!phoneNumber || phoneNumber.trim().length < 9) {
+          toast.error("Please enter a valid phone number for M-Pesa payment");
+          return;
         }
 
-        if (data?.url) {
-          console.log('✅ Redirecting to Stripe checkout...');
-          window.location.href = data.url;
-          return;
+        const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
+          'create-billing-checkout',
+          {
+            body: {
+              planId: selectedPlan,
+              phoneNumber: phoneNumber.trim()
+            }
+          }
+        );
+
+        if (checkoutError) {
+          const errorDetail = checkoutError instanceof Error
+            ? checkoutError.message
+            : typeof checkoutError === 'object' && checkoutError !== null
+            ? (checkoutError as any).error || JSON.stringify(checkoutError)
+            : String(checkoutError);
+          throw new Error(`Payment setup failed: ${errorDetail}`);
+        }
+
+        if (checkoutData?.type === 'mpesa_payment') {
+          console.log('🚀 Initiating M-Pesa STK push...');
+
+          const { data: stkData, error: stkError } = await supabase.functions.invoke(
+            'mpesa-stk-push',
+            {
+              body: {
+                phoneNumber: phoneNumber.trim(),
+                amount: checkoutData.amount,
+                description: `Plan Upgrade: ${selectedPlanData.name}`,
+                transactionId: checkoutData.transactionId,
+                paymentType: 'plan_upgrade',
+                planId: selectedPlan
+              }
+            }
+          );
+
+          if (stkError) {
+            throw stkError;
+          }
+
+          if (stkData?.CheckoutRequestID) {
+            toast.success("M-Pesa prompt sent to your phone. Please complete the payment.");
+            setPhoneNumber('');
+            setTimeout(() => {
+              onClose();
+              window.location.reload();
+            }, 2000);
+            return;
+          } else {
+            throw new Error("Failed to initiate M-Pesa payment");
+          }
         } else {
-          throw new Error("Failed to create checkout session");
+          throw new Error("Unexpected response from payment setup");
         }
       }
     } catch (error: any) {
