@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@14.21.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -20,11 +19,6 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
-    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) {
-      throw new Error("STRIPE_SECRET_KEY is not configured");
-    }
-
     // Use service role key to bypass RLS for subscription updates
     const supabaseService = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -42,21 +36,28 @@ serve(async (req) => {
     if (!user) throw new Error("User not authenticated");
     logStep("User authenticated", { userId: user.id });
 
-    const { sessionId, planId } = await req.json();
-    if (!sessionId || !planId) {
-      throw new Error("Session ID and Plan ID are required");
+    const { transactionId, planId } = await req.json();
+    if (!transactionId || !planId) {
+      throw new Error("Transaction ID and Plan ID are required");
     }
-    logStep("Request parsed", { sessionId, planId });
+    logStep("Request parsed", { transactionId, planId });
 
-    const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+    // Get the transaction to verify payment was successful
+    const { data: transaction, error: txnError } = await supabaseService
+      .from('mpesa_transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .single();
 
-    // Retrieve the checkout session to verify completion
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
-    
-    if (session.status !== 'complete') {
-      throw new Error("Checkout session is not complete");
+    if (txnError || !transaction) {
+      throw new Error("Transaction not found");
     }
-    logStep("Session verified as complete", { sessionId, status: session.status });
+    logStep("Transaction retrieved", { status: transaction.status });
+
+    // Verify transaction is completed
+    if (transaction.status !== 'completed') {
+      throw new Error(`Payment not completed. Current status: ${transaction.status}`);
+    }
 
     // Get the billing plan
     const { data: plan, error: planError } = await supabaseService
@@ -78,7 +79,7 @@ serve(async (req) => {
         billing_plan_id: planId,
         status: 'active',
         subscription_start_date: new Date().toISOString(),
-        trial_end_date: null, // End trial period
+        trial_end_date: null,
         auto_renewal: true,
         sms_credits_balance: plan.sms_credits_included || 0,
         updated_at: new Date().toISOString()
@@ -102,11 +103,25 @@ serve(async (req) => {
       _details: {
         plan_name: plan.name,
         billing_model: plan.billing_model,
-        percentage_rate: plan.percentage_rate,
-        stripe_session_id: sessionId
+        payment_method: 'mpesa',
+        transaction_id: transactionId,
+        mpesa_receipt: transaction.mpesa_receipt_number
       }
     });
     logStep("Activity logged");
+
+    // Update the transaction metadata to link it to the subscription
+    await supabaseService
+      .from('mpesa_transactions')
+      .update({
+        metadata: {
+          ...transaction.metadata,
+          subscription_id: subscription?.[0]?.id,
+          plan_name: plan.name,
+          upgraded_at: new Date().toISOString()
+        }
+      })
+      .eq('id', transactionId);
 
     return new Response(JSON.stringify({
       success: true,
