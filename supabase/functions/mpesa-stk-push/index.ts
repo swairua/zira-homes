@@ -423,8 +423,8 @@ serve(async (req) => {
       PartyB: shortcode,
       PhoneNumber: phoneNumber,
       CallBackURL: callbackUrl,
-      AccountReference: accountReference || (paymentType === 'service-charge' ? 'ZIRA-SERVICE' : `INV-${invoiceId}`),
-      TransactionDesc: transactionDesc || (paymentType === 'service-charge' ? 'Zira Homes Service Charge' : 'Payment for ' + (accountReference || `INV-${invoiceId}`))
+      AccountReference: accountReference || (paymentType === 'service-charge' ? 'ZIRA-SERVICE' : paymentType === 'plan_upgrade' ? 'PLAN-UPGRADE' : `INV-${invoiceId}`),
+      TransactionDesc: finalTransactionDesc || (paymentType === 'service-charge' ? 'Zira Homes Service Charge' : paymentType === 'plan_upgrade' ? 'Plan Upgrade Payment' : 'Payment for ' + (accountReference || `INV-${invoiceId}`))
     }
 
     console.log('STK Push payload:', JSON.stringify(stkPayload, null, 2))
