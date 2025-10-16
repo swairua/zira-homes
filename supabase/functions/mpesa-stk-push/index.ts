@@ -526,6 +526,18 @@ serve(async (req) => {
         console.log('Service charge metadata added to transaction:', transactionData.metadata);
       }
 
+      // For plan upgrade payments, store additional metadata
+      if (paymentType === 'plan_upgrade') {
+        console.log('Processing plan upgrade payment');
+        transactionData.metadata = {
+          ...metadata,
+          payment_type: 'plan_upgrade',
+          landlord_id: user.id,
+          upgraded_at: new Date().toISOString()
+        }
+        console.log('Plan upgrade metadata added to transaction:', transactionData.metadata);
+      }
+
       console.log('Creating M-Pesa transaction record:', {
         checkout_request_id: transactionData.checkout_request_id,
         merchant_request_id: transactionData.merchant_request_id,
