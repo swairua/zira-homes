@@ -193,7 +193,7 @@ export function Upgrade() {
 
       // For regular plans, create Stripe checkout session
       console.log('💳 Creating Stripe checkout session...');
-      
+
       const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
         'create-billing-checkout',
         {
@@ -201,7 +201,15 @@ export function Upgrade() {
         }
       );
 
-      if (checkoutError) throw checkoutError;
+      if (checkoutError) {
+        // Extract error details from the response
+        const errorDetail = checkoutError instanceof Error
+          ? checkoutError.message
+          : typeof checkoutError === 'object' && checkoutError !== null
+          ? (checkoutError as any).error || JSON.stringify(checkoutError)
+          : String(checkoutError);
+        throw new Error(`Checkout failed: ${errorDetail}`);
+      }
 
       if (checkoutData?.url) {
         setConfirmModalOpen(false);
@@ -210,7 +218,7 @@ export function Upgrade() {
       } else {
         throw new Error('No checkout URL returned');
       }
-      
+
     } catch (error: any) {
       console.error('❌ Upgrade error:', error);
       const msg = error?.message || (typeof error === 'string' ? error : 'Upgrade failed. Please try again.');
