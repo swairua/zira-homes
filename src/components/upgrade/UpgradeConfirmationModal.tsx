@@ -227,7 +227,12 @@ export function UpgradeConfirmationModal({
                 <Shield className="h-4 w-4 text-blue-500 mt-0.5" />
                 <div className="text-xs text-muted-foreground">
                   <p className="font-medium mb-1">Secure Payment</p>
-                  <p>All payments are processed securely through Stripe. Your card information is never stored on our servers.</p>
+                  <p>
+                    {selectedPlan?.billing_model === 'percentage'
+                      ? 'This plan will be activated immediately. You\'ll be billed monthly based on rent collected.'
+                      : 'Payments are processed securely through M-Pesa. Your phone number is only used for payment verification.'
+                    }
+                  </p>
                 </div>
               </div>
             </div>
