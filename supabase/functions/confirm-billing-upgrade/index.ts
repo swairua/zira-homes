@@ -104,24 +104,30 @@ serve(async (req) => {
         plan_name: plan.name,
         billing_model: plan.billing_model,
         payment_method: 'mpesa',
-        transaction_id: transactionId,
+        checkout_request_id: checkoutRequestId,
         mpesa_receipt: transaction.mpesa_receipt_number
       }
     });
     logStep("Activity logged");
 
     // Update the transaction metadata to link it to the subscription
-    await supabaseService
+    const { error: updateError } = await supabaseService
       .from('mpesa_transactions')
       .update({
         metadata: {
-          ...transaction.metadata,
+          ...(transaction.metadata || {}),
           subscription_id: subscription?.[0]?.id,
           plan_name: plan.name,
           upgraded_at: new Date().toISOString()
         }
       })
-      .eq('id', transactionId);
+      .eq('checkout_request_id', checkoutRequestId);
+
+    if (updateError) {
+      logStep("Warning: Failed to update transaction metadata", { error: updateError });
+    } else {
+      logStep("Transaction metadata updated");
+    }
 
     return new Response(JSON.stringify({
       success: true,
