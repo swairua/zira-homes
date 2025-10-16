@@ -275,15 +275,17 @@ export function Upgrade() {
       }
 
     } catch (error: any) {
-      console.error('❌ Upgrade error:', error);
-      console.error('Error details:', {
-        message: error?.message,
-        status: error?.status,
-        statusText: error?.statusText,
-        response: error?.response,
-        toString: error?.toString()
-      });
-      const msg = error?.message || (typeof error === 'string' ? error : 'Upgrade failed. Please try again.');
+      console.error('❌ Upgrade error:', error?.message || error);
+
+      let msg = 'Upgrade failed. Please try again.';
+      if (error instanceof Error) {
+        msg = error.message;
+      } else if (typeof error === 'string') {
+        msg = error;
+      } else if (typeof error === 'object' && error?.message) {
+        msg = error.message;
+      }
+
       toast.error(msg);
     } finally {
       setIsProcessing(false);
