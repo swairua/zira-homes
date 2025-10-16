@@ -191,12 +191,16 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
             'mpesa-stk-push',
             {
               body: {
-                phoneNumber: phoneNumber.trim(),
+                phoneNumber: checkoutData.phoneNumber || phoneNumber.trim(),
                 amount: checkoutData.amount,
                 description: `Plan Upgrade: ${selectedPlanData.name}`,
-                transactionId: checkoutData.transactionId,
                 paymentType: 'plan_upgrade',
-                planId: selectedPlan
+                metadata: {
+                  planId: selectedPlan,
+                  planName: selectedPlanData.name,
+                  billingModel: selectedPlanData.billing_model,
+                  upgradeType: 'plan_upgrade'
+                }
               }
             }
           );
@@ -205,7 +209,7 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
             throw stkError;
           }
 
-          if (stkData?.CheckoutRequestID) {
+          if (stkData?.data?.CheckoutRequestID) {
             toast.success("M-Pesa prompt sent to your phone. Please complete the payment.");
             setPhoneNumber('');
             setTimeout(() => {
