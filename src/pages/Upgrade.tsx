@@ -162,14 +162,14 @@ export function Upgrade() {
     }
 
     setIsProcessing(true);
-    
+
     try {
       console.log('🚀 Starting upgrade process for plan:', selectedPlanData.name);
 
       // For commission-based plans, activate directly without payment setup
       if (selectedPlanData.billing_model === 'percentage') {
         console.log('✅ Activating commission-based plan directly...');
-        
+
         const { error: subscriptionError } = await supabase
           .from('landlord_subscriptions')
           .upsert({
@@ -177,7 +177,7 @@ export function Upgrade() {
             billing_plan_id: selectedPlan,
             status: 'active',
             subscription_start_date: new Date().toISOString(),
-            trial_end_date: null, // End trial
+            trial_end_date: null,
             auto_renewal: true,
             sms_credits_balance: selectedPlanData.sms_credits_included || 0
           }, {
@@ -187,37 +187,82 @@ export function Upgrade() {
         if (subscriptionError) throw subscriptionError;
 
         setConfirmModalOpen(false);
-        toast.success("Plan activated successfully!");
+        toast.success(`${selectedPlanData.name} plan activated successfully!`);
         setTimeout(() => window.location.href = '/', 1000);
         return;
       }
 
-      // For regular plans, create Stripe checkout session
-      console.log('💳 Creating Stripe checkout session...');
+      // For other billing models, use M-Pesa STK push for payment
+      console.log('💳 Initiating M-Pesa payment for plan upgrade...');
+
+      // Validate phone number
+      if (!phoneNumber || phoneNumber.trim().length < 9) {
+        toast.error("Please enter a valid phone number for M-Pesa payment");
+        setIsProcessing(false);
+        return;
+      }
 
       const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
         'create-billing-checkout',
         {
-          body: { planId: selectedPlan }
+          body: {
+            planId: selectedPlan,
+            phoneNumber: phoneNumber.trim()
+          }
         }
       );
 
       if (checkoutError) {
-        // Extract error details from the response
         const errorDetail = checkoutError instanceof Error
           ? checkoutError.message
           : typeof checkoutError === 'object' && checkoutError !== null
           ? (checkoutError as any).error || JSON.stringify(checkoutError)
           : String(checkoutError);
-        throw new Error(`Checkout failed: ${errorDetail}`);
+        throw new Error(`Payment setup failed: ${errorDetail}`);
       }
 
-      if (checkoutData?.url) {
-        setConfirmModalOpen(false);
-        // Open Stripe checkout in a new tab
-        window.open(checkoutData.url, '_blank');
+      if (checkoutData?.type === 'mpesa_payment') {
+        console.log('🚀 Initiating M-Pesa STK push...');
+
+        // Initiate M-Pesa STK push
+        const { data: stkData, error: stkError } = await supabase.functions.invoke(
+          'mpesa-stk-push',
+          {
+            body: {
+              phoneNumber: phoneNumber.trim(),
+              amount: checkoutData.amount,
+              description: `Plan Upgrade: ${selectedPlanData.name}`,
+              transactionId: checkoutData.transactionId,
+              paymentType: 'plan_upgrade',
+              planId: selectedPlan
+            }
+          }
+        );
+
+        if (stkError) {
+          const stkErrorDetail = stkError instanceof Error
+            ? stkError.message
+            : typeof stkError === 'object' && stkError !== null
+            ? (stkError as any).error || JSON.stringify(stkError)
+            : String(stkError);
+          throw new Error(`M-Pesa error: ${stkErrorDetail}`);
+        }
+
+        if (stkData?.CheckoutRequestID) {
+          toast.success("M-Pesa prompt sent to your phone. Please complete the payment.");
+          setConfirmModalOpen(false);
+          setPhoneNumber('');
+
+          // Store the checkout request ID for verification
+          sessionStorage.setItem(`upgrade_${selectedPlan}`, stkData.CheckoutRequestID);
+
+          // Redirect after a short delay
+          setTimeout(() => window.location.href = '/', 2000);
+        } else {
+          throw new Error("Failed to initiate M-Pesa payment");
+        }
       } else {
-        throw new Error('No checkout URL returned');
+        throw new Error("Unexpected response from payment setup");
       }
 
     } catch (error: any) {
