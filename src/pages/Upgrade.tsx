@@ -276,6 +276,13 @@ export function Upgrade() {
 
     } catch (error: any) {
       console.error('❌ Upgrade error:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        status: error?.status,
+        statusText: error?.statusText,
+        response: error?.response,
+        toString: error?.toString()
+      });
       const msg = error?.message || (typeof error === 'string' ? error : 'Upgrade failed. Please try again.');
       toast.error(msg);
     } finally {
