@@ -67,6 +67,7 @@ export function Upgrade() {
   const [loading, setLoading] = useState(true);
   const [currentSubscription, setCurrentSubscription] = useState<CurrentSubscription | null>(null);
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
 
   useEffect(() => {
     fetchActiveBillingPlans();
