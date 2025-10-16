@@ -238,12 +238,16 @@ export function Upgrade() {
           'mpesa-stk-push',
           {
             body: {
-              phoneNumber: finalPhoneNumber.trim(),
+              phoneNumber: checkoutData.phoneNumber || finalPhoneNumber.trim(),
               amount: checkoutData.amount,
               description: `Plan Upgrade: ${selectedPlanData.name}`,
-              transactionId: checkoutData.transactionId,
               paymentType: 'plan_upgrade',
-              planId: selectedPlan
+              metadata: {
+                planId: selectedPlan,
+                planName: selectedPlanData.name,
+                billingModel: selectedPlanData.billing_model,
+                upgradeType: 'plan_upgrade'
+              }
             }
           }
         );
@@ -252,18 +256,19 @@ export function Upgrade() {
           const stkErrorDetail = stkError instanceof Error
             ? stkError.message
             : typeof stkError === 'object' && stkError !== null
-            ? (stkError as any).error || JSON.stringify(stkError)
+            ? (stkError as any).error || (stkError as any).message || 'STK push failed'
             : String(stkError);
           throw new Error(`M-Pesa error: ${stkErrorDetail}`);
         }
 
-        if (stkData?.CheckoutRequestID) {
+        if (stkData?.data?.CheckoutRequestID) {
           toast.success("M-Pesa prompt sent to your phone. Please complete the payment.");
           setConfirmModalOpen(false);
           setPhoneNumber('');
 
-          // Store the checkout request ID for verification
-          sessionStorage.setItem(`upgrade_${selectedPlan}`, stkData.CheckoutRequestID);
+          // Store the checkout request ID and plan for verification
+          sessionStorage.setItem(`upgrade_${selectedPlan}`, stkData.data.CheckoutRequestID);
+          sessionStorage.setItem(`upgrade_plan_${selectedPlan}`, selectedPlan);
 
           // Redirect after a short delay
           setTimeout(() => window.location.href = '/', 2000);
