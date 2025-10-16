@@ -81,35 +81,13 @@ serve(async (req) => {
       formattedPhone = '254' + formattedPhone;
     }
 
-    // Create a temporary transaction record for this upgrade attempt
-    const { data: transaction, error: txnError } = await supabaseClient
-      .from('mpesa_transactions')
-      .insert({
-        user_id: user.id,
-        amount: plan.price,
-        phone_number: formattedPhone,
-        payment_type: 'plan_upgrade',
-        metadata: {
-          plan_id: planId,
-          plan_name: plan.name,
-          billing_model: plan.billing_model
-        }
-      })
-      .select()
-      .single();
-
-    if (txnError) {
-      logStep("Failed to create transaction record", { error: txnError });
-      throw new Error("Failed to initialize payment transaction");
-    }
-
-    logStep("Transaction record created", { transactionId: transaction.id });
+    logStep("Phone number formatted", { formattedPhone: formattedPhone.slice(-4) });
 
     // Return M-Pesa payment details (STK push will be initiated on client side)
+    // Transaction record will be created by mpesa-stk-push function when it has the checkout_request_id
     return new Response(JSON.stringify({
       type: 'mpesa_payment',
       requiresPayment: true,
-      transactionId: transaction.id,
       planId: planId,
       amount: plan.price,
       currency: plan.currency,
