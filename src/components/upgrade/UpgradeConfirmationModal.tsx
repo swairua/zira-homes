@@ -61,6 +61,14 @@ export function UpgradeConfirmationModal({
   const [phoneError, setPhoneError] = useState("");
 
   const handleConfirm = () => {
+    // For non-percentage plans, require M-Pesa phone number
+    if (selectedPlan && selectedPlan.billing_model !== 'percentage') {
+      if (!phoneNumber || phoneNumber.trim().length < 9) {
+        setPhoneError("Please enter a valid phone number for M-Pesa");
+        return;
+      }
+    }
+
     if (requireOtp) {
       if (!otp || otp.length !== 6) {
         setOtpError("Please enter a valid 6-digit OTP");
@@ -76,6 +84,8 @@ export function UpgradeConfirmationModal({
     if (!isProcessing) {
       setOtp("");
       setOtpError("");
+      setPhoneNumber("");
+      setPhoneError("");
       onOpenChange(false);
     }
   };
