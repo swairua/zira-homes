@@ -142,7 +142,7 @@ export function Upgrade() {
     setConfirmModalOpen(true);
   };
 
-  const handleUpgrade = async (otp?: string) => {
+  const handleUpgrade = async (phoneNumberOrOtp?: string) => {
     if (!selectedPlan || !user) {
       toast.error("Please select a plan to continue");
       return;
@@ -195,8 +195,11 @@ export function Upgrade() {
       // For other billing models, use M-Pesa STK push for payment
       console.log('💳 Initiating M-Pesa payment for plan upgrade...');
 
+      // Use phone number from modal or state
+      const finalPhoneNumber = phoneNumberOrOtp || phoneNumber;
+
       // Validate phone number
-      if (!phoneNumber || phoneNumber.trim().length < 9) {
+      if (!finalPhoneNumber || finalPhoneNumber.trim().length < 9) {
         toast.error("Please enter a valid phone number for M-Pesa payment");
         setIsProcessing(false);
         return;
@@ -207,7 +210,7 @@ export function Upgrade() {
         {
           body: {
             planId: selectedPlan,
-            phoneNumber: phoneNumber.trim()
+            phoneNumber: finalPhoneNumber.trim()
           }
         }
       );
@@ -229,7 +232,7 @@ export function Upgrade() {
           'mpesa-stk-push',
           {
             body: {
-              phoneNumber: phoneNumber.trim(),
+              phoneNumber: finalPhoneNumber.trim(),
               amount: checkoutData.amount,
               description: `Plan Upgrade: ${selectedPlanData.name}`,
               transactionId: checkoutData.transactionId,
