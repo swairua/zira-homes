@@ -57,6 +57,8 @@ export function UpgradeConfirmationModal({
 }: UpgradeConfirmationModalProps) {
   const [otp, setOtp] = useState("");
   const [otpError, setOtpError] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [phoneError, setPhoneError] = useState("");
 
   const handleConfirm = () => {
     if (requireOtp) {
