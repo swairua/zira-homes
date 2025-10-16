@@ -216,17 +216,17 @@ export function Upgrade() {
       );
 
       if (checkoutError) {
-        console.error('Checkout error details:', {
-          error: checkoutError,
-          message: checkoutError?.message,
-          toString: checkoutError?.toString(),
-          json: typeof checkoutError === 'object' ? JSON.stringify(checkoutError) : checkoutError
-        });
-        const errorDetail = checkoutError instanceof Error
-          ? checkoutError.message
-          : typeof checkoutError === 'object' && checkoutError !== null
-          ? (checkoutError as any).error || (checkoutError as any).message || JSON.stringify(checkoutError)
-          : String(checkoutError);
+        console.error('Checkout error:', checkoutError?.message || checkoutError);
+
+        let errorDetail = 'Unknown error';
+        if (checkoutError instanceof Error) {
+          errorDetail = checkoutError.message;
+        } else if (typeof checkoutError === 'object' && checkoutError !== null) {
+          errorDetail = (checkoutError as any).message || (checkoutError as any).error || 'Payment setup failed';
+        } else if (typeof checkoutError === 'string') {
+          errorDetail = checkoutError;
+        }
+
         throw new Error(`Payment setup failed: ${errorDetail}`);
       }
 
