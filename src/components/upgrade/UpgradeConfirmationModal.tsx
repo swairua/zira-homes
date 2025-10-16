@@ -69,6 +69,7 @@ export function UpgradeConfirmationModal({
         setPhoneError("Please enter a valid phone number for M-Pesa");
         return;
       }
+      onPhoneNumberChange?.(phoneNumber);
     }
 
     if (requireOtp) {
@@ -78,7 +79,7 @@ export function UpgradeConfirmationModal({
       }
       onConfirm(otp);
     } else {
-      onConfirm();
+      onConfirm(phoneNumber || undefined);
     }
   };
 
