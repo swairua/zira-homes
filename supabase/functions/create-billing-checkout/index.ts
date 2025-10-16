@@ -114,12 +114,24 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : '';
-    logStep("ERROR", { message: errorMessage, stack: errorStack });
-    console.error("Full error object:", error);
+
+    // Log detailed error information for debugging
+    logStep("ERROR", {
+      message: errorMessage,
+      type: error instanceof Error ? error.constructor.name : typeof error,
+      timestamp: new Date().toISOString()
+    });
+    console.error("Full error details:", {
+      message: errorMessage,
+      stack: errorStack,
+      error: error
+    });
+
     return new Response(JSON.stringify({
       error: errorMessage,
       details: errorStack,
-      type: error instanceof Error ? error.constructor.name : typeof error
+      type: error instanceof Error ? error.constructor.name : typeof error,
+      timestamp: new Date().toISOString()
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
