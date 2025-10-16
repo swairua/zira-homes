@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -58,9 +57,12 @@ serve(async (req) => {
     )
 
   const requestBody = await req.json();
-  
+
   // Input validation with enhanced security
-  const { phone, amount, accountReference, transactionDesc, invoiceId, paymentType, landlordId, dryRun } = requestBody;
+  // Support both phone/phoneNumber for backward compatibility
+  const phone = requestBody.phone || requestBody.phoneNumber;
+  const { amount, accountReference, description, transactionDesc, invoiceId, paymentType, landlordId, dryRun, metadata } = requestBody;
+  const finalTransactionDesc = description || transactionDesc;
 
   // Rate limiting check (basic implementation)
   const rateLimitKey = `mpesa_stk_${user.id}`;
