@@ -94,13 +94,18 @@ export function useTour(): UseTourReturn {
         .maybeSingle();
 
       if (error) {
-        console.error('Error querying tour status:', error);
+        console.error('Error querying tour status:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        });
         return null;
       }
 
       return (data as any)?.status || null;
     } catch (error) {
-      console.error('Error getting tour status:', error);
+      console.error('Error getting tour status:', error instanceof Error ? error.message : String(error));
       return null;
     }
   }, []);
