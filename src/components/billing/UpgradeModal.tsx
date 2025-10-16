@@ -400,29 +400,47 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
 
         {/* Action Section */}
         {selectedPlan && !billingPlans.find(p => p.id === selectedPlan)?.is_custom && (
-          <div className="bg-muted/50 border rounded-lg p-6 text-center">
-            <h3 className="text-lg font-semibold mb-2">
-              {billingPlans.find(p => p.id === selectedPlan)?.billing_model === 'percentage' 
-                ? 'Ready to activate?' 
+          <div className="bg-muted/50 border rounded-lg p-6">
+            <h3 className="text-lg font-semibold mb-2 text-center">
+              {billingPlans.find(p => p.id === selectedPlan)?.billing_model === 'percentage'
+                ? 'Ready to activate?'
                 : 'Ready to upgrade?'
               }
             </h3>
-            <p className="text-muted-foreground mb-4 text-sm">
+            <p className="text-muted-foreground mb-4 text-sm text-center">
               You've selected the <strong>{billingPlans.find(p => p.id === selectedPlan)?.name}</strong> plan.
-              {billingPlans.find(p => p.id === selectedPlan)?.billing_model === 'percentage' 
+              {billingPlans.find(p => p.id === selectedPlan)?.billing_model === 'percentage'
                 ? ' This plan will be activated immediately and you\'ll be billed monthly based on rent collected.'
-                : ' Click below to complete your upgrade and unlock all features.'
+                : ' Payment will be processed via M-Pesa STK Push.'
               }
             </p>
+
+            {billingPlans.find(p => p.id === selectedPlan)?.billing_model !== 'percentage' && (
+              <div className="mb-4">
+                <label className="text-sm font-medium block mb-2">M-Pesa Phone Number</label>
+                <input
+                  type="tel"
+                  placeholder="e.g., 254712345678 or 0712345678"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  className="w-full px-3 py-2 border border-input rounded-md bg-background text-sm"
+                  disabled={isProcessing}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Enter the phone number registered with M-Pesa to receive the payment prompt
+                </p>
+              </div>
+            )}
+
             <div className="flex gap-3 justify-center">
-              <Button 
+              <Button
                 variant="outline"
                 onClick={onClose}
                 disabled={isProcessing}
               >
                 Cancel
               </Button>
-              <Button 
+              <Button
                 onClick={handleUpgrade}
                 disabled={isProcessing || loading}
                 className="min-w-32"
@@ -430,14 +448,14 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
                 {isProcessing ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    {billingPlans.find(p => p.id === selectedPlan)?.billing_model === 'percentage' 
-                      ? 'Activating...' 
+                    {billingPlans.find(p => p.id === selectedPlan)?.billing_model === 'percentage'
+                      ? 'Activating...'
                       : 'Processing...'
                     }
                   </>
                 ) : (
-                  billingPlans.find(p => p.id === selectedPlan)?.billing_model === 'percentage' 
-                    ? 'Activate Plan' 
+                  billingPlans.find(p => p.id === selectedPlan)?.billing_model === 'percentage'
+                    ? 'Activate Plan'
                     : 'Upgrade Now'
                 )}
               </Button>
