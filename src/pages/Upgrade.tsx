@@ -436,9 +436,10 @@ export function Upgrade() {
           open={confirmModalOpen}
           onOpenChange={setConfirmModalOpen}
           onConfirm={handleUpgrade}
+          onPhoneNumberChange={setPhoneNumber}
           selectedPlan={selectedPlan ? billingPlans.find(p => p.id === selectedPlan) : undefined}
           isProcessing={isProcessing}
-          requireOtp={false} // Set to true if you want OTP verification
+          requireOtp={false}
         />
 
         {/* Benefits Section */}
