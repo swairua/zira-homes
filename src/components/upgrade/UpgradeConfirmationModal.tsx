@@ -144,6 +144,36 @@ export function UpgradeConfirmationModal({
               </div>
             </div>
 
+            {/* M-Pesa Phone Number for non-percentage plans */}
+            {selectedPlan && selectedPlan.billing_model !== 'percentage' && (
+              <div className="space-y-2">
+                <Label htmlFor="phone" className="flex items-center gap-2">
+                  <Smartphone className="h-4 w-4" />
+                  M-Pesa Phone Number
+                </Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  placeholder="e.g., 254712345678 or 0712345678"
+                  value={phoneNumber}
+                  onChange={(e) => {
+                    setPhoneNumber(e.target.value);
+                    setPhoneError("");
+                  }}
+                  className={phoneError ? "border-destructive" : ""}
+                  disabled={isProcessing}
+                />
+                {phoneError && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{phoneError}</AlertDescription>
+                  </Alert>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Enter the phone number registered with M-Pesa to receive the payment prompt
+                </p>
+              </div>
+            )}
+
             {/* OTP Input if required */}
             {requireOtp && (
               <div className="space-y-2">
