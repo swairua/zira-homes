@@ -45,6 +45,7 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [phoneNumber, setPhoneNumber] = useState('');
 
   useEffect(() => {
     if (isOpen) {
