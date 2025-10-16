@@ -54,7 +54,8 @@ export function UpgradeConfirmationModal({
   onConfirm,
   selectedPlan,
   isProcessing = false,
-  requireOtp = false
+  requireOtp = false,
+  onPhoneNumberChange
 }: UpgradeConfirmationModalProps) {
   const [otp, setOtp] = useState("");
   const [otpError, setOtpError] = useState("");
