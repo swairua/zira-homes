@@ -41,26 +41,33 @@ serve(async (req) => {
     if (!planId) throw new Error("Plan ID is required");
     logStep("Request parsed", { planId, hasPhoneNumber: !!phoneNumber });
 
-    // Get billing plan details
+    // Get billing plan details - select only specific columns to avoid serialization issues
     const { data: plan, error: planError } = await supabaseClient
       .from('billing_plans')
-      .select('*')
+      .select('id, name, price, billing_model, currency, sms_credits_included, is_active, is_custom, contact_link')
       .eq('id', planId)
       .eq('is_active', true)
       .single();
 
     if (planError || !plan) {
-      throw new Error("Billing plan not found or inactive");
+      logStep("Plan query error", { planError: planError?.message, planExists: !!plan });
+      throw new Error(`Billing plan not found or inactive: ${planError?.message || 'No plan found'}`);
     }
-    logStep("Billing plan retrieved", { planName: plan.name, price: plan.price });
+    logStep("Billing plan retrieved", { planName: plan.name, price: plan.price, billingModel: plan.billing_model });
+
+    // Provide defaults for missing columns to maintain backward compatibility
+    const billingModel = plan.billing_model || 'fixed';
+    const currency = plan.currency || 'KES';
 
     // For commission-based plans (percentage billing), activate directly
-    if (plan.billing_model === 'percentage') {
+    if (billingModel === 'percentage') {
       logStep("Commission-based plan detected, no payment required");
       return new Response(JSON.stringify({
         type: 'direct_activation',
         message: 'Plan activated successfully',
-        requiresPayment: false
+        requiresPayment: false,
+        planId: planId,
+        planName: plan.name
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
@@ -69,8 +76,8 @@ serve(async (req) => {
 
     // For fixed pricing or other models, require M-Pesa payment via STK push
     // Phone number is required for M-Pesa STK push
-    if (!phoneNumber) {
-      throw new Error("Phone number is required for M-Pesa payment. Please provide a phone number registered with M-Pesa.");
+    if (!phoneNumber || phoneNumber.trim().length < 9) {
+      throw new Error("Phone number is required for M-Pesa payment. Please provide a valid phone number.");
     }
 
     logStep("M-Pesa payment required", { phoneNumber: phoneNumber.slice(-4) });
@@ -81,6 +88,11 @@ serve(async (req) => {
       formattedPhone = '254' + formattedPhone;
     }
 
+    // Validate formatted phone number length (Kenya numbers should be 254 + 9 digits = 12 chars)
+    if (formattedPhone.length < 12 || formattedPhone.length > 15) {
+      throw new Error("Invalid phone number format. Please use a valid Kenyan phone number.");
+    }
+
     logStep("Phone number formatted", { formattedPhone: formattedPhone.slice(-4) });
 
     // Return M-Pesa payment details (STK push will be initiated on client side)
@@ -89,10 +101,11 @@ serve(async (req) => {
       type: 'mpesa_payment',
       requiresPayment: true,
       planId: planId,
-      amount: plan.price,
-      currency: plan.currency,
+      planName: plan.name,
+      amount: parseFloat(plan.price as any),
+      currency: currency,
       phoneNumber: formattedPhone,
-      message: `You will receive an M-Pesa prompt to pay ${plan.currency} ${plan.price} for the ${plan.name} plan.`
+      message: `You will receive an M-Pesa prompt to pay ${currency} ${plan.price} for the ${plan.name} plan.`
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
