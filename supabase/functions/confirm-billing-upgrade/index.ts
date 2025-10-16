@@ -36,17 +36,17 @@ serve(async (req) => {
     if (!user) throw new Error("User not authenticated");
     logStep("User authenticated", { userId: user.id });
 
-    const { transactionId, planId } = await req.json();
-    if (!transactionId || !planId) {
-      throw new Error("Transaction ID and Plan ID are required");
+    const { checkoutRequestId, planId } = await req.json();
+    if (!checkoutRequestId || !planId) {
+      throw new Error("Checkout Request ID and Plan ID are required");
     }
-    logStep("Request parsed", { transactionId, planId });
+    logStep("Request parsed", { checkoutRequestId, planId });
 
     // Get the transaction to verify payment was successful
     const { data: transaction, error: txnError } = await supabaseService
       .from('mpesa_transactions')
       .select('*')
-      .eq('id', transactionId)
+      .eq('checkout_request_id', checkoutRequestId)
       .single();
 
     if (txnError || !transaction) {
