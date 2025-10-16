@@ -10,7 +10,7 @@ import { formatAmount, getGlobalCurrencySync } from "@/utils/currency";
 interface UpgradeConfirmationModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: (otp?: string) => void;
+  onConfirm: (phoneNumber?: string) => void;
   selectedPlan?: {
     name: string;
     price: number;
@@ -23,6 +23,7 @@ interface UpgradeConfirmationModalProps {
   };
   isProcessing?: boolean;
   requireOtp?: boolean;
+  onPhoneNumberChange?: (phoneNumber: string) => void;
 }
 
 // Feature display mapping for user-friendly names
