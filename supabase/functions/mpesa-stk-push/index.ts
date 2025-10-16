@@ -160,8 +160,13 @@ serve(async (req) => {
     // Authorization checks based on payment type
     let authorized = false;
     let landlordConfigId = landlordId;
-    
-    if (paymentType === 'service-charge') {
+
+    if (paymentType === 'plan_upgrade') {
+      // Plan upgrade: Only the authenticated user can upgrade their own plan
+      authorized = true;
+      // Use the authenticated user's ID (they are the landlord)
+      landlordConfigId = user.id;
+    } else if (paymentType === 'service-charge') {
       // Service charge: Only landlords can pay their own service charges or admins
       const { data: userRoles } = await supabase
         .from('user_roles')
