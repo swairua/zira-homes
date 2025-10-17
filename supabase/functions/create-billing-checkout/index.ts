@@ -19,10 +19,17 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
-    // Create Supabase client using anon key for authentication
-    const supabaseClient = createClient(
+    // Create TWO Supabase clients:
+    // 1. Anon client for auth verification
+    // 2. Service role client for database queries (bypasses RLS)
+    const anonClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+    );
+
+    const serviceRoleClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
     const authHeader = req.headers.get("Authorization");
@@ -30,7 +37,7 @@ serve(async (req) => {
     logStep("Authorization header found");
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
+    const { data: userData, error: userError } = await anonClient.auth.getUser(token);
     if (userError) throw new Error(`Authentication error: ${userError.message}`);
     const user = userData.user;
     if (!user?.id) throw new Error("User not authenticated");
