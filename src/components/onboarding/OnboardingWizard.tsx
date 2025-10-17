@@ -180,17 +180,7 @@ export function OnboardingWizard({ open, onOpenChange, forceShow = false }: Onbo
     try {
       setCompleting(true);
       
-      // Mark onboarding as completed in subscription
-      const { error } = await supabase
-        .from('landlord_subscriptions')
-        .update({
-          onboarding_completed: true,
-          onboarding_completed_at: new Date().toISOString()
-        })
-        .eq('landlord_id', user?.id);
-
-      if (error) throw error;
-
+      // Mark onboarding as completed
       toast({
         title: "Onboarding Complete!",
         description: "Welcome to the platform! You're all set to start managing your properties.",

@@ -116,23 +116,6 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
               if (subUserInfo?.permissions) {
                 setSubUserPermissions(subUserInfo.permissions);
                 setLandlordId(subUserInfo.landlord_id || null);
-                
-                // Check if landlord is on trial
-                if (subUserInfo.landlord_id) {
-                  const { data: landlordSubscription } = await supabase
-                    .from('landlord_subscriptions')
-                    .select('status, trial_end_date')
-                    .eq('landlord_id', subUserInfo.landlord_id)
-                    .eq('status', 'trial')
-                    .maybeSingle();
-                  
-                  if (landlordSubscription) {
-                    const trialEndDate = new Date(landlordSubscription.trial_end_date);
-                    const today = new Date();
-                    const isActive = trialEndDate > today;
-                    setIsOnLandlordTrial(isActive);
-                  }
-                }
               } else {
                 // No permissions found - set to empty object (deny all)
                 setSubUserPermissions({});

@@ -13,7 +13,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Plus } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { isCommercialUnit } from "@/utils/unitSpecifications";
-import { UnitCapGate } from "./UnitCapGate";
 
 interface Property {
   id: string;
@@ -166,8 +165,7 @@ export function AddUnitDialog({ onUnitAdded }: AddUnitDialogProps) {
   };
 
   return (
-    <UnitCapGate action="create">
-      <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
           <Button className="flex items-center gap-2">
             <Plus className="h-4 w-4" />
@@ -325,6 +323,5 @@ export function AddUnitDialog({ onUnitAdded }: AddUnitDialogProps) {
         </form>
       </DialogContent>
     </Dialog>
-    </UnitCapGate>
   );
 }

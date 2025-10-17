@@ -87,17 +87,9 @@ export default function LandlordManagement() {
         (profiles || []).map(async (profile) => {
           const roleData = propertyRoles?.find(r => r.user_id === profile.id);
           
-          const [propertiesResult, tenantsResult, subscriptionResult] = await Promise.all([
+          const [propertiesResult, tenantsResult] = await Promise.all([
             supabase.from('properties').select('id').eq('owner_id', profile.id),
-            supabase.from('tenants').select('id').eq('user_id', profile.id),
-            supabase
-              .from('landlord_subscriptions')
-              .select(`
-                status,
-                billing_plan:billing_plans(name)
-              `)
-              .eq('landlord_id', profile.id)
-              .maybeSingle()
+            supabase.from('tenants').select('id').eq('user_id', profile.id)
           ]);
 
           return {
@@ -109,9 +101,7 @@ export default function LandlordManagement() {
             created_at: profile.created_at,
             role: roleData?.role || 'Unknown',
             properties_count: propertiesResult.data?.length || 0,
-            tenants_count: tenantsResult.data?.length || 0,
-            subscription_status: subscriptionResult.data?.status || 'not_subscribed',
-            billing_plan: subscriptionResult.data?.billing_plan?.name || 'None'
+            tenants_count: tenantsResult.data?.length || 0
           };
         })
       );
