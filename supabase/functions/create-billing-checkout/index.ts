@@ -139,9 +139,22 @@ serve(async (req) => {
       error: error
     });
 
+    // Determine appropriate error message to return
+    let userFriendlyMessage = "Payment setup failed";
+
+    if (errorMessage.includes("No authorization header")) {
+      userFriendlyMessage = "Authentication failed. Please log in and try again.";
+    } else if (errorMessage.includes("Plan ID is required")) {
+      userFriendlyMessage = "Invalid plan selected. Please select a plan and try again.";
+    } else if (errorMessage.includes("Billing plan not found")) {
+      userFriendlyMessage = "The selected plan is no longer available. Please refresh and select another plan.";
+    } else if (errorMessage.includes("Phone number")) {
+      userFriendlyMessage = "Please enter a valid phone number.";
+    }
+
     return new Response(JSON.stringify({
-      error: errorMessage,
-      details: errorStack,
+      error: userFriendlyMessage,
+      details: errorMessage,
       type: error instanceof Error ? error.constructor.name : typeof error,
       timestamp: new Date().toISOString()
     }), {
