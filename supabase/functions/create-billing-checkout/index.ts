@@ -48,10 +48,10 @@ serve(async (req) => {
     if (!planId) throw new Error("Plan ID is required");
     logStep("Request parsed", { planId, hasPhoneNumber: !!phoneNumber });
 
-    // Get billing plan details - select only specific columns to avoid serialization issues
+    // Get billing plan details - use service role client to bypass RLS
     logStep("Fetching plan from database", { planId, supabaseUrl: Deno.env.get("SUPABASE_URL") ? "configured" : "missing" });
 
-    const { data: plan, error: planError } = await supabaseClient
+    const { data: plan, error: planError } = await serviceRoleClient
       .from('billing_plans')
       .select('id, name, price, billing_model, currency, sms_credits_included, is_active, is_custom, contact_link')
       .eq('id', planId)
