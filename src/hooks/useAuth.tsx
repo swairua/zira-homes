@@ -74,9 +74,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const hasRole = useCallback(async (role: "Admin" | "Landlord" | "Manager" | "Agent" | "Tenant" | "System"): Promise<boolean> => {
-    if (!user) return false;
+    if (!user) {
+      console.log(`[hasRole] No user, returning false for role: ${role}`);
+      return false;
+    }
 
     try {
+      // Skip System role check as it's not a valid app_role
+      if (role === "System") {
+        console.log(`[hasRole] System role check skipped (not a valid app_role)`);
+        return false;
+      }
+
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
@@ -84,11 +93,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .eq('role', role)
         .limit(1)
         .maybeSingle();
-      if (error) throw error;
-      return Boolean(data);
+
+      if (error) {
+        console.warn(`[hasRole] Query error for role ${role}:`, error.message);
+        return false;
+      }
+
+      const hasTheRole = Boolean(data);
+      console.log(`[hasRole] User has ${role}:`, hasTheRole);
+      return hasTheRole;
     } catch (e: any) {
       const msg = e?.message || JSON.stringify(e);
-      console.error(`Error checking role ${role} via user_roles: ${msg}`);
+      console.error(`[hasRole] Error checking role ${role} via user_roles: ${msg}`);
       return false;
     }
   }, [user]);
