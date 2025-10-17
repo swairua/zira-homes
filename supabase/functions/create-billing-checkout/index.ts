@@ -42,6 +42,8 @@ serve(async (req) => {
     logStep("Request parsed", { planId, hasPhoneNumber: !!phoneNumber });
 
     // Get billing plan details - select only specific columns to avoid serialization issues
+    logStep("Fetching plan from database", { planId, supabaseUrl: Deno.env.get("SUPABASE_URL") ? "configured" : "missing" });
+
     const { data: plan, error: planError } = await supabaseClient
       .from('billing_plans')
       .select('id, name, price, billing_model, currency, sms_credits_included, is_active, is_custom, contact_link')
@@ -49,9 +51,19 @@ serve(async (req) => {
       .eq('is_active', true)
       .single();
 
-    if (planError || !plan) {
-      logStep("Plan query error", { planError: planError?.message, planExists: !!plan });
-      throw new Error(`Billing plan not found or inactive: ${planError?.message || 'No plan found'}`);
+    if (planError) {
+      logStep("Plan query error details", {
+        code: planError.code,
+        message: planError.message,
+        details: planError.details,
+        hint: planError.hint
+      });
+      throw new Error(`Billing plan not found or inactive: ${planError.message}`);
+    }
+
+    if (!plan) {
+      logStep("Plan not found", { planId });
+      throw new Error("Billing plan not found. Please select a valid plan.");
     }
     logStep("Billing plan retrieved", { planName: plan.name, price: plan.price, billingModel: plan.billing_model });
 
