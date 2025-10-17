@@ -145,7 +145,7 @@ export type Database = {
           max_units?: number | null
           name: string
           percentage_rate?: number | null
-          price: number
+          price?: number
           sms_credits_included?: number | null
           tier_pricing?: Json | null
           updated_at?: string
@@ -4334,7 +4334,7 @@ export type Database = {
               p_severity?: string
               p_user_id?: string
             }
-        Returns: undefined
+        Returns: string
       }
       log_sensitive_data_access: {
         Args: { _operation: string; _record_id?: string; _table_name: string }
