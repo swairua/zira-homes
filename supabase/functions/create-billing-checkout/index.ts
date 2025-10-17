@@ -41,26 +41,45 @@ serve(async (req) => {
     if (!planId) throw new Error("Plan ID is required");
     logStep("Request parsed", { planId, hasPhoneNumber: !!phoneNumber });
 
-    // Get billing plan details
+    // Get billing plan details - select only specific columns to avoid serialization issues
+    logStep("Fetching plan from database", { planId, supabaseUrl: Deno.env.get("SUPABASE_URL") ? "configured" : "missing" });
+
     const { data: plan, error: planError } = await supabaseClient
       .from('billing_plans')
-      .select('*')
+      .select('id, name, price, billing_model, currency, sms_credits_included, is_active, is_custom, contact_link')
       .eq('id', planId)
       .eq('is_active', true)
       .single();
 
-    if (planError || !plan) {
-      throw new Error("Billing plan not found or inactive");
+    if (planError) {
+      logStep("Plan query error details", {
+        code: planError.code,
+        message: planError.message,
+        details: planError.details,
+        hint: planError.hint
+      });
+      throw new Error(`Billing plan not found or inactive: ${planError.message}`);
     }
-    logStep("Billing plan retrieved", { planName: plan.name, price: plan.price });
+
+    if (!plan) {
+      logStep("Plan not found", { planId });
+      throw new Error("Billing plan not found. Please select a valid plan.");
+    }
+    logStep("Billing plan retrieved", { planName: plan.name, price: plan.price, billingModel: plan.billing_model });
+
+    // Provide defaults for missing columns to maintain backward compatibility
+    const billingModel = plan.billing_model || 'fixed';
+    const currency = plan.currency || 'KES';
 
     // For commission-based plans (percentage billing), activate directly
-    if (plan.billing_model === 'percentage') {
+    if (billingModel === 'percentage') {
       logStep("Commission-based plan detected, no payment required");
       return new Response(JSON.stringify({
         type: 'direct_activation',
         message: 'Plan activated successfully',
-        requiresPayment: false
+        requiresPayment: false,
+        planId: planId,
+        planName: plan.name
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
@@ -69,8 +88,8 @@ serve(async (req) => {
 
     // For fixed pricing or other models, require M-Pesa payment via STK push
     // Phone number is required for M-Pesa STK push
-    if (!phoneNumber) {
-      throw new Error("Phone number is required for M-Pesa payment. Please provide a phone number registered with M-Pesa.");
+    if (!phoneNumber || phoneNumber.trim().length < 9) {
+      throw new Error("Phone number is required for M-Pesa payment. Please provide a valid phone number.");
     }
 
     logStep("M-Pesa payment required", { phoneNumber: phoneNumber.slice(-4) });
@@ -81,6 +100,11 @@ serve(async (req) => {
       formattedPhone = '254' + formattedPhone;
     }
 
+    // Validate formatted phone number length (Kenya numbers should be 254 + 9 digits = 12 chars)
+    if (formattedPhone.length < 12 || formattedPhone.length > 15) {
+      throw new Error("Invalid phone number format. Please use a valid Kenyan phone number.");
+    }
+
     logStep("Phone number formatted", { formattedPhone: formattedPhone.slice(-4) });
 
     // Return M-Pesa payment details (STK push will be initiated on client side)
@@ -89,10 +113,11 @@ serve(async (req) => {
       type: 'mpesa_payment',
       requiresPayment: true,
       planId: planId,
-      amount: plan.price,
-      currency: plan.currency,
+      planName: plan.name,
+      amount: parseFloat(plan.price as any),
+      currency: currency,
       phoneNumber: formattedPhone,
-      message: `You will receive an M-Pesa prompt to pay ${plan.currency} ${plan.price} for the ${plan.name} plan.`
+      message: `You will receive an M-Pesa prompt to pay ${currency} ${plan.price} for the ${plan.name} plan.`
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
@@ -101,12 +126,37 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : '';
-    logStep("ERROR", { message: errorMessage, stack: errorStack });
-    console.error("Full error object:", error);
+
+    // Log detailed error information for debugging
+    logStep("ERROR", {
+      message: errorMessage,
+      type: error instanceof Error ? error.constructor.name : typeof error,
+      timestamp: new Date().toISOString()
+    });
+    console.error("Full error details:", {
+      message: errorMessage,
+      stack: errorStack,
+      error: error
+    });
+
+    // Determine appropriate error message to return
+    let userFriendlyMessage = "Payment setup failed";
+
+    if (errorMessage.includes("No authorization header")) {
+      userFriendlyMessage = "Authentication failed. Please log in and try again.";
+    } else if (errorMessage.includes("Plan ID is required")) {
+      userFriendlyMessage = "Invalid plan selected. Please select a plan and try again.";
+    } else if (errorMessage.includes("Billing plan not found")) {
+      userFriendlyMessage = "The selected plan is no longer available. Please refresh and select another plan.";
+    } else if (errorMessage.includes("Phone number")) {
+      userFriendlyMessage = "Please enter a valid phone number.";
+    }
+
     return new Response(JSON.stringify({
-      error: errorMessage,
-      details: errorStack,
-      type: error instanceof Error ? error.constructor.name : typeof error
+      error: userFriendlyMessage,
+      details: errorMessage,
+      type: error instanceof Error ? error.constructor.name : typeof error,
+      timestamp: new Date().toISOString()
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
