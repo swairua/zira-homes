@@ -8,8 +8,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useRole } from "@/context/RoleContext";
 import { useRouteTitle } from "@/hooks/useRouteTitle";
 import { supabase } from "@/integrations/supabase/client";
-import { UpgradeButton } from "@/components/billing";
-import { HeaderTrialCountdown } from "@/components/trial/HeaderTrialCountdown";
 import { NotificationsPopover } from "@/components/notifications/NotificationsPopover";
 import { TourLauncher } from "@/components/onboarding/TourLauncher";
 import {
@@ -70,12 +68,6 @@ export function Header() {
         </div>
         
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Trial countdown and upgrade button grouped together */}
-          <div className="flex items-center gap-2">
-            <HeaderTrialCountdown />
-            <UpgradeButton variant="outline" size="sm" className="hidden sm:inline-flex bg-white/10 border-white/30 text-white hover:bg-white/20 hover:text-white" />
-          </div>
-          
           <NotificationsPopover />
           
           <TourLauncher />
