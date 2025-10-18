@@ -26,6 +26,8 @@ const routeImportMap: Record<string, () => Promise<any>> = {
   "/admin": () => import("@/pages/admin/AdminDashboard"),
   "/admin/users": () => import("@/pages/admin/UserManagement"),
   "/admin/landlords": () => import("@/pages/admin/LandlordManagement"),
+  "/admin/billing": () => import("@/pages/admin/BillingDashboard"),
+  "/admin/trials": () => import("@/pages/admin/TrialManagement"),
   "/admin/support": () => import("@/pages/admin/EnhancedSupportCenter"),
   "/admin/analytics": () => import("@/pages/admin/PlatformAnalytics"),
   

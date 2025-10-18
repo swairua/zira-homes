@@ -93,6 +93,12 @@ export function usePlatformAnalytics() {
         .gte('created_at', sixMonthsAgo.toISOString())
         .order('created_at');
 
+      const { data: subscriptions } = await supabase
+        .from('landlord_subscriptions')
+        .select('billing_plan:billing_plans(price), created_at')
+        .not('billing_plan', 'is', null)
+        .gte('created_at', sixMonthsAgo.toISOString());
+
       const monthData: { [key: string]: { commission: number; subscriptions: number; total: number } } = {};
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -100,9 +106,19 @@ export function usePlatformAnalytics() {
         const month = months[new Date(transaction.created_at).getMonth()];
         if (!monthData[month]) monthData[month] = { commission: 0, subscriptions: 0, total: 0 };
         
-        // Treat all transactions as commission-based revenue
+        // For now, treat all transactions as commission-based revenue
+        // In the future, you could add logic to differentiate based on gateway_response
         monthData[month].commission += transaction.amount || 0;
         monthData[month].total += transaction.amount || 0;
+      });
+
+      subscriptions?.forEach(subscription => {
+        const month = months[new Date(subscription.created_at).getMonth()];
+        if (!monthData[month]) monthData[month] = { commission: 0, subscriptions: 0, total: 0 };
+        
+        const price = (subscription.billing_plan as any)?.price || 0;
+        monthData[month].subscriptions += price;
+        monthData[month].total += price;
       });
 
       return Object.entries(monthData).map(([month, data]) => ({

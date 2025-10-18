@@ -20,7 +20,10 @@ import { UserActivityDialog } from "@/components/admin/UserActivityDialog";
 import { UserImpersonationDialog } from "@/components/admin/UserImpersonationDialog";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DataIntegrityMonitor } from "@/components/admin/DataIntegrityMonitor";
+import { AccountMergeDialog } from "@/components/admin/AccountMergeDialog";
 import { Plus, Trash2, Edit, Users, Shield, UserCheck, UserX, History, Monitor, UserCog, Key, Save, X, Clock } from "lucide-react";
+import { useTrialManagement } from "@/hooks/useTrialManagement";
+import { TrialCountdown } from "@/components/admin/TrialCountdown";
 import { useForm } from "react-hook-form";
 
 interface UserProfile {
@@ -145,6 +148,27 @@ const UserManagement = () => {
           const hasPropertyRole = user.user_roles?.some((r: any) => propertyRoles.includes(r.role));
           
           let subscription = null;
+          if (hasPropertyRole) {
+            const { data: subscriptionData } = await supabase
+              .from("landlord_subscriptions")
+              .select("status, trial_end_date")
+              .eq("landlord_id", user.id)
+              .maybeSingle();
+            
+            if (subscriptionData) {
+              let daysRemaining = 0;
+              if (subscriptionData.trial_end_date) {
+                const trialEndDate = new Date(subscriptionData.trial_end_date);
+                const today = new Date();
+                daysRemaining = Math.max(0, Math.ceil((trialEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+              }
+              
+              subscription = {
+                ...subscriptionData,
+                daysRemaining
+              };
+            }
+          }
           
           // Check if user is a sub-user and fetch their info
           let subUserInfo = null;
