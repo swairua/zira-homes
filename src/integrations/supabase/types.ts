@@ -74,6 +74,135 @@ export type Database = {
         }
         Relationships: []
       }
+      automated_billing_settings: {
+        Row: {
+          auto_payment_enabled: boolean
+          billing_day_of_month: number
+          created_at: string
+          enabled: boolean
+          grace_period_days: number
+          id: string
+          notification_enabled: boolean
+          updated_at: string
+        }
+        Insert: {
+          auto_payment_enabled?: boolean
+          billing_day_of_month?: number
+          created_at?: string
+          enabled?: boolean
+          grace_period_days?: number
+          id?: string
+          notification_enabled?: boolean
+          updated_at?: string
+        }
+        Update: {
+          auto_payment_enabled?: boolean
+          billing_day_of_month?: number
+          created_at?: string
+          enabled?: boolean
+          grace_period_days?: number
+          id?: string
+          notification_enabled?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      billing_plans: {
+        Row: {
+          billing_cycle: string
+          billing_model: string | null
+          contact_link: string | null
+          created_at: string
+          currency: string | null
+          description: string | null
+          features: Json | null
+          fixed_amount_per_unit: number | null
+          id: string
+          is_active: boolean | null
+          is_custom: boolean
+          max_properties: number | null
+          max_units: number | null
+          name: string
+          percentage_rate: number | null
+          price: number
+          sms_credits_included: number | null
+          tier_pricing: Json | null
+          updated_at: string
+        }
+        Insert: {
+          billing_cycle: string
+          billing_model?: string | null
+          contact_link?: string | null
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          features?: Json | null
+          fixed_amount_per_unit?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_custom?: boolean
+          max_properties?: number | null
+          max_units?: number | null
+          name: string
+          percentage_rate?: number | null
+          price?: number
+          sms_credits_included?: number | null
+          tier_pricing?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          billing_cycle?: string
+          billing_model?: string | null
+          contact_link?: string | null
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          features?: Json | null
+          fixed_amount_per_unit?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_custom?: boolean
+          max_properties?: number | null
+          max_units?: number | null
+          name?: string
+          percentage_rate?: number | null
+          price?: number
+          sms_credits_included?: number | null
+          tier_pricing?: Json | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      billing_settings: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          setting_key: string
+          setting_value: Json
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          setting_key: string
+          setting_value: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          setting_key?: string
+          setting_value?: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       blocks: {
         Row: {
           created_at: string
@@ -773,6 +902,80 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      landlord_subscriptions: {
+        Row: {
+          auto_renewal: boolean | null
+          billing_plan_id: string | null
+          created_at: string
+          grace_period_days: number
+          id: string
+          landlord_id: string
+          last_billing_date: string | null
+          next_billing_date: string | null
+          onboarding_completed: boolean | null
+          onboarding_completed_at: string | null
+          sms_credits_balance: number | null
+          status: string
+          subscription_start_date: string | null
+          trial_end_date: string | null
+          trial_features_enabled: Json | null
+          trial_limitations: Json | null
+          trial_start_date: string | null
+          trial_usage_data: Json | null
+          updated_at: string
+        }
+        Insert: {
+          auto_renewal?: boolean | null
+          billing_plan_id?: string | null
+          created_at?: string
+          grace_period_days?: number
+          id?: string
+          landlord_id: string
+          last_billing_date?: string | null
+          next_billing_date?: string | null
+          onboarding_completed?: boolean | null
+          onboarding_completed_at?: string | null
+          sms_credits_balance?: number | null
+          status?: string
+          subscription_start_date?: string | null
+          trial_end_date?: string | null
+          trial_features_enabled?: Json | null
+          trial_limitations?: Json | null
+          trial_start_date?: string | null
+          trial_usage_data?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          auto_renewal?: boolean | null
+          billing_plan_id?: string | null
+          created_at?: string
+          grace_period_days?: number
+          id?: string
+          landlord_id?: string
+          last_billing_date?: string | null
+          next_billing_date?: string | null
+          onboarding_completed?: boolean | null
+          onboarding_completed_at?: string | null
+          sms_credits_balance?: number | null
+          status?: string
+          subscription_start_date?: string | null
+          trial_end_date?: string | null
+          trial_features_enabled?: Json | null
+          trial_limitations?: Json | null
+          trial_start_date?: string | null
+          trial_usage_data?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "landlord_subscriptions_billing_plan_id_fkey"
+            columns: ["billing_plan_id"]
+            isOneToOne: false
+            referencedRelation: "billing_plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       leases: {
         Row: {
@@ -2939,7 +3142,15 @@ export type Database = {
           trial_duration_days?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "trial_configurations_billing_plan_id_fkey"
+            columns: ["billing_plan_id"]
+            isOneToOne: false
+            referencedRelation: "billing_plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       trial_notification_templates: {
         Row: {

@@ -18,11 +18,27 @@ import { useAuth } from "@/hooks/useAuth";
 import { useRole } from "@/context/RoleContext";
 import { prefetchRoute } from "@/utils/routePrefetch";
 import { adminNav, landlordNav, accountNav } from "@/config/navigation";
+import { usePlanFeatureAccess, FEATURES } from "@/hooks/usePlanFeatureAccess";
+import { LockedMenuItem } from "@/components/ui/locked-menu-item";
+import { useTrialManagement } from "@/hooks/useTrialManagement";
 
 export function AppSidebar() {
   const { signOut } = useAuth();
   const { open } = useSidebar();
-  const { isAdmin, isLandlord, isManager, isAgent, isSubUser, subUserPermissions, loading } = useRole();
+  const { isAdmin, isLandlord, isManager, isAgent, isSubUser, subUserPermissions, isOnLandlordTrial, loading } = useRole();
+  const { trialStatus } = useTrialManagement();
+
+  // Feature access hooks
+  const { allowed: hasReports } = usePlanFeatureAccess(FEATURES.BASIC_REPORTING);
+  const { allowed: hasSubUsers } = usePlanFeatureAccess(FEATURES.SUB_USERS);
+  const { allowed: hasCustomTemplates } = usePlanFeatureAccess(FEATURES.CUSTOM_EMAIL_TEMPLATES);
+  const { allowed: hasAdvancedReports } = usePlanFeatureAccess(FEATURES.ADVANCED_REPORTING);
+
+  // Check if user has Professional, Enterprise, Admin plan, OR is on trial - no locks for these
+  const isPremiumPlan = (trialStatus?.planName && 
+    ['Professional', 'Enterprise', 'Admin', 'Pro'].includes(trialStatus.planName)) ||
+    trialStatus?.isActive || // TRIAL USERS GET FULL ACCESS
+    isAdmin;
 
   // Show skeleton while role is loading
   if (loading) {
@@ -66,20 +82,50 @@ export function AppSidebar() {
                     }
                     return true;
                   })
-                  .map((item) => (
+                  .map((item) => {
+                    // Check feature access for specific items
+                    const isReportsItem = item.title === "Reports";
+                    const isSubUsersItem = item.title === "Sub Users";
+                    const isEmailTemplatesItem = item.title === "Email Templates";
+                    const isMessageTemplatesItem = item.title === "Message Templates";
+                    
+                    // Skip locks for premium plans and admins
+                    const isLocked = !isPremiumPlan && (
+                      (isReportsItem && !hasReports && !hasAdvancedReports) || 
+                      (isSubUsersItem && !hasSubUsers) ||
+                      (isEmailTemplatesItem && !hasCustomTemplates) ||
+                      (isMessageTemplatesItem && !hasCustomTemplates)
+                    );
+
+                    return (
                       <SidebarMenuItem key={item.title}>
-                        <SidebarMenuButton asChild size="sm">
-                          <NavLink 
-                            to={item.url}
-                            onMouseEnter={() => prefetchRoute(item.url)}
-                            className="flex items-center gap-2"
-                          >
-                            <item.icon className="h-4 w-4" />
-                            {open && <span>{item.title}</span>}
-                          </NavLink>
-                        </SidebarMenuButton>
+                        <LockedMenuItem 
+                          isLocked={isLocked}
+                          lockMessage={
+                            isReportsItem ? "Upgrade to access advanced reporting" :
+                            isSubUsersItem ? "Upgrade to manage team members" :
+                            (isEmailTemplatesItem || isMessageTemplatesItem) ? "Upgrade to create custom templates" :
+                            "Upgrade to Pro to access this feature"
+                          }
+                        >
+                          <SidebarMenuButton asChild size="sm">
+                            <NavLink 
+                              to={item.url}
+                              onMouseEnter={() => prefetchRoute(item.url)}
+                              className={`flex items-center gap-2 ${isLocked ? 'opacity-75' : ''}`}
+                            >
+                              <item.icon className="h-4 w-4" />
+                              {open && (
+                                <div className="flex items-center justify-between w-full">
+                                  <span>{item.title}</span>
+                                </div>
+                              )}
+                            </NavLink>
+                          </SidebarMenuButton>
+                        </LockedMenuItem>
                       </SidebarMenuItem>
-                    ))}
+                    );
+                  })}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -147,20 +193,53 @@ export function AppSidebar() {
                     }
                   }
                   return true;
-                }).map((item) => (
+                }).map((item) => {
+                  // Check feature access for specific items
+                  const isReportsItem = item.title === "Reports";
+                  const isSubUsersItem = item.title === "Sub Users";
+                  const isEmailTemplatesItem = item.title === "Email Templates";
+                  const isMessageTemplatesItem = item.title === "Message Templates";
+                  
+                   // Show partial lock for Reports since some reports are locked (skip for premium plans)
+                   const isPartiallyLocked = !isPremiumPlan && isReportsItem && (hasReports || hasAdvancedReports) && !hasAdvancedReports;
+                   const isFullyLocked = !isPremiumPlan && (
+                     (isReportsItem && !hasReports && !hasAdvancedReports) || 
+                     (isSubUsersItem && !hasSubUsers) ||
+                     (isEmailTemplatesItem && !hasCustomTemplates) ||
+                     (isMessageTemplatesItem && !hasCustomTemplates)
+                   );
+
+                   return (
                      <SidebarMenuItem key={item.title}>
-                       <SidebarMenuButton asChild size="sm">
-                         <NavLink 
-                           to={item.url}
-                           onMouseEnter={() => prefetchRoute(item.url)}
-                           className="flex items-center gap-2"
-                         >
-                           <item.icon className="h-4 w-4" />
-                           {open && <span>{item.title}</span>}
-                         </NavLink>
-                       </SidebarMenuButton>
+                       <LockedMenuItem 
+                         isLocked={isFullyLocked}
+                         isPartiallyLocked={isPartiallyLocked}
+                         lockMessage={
+                           isReportsItem && isPartiallyLocked ? "Some reports require Pro plan" :
+                           isReportsItem ? "Upgrade to access reporting features" :
+                           isSubUsersItem ? "Upgrade to manage team members" :
+                           (isEmailTemplatesItem || isMessageTemplatesItem) ? "Upgrade to create custom templates" :
+                           "Upgrade to Pro to access this feature"
+                         }
+                       >
+                         <SidebarMenuButton asChild size="sm">
+                           <NavLink 
+                             to={item.url}
+                             onMouseEnter={() => prefetchRoute(item.url)}
+                             className="flex items-center gap-2"
+                           >
+                             <item.icon className="h-4 w-4" />
+                             {open && (
+                               <div className="flex items-center justify-between w-full">
+                                 <span>{item.title}</span>
+                               </div>
+                             )}
+                           </NavLink>
+                         </SidebarMenuButton>
+                       </LockedMenuItem>
                      </SidebarMenuItem>
-                   ))}
+                   );
+                })}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
