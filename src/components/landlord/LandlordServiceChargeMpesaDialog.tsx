@@ -163,7 +163,7 @@ export const LandlordServiceChargeMpesaDialog: React.FC<LandlordServiceChargeMpe
           description: "Please check your phone and enter your M-Pesa PIN",
         });
       } else {
-        throw new Error(data.error || 'STK push failed');
+        throw new Error(toErrorString(data.error) || 'STK push failed');
       }
     } catch (error) {
       logErrorDetails(error, 'M-Pesa STK Push');
