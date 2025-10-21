@@ -210,8 +210,25 @@ export function FlowTester() {
       }
     });
 
-    if (error) throw new Error(`Payment processing test failed: ${error.message}`);
-    if (!data || data.error) throw new Error(`Payment processing returned error: ${data?.error || 'Unknown error'}`);
+    if (error) {
+      // Extract proper error message from error object
+      let errorMsg = 'Payment processing test failed';
+      if (typeof error === 'string') {
+        errorMsg = error;
+      } else if (error && typeof error === 'object') {
+        errorMsg = error.message || error.error || JSON.stringify(error);
+      }
+      throw new Error(errorMsg);
+    }
+
+    if (!data || data.error) {
+      // Extract error from response data
+      let errorMsg = 'Payment processing returned an error';
+      if (data && data.error) {
+        errorMsg = typeof data.error === 'string' ? data.error : (data.error.message || JSON.stringify(data.error));
+      }
+      throw new Error(errorMsg);
+    }
   };
 
   const testDatabaseIntegrity = async () => {
