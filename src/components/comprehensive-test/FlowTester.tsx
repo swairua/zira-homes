@@ -49,10 +49,11 @@ export function FlowTester() {
     } catch (error) {
       logErrorDetails(error, `Test: ${testName}`);
       const { message } = extractErrorMessage(error);
+      const displayMessage = toErrorString(message);
       const duration = Date.now() - startTime;
       updateTest(index, {
         status: 'failed',
-        message: `✗ ${message}`,
+        message: `✗ ${displayMessage}`,
         duration
       });
       throw error;
