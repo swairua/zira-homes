@@ -192,10 +192,29 @@ export const formatErrorForDisplay = (error: any): string => {
 export const logErrorDetails = (error: any, context?: string) => {
   const { message, details, fullError } = extractErrorMessage(error);
 
+  // Safely serialize the error object to avoid [object Object]
+  let serializedError: any;
+  try {
+    const errorToLog = fullError || error;
+    if (errorToLog instanceof Error) {
+      serializedError = {
+        name: errorToLog.name,
+        message: errorToLog.message,
+        stack: errorToLog.stack
+      };
+    } else if (typeof errorToLog === 'object' && errorToLog !== null) {
+      serializedError = JSON.parse(JSON.stringify(errorToLog, null, 2));
+    } else {
+      serializedError = String(errorToLog);
+    }
+  } catch (e) {
+    serializedError = String(fullError || error);
+  }
+
   console.error(`[Error${context ? ` - ${context}` : ''}]`, {
     message,
     details,
-    original: fullError || error,
+    original: serializedError,
     timestamp: new Date().toISOString()
   });
 };
