@@ -35,7 +35,8 @@ export const useRoleManagement = () => {
       if (error) throw error;
       return data || false;
     } catch (error) {
-      console.error('Error checking role assignment permission:', error);
+      logErrorDetails(error, 'Check Role Assignment Permission');
+      console.error('Error checking role assignment permission:', toErrorString(error));
       return false;
     }
   }, [user]);
