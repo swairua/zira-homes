@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, CheckCircle, AlertTriangle, Phone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { extractErrorMessage, logErrorDetails } from "@/utils/errorExtraction";
+import { extractErrorMessage, logErrorDetails, toErrorString } from "@/utils/errorExtraction";
 
 interface ServiceChargeMpesaDialogProps {
   open: boolean;
