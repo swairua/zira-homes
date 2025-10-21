@@ -84,8 +84,9 @@ export function MpesaPaymentModal({
         throw new Error(data?.error || "Failed to initiate payment");
       }
     } catch (error) {
-      console.error("Error initiating M-Pesa payment:", error);
-      toast.error("Failed to initiate payment. Please try again.");
+      logErrorDetails(error, 'M-Pesa Payment Modal');
+      const { message, details } = extractErrorMessage(error);
+      toast.error(details ? `${message}\n\n${details}` : message);
     } finally {
       setLoading(false);
     }
