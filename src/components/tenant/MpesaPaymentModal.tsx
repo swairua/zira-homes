@@ -86,7 +86,10 @@ export function MpesaPaymentModal({
     } catch (error) {
       logErrorDetails(error, 'M-Pesa Payment Modal');
       const { message, details } = extractErrorMessage(error);
-      toast.error(details ? `${message}\n\n${details}` : message);
+      const displayMessage = details && details !== message
+        ? `${toErrorString(message)}\n\n${toErrorString(details)}`
+        : toErrorString(message);
+      toast.error(displayMessage);
     } finally {
       setLoading(false);
     }
