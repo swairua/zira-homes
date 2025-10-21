@@ -124,10 +124,11 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
         throw new Error(data?.error || 'Payment request failed');
       }
     } catch (error: any) {
-      console.error('Payment error:', error);
+      logErrorDetails(error, 'M-Pesa Payment');
+      const { message, details } = extractErrorMessage(error);
       toast({
         title: "Payment Error",
-        description: error.message || "Failed to initiate payment. Please try again.",
+        description: details ? `${message}\n\n${details}` : message,
         variant: "destructive",
       });
     } finally {
