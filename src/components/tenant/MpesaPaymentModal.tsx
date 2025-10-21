@@ -30,6 +30,7 @@ export function MpesaPaymentModal({
 }: MpesaPaymentModalProps) {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [loading, setLoading] = useState(false);
+  const [rawResponse, setRawResponse] = useState<any>(null);
 
   const formatPhoneNumber = (phone: string) => {
     // Remove any non-numeric characters
@@ -85,7 +86,8 @@ export function MpesaPaymentModal({
       }
     } catch (error) {
       logErrorDetails(error, 'M-Pesa Payment Modal');
-      const { message, details } = extractErrorMessage(error);
+      const { message, details, fullError } = extractErrorMessage(error);
+      setRawResponse(fullError || error);
       const displayMessage = details && details !== message
         ? `${toErrorString(message)}\n\n${toErrorString(details)}`
         : toErrorString(message);
@@ -155,6 +157,16 @@ export function MpesaPaymentModal({
               <li>4. Enter your M-Pesa PIN to complete payment</li>
             </ol>
           </div>
+
+          {rawResponse && (
+            <div className="bg-red-50 border border-red-200 rounded p-3">
+              <div className="text-sm font-medium text-destructive">Function error details</div>
+              <details className="mt-2 text-xs text-muted-foreground">
+                <summary className="cursor-pointer">Show raw response</summary>
+                <pre className="mt-2 text-xs bg-muted/10 p-2 rounded overflow-auto max-h-40">{JSON.stringify(rawResponse, null, 2)}</pre>
+              </details>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="flex gap-3">
