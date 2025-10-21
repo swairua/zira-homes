@@ -58,7 +58,7 @@ export const ServiceChargeMpesaDialog: React.FC<ServiceChargeMpesaDialogProps> =
 
     try {
       const formattedPhone = formatPhoneNumber(phoneNumber);
-      
+
       const { data, error } = await supabase.functions.invoke('mpesa-stk-push', {
         body: {
           phone: formattedPhone,
@@ -76,7 +76,7 @@ export const ServiceChargeMpesaDialog: React.FC<ServiceChargeMpesaDialogProps> =
         setCheckoutRequestId(data.data.CheckoutRequestID);
         setStatus('sent');
         startStatusPolling(data.data.CheckoutRequestID);
-        
+
         // Update service charge invoice with M-Pesa details
         await supabase
           .from('service_charge_invoices')
@@ -94,11 +94,12 @@ export const ServiceChargeMpesaDialog: React.FC<ServiceChargeMpesaDialogProps> =
         throw new Error(data.error || 'STK push failed');
       }
     } catch (error) {
-      console.error('M-Pesa STK push error:', error);
+      logErrorDetails(error, 'M-Pesa STK Push');
+      const { message, details } = extractErrorMessage(error);
       setStatus('error');
       toast({
         title: "Payment Failed",
-        description: error instanceof Error ? error.message : "Failed to initiate M-Pesa payment",
+        description: details ? `${message}\n\n${details}` : message,
         variant: "destructive",
       });
     } finally {
