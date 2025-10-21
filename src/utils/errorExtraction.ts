@@ -204,33 +204,43 @@ export const logErrorDetails = (error: any, context?: string) => {
  * Safe string conversion that avoids [object Object]
  */
 export const toErrorString = (value: any): string => {
+  if (!value) {
+    return '';
+  }
+
   if (typeof value === 'string') {
     return value;
   }
 
   if (value instanceof Error) {
-    return value.message;
+    return value.message || String(value);
   }
 
-  if (typeof value === 'object' && value !== null) {
-    // Try to extract a meaningful string from the object
-    if (value.message && typeof value.message === 'string') {
+  if (typeof value === 'object') {
+    // Try to extract a meaningful string from the object in priority order
+    if (value.message && typeof value.message === 'string' && value.message !== '[object Object]') {
       return value.message;
     }
-    if (value.error && typeof value.error === 'string') {
+    if (value.error && typeof value.error === 'string' && value.error !== '[object Object]') {
       return value.error;
     }
-    if (value.detail && typeof value.detail === 'string') {
+    if (value.detail && typeof value.detail === 'string' && value.detail !== '[object Object]') {
       return value.detail;
     }
-    if (value.msg && typeof value.msg === 'string') {
+    if (value.msg && typeof value.msg === 'string' && value.msg !== '[object Object]') {
       return value.msg;
+    }
+    if (value.description && typeof value.description === 'string' && value.description !== '[object Object]') {
+      return value.description;
+    }
+    if (value.ResponseDescription && typeof value.ResponseDescription === 'string' && value.ResponseDescription !== '[object Object]') {
+      return value.ResponseDescription;
     }
 
     // Try JSON stringify as last resort
     try {
       const str = JSON.stringify(value);
-      if (str && str !== '{}') {
+      if (str && str !== '{}' && str !== '[object Object]') {
         return str;
       }
     } catch (e) {
@@ -238,6 +248,7 @@ export const toErrorString = (value: any): string => {
     }
   }
 
-  // Fallback
-  return String(value);
+  // Fallback to String conversion but avoid [object Object]
+  const str = String(value);
+  return str && str !== '[object Object]' ? str : '';
 };
