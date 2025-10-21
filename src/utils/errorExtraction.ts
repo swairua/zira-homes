@@ -191,11 +191,53 @@ export const formatErrorForDisplay = (error: any): string => {
  */
 export const logErrorDetails = (error: any, context?: string) => {
   const { message, details, fullError } = extractErrorMessage(error);
-  
+
   console.error(`[Error${context ? ` - ${context}` : ''}]`, {
     message,
     details,
     original: fullError || error,
     timestamp: new Date().toISOString()
   });
+};
+
+/**
+ * Safe string conversion that avoids [object Object]
+ */
+export const toErrorString = (value: any): string => {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (value instanceof Error) {
+    return value.message;
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    // Try to extract a meaningful string from the object
+    if (value.message && typeof value.message === 'string') {
+      return value.message;
+    }
+    if (value.error && typeof value.error === 'string') {
+      return value.error;
+    }
+    if (value.detail && typeof value.detail === 'string') {
+      return value.detail;
+    }
+    if (value.msg && typeof value.msg === 'string') {
+      return value.msg;
+    }
+
+    // Try JSON stringify as last resort
+    try {
+      const str = JSON.stringify(value);
+      if (str && str !== '{}') {
+        return str;
+      }
+    } catch (e) {
+      // Continue to fallback
+    }
+  }
+
+  // Fallback
+  return String(value);
 };
