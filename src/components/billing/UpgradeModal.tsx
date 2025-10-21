@@ -207,10 +207,17 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
           );
 
           if (stkError) {
-            throw new Error(toErrorString(stkError));
+            // Extract proper error message from error object
+            let errorMsg = 'Failed to initiate M-Pesa payment';
+            if (typeof stkError === 'string') {
+              errorMsg = stkError;
+            } else if (stkError && typeof stkError === 'object') {
+              errorMsg = stkError.message || stkError.error || JSON.stringify(stkError);
+            }
+            throw new Error(errorMsg);
           }
 
-          if (stkData?.data?.CheckoutRequestID) {
+          if (stkData && stkData.data && stkData.data.CheckoutRequestID) {
             toast.success("M-Pesa prompt sent to your phone. Please complete the payment.");
             setPhoneNumber('');
             setTimeout(() => {
@@ -219,7 +226,14 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
             }, 2000);
             return;
           } else {
-            throw new Error("Failed to initiate M-Pesa payment");
+            // Extract error from response data
+            let errorMsg = 'Failed to initiate M-Pesa payment';
+            if (stkData && stkData.error) {
+              errorMsg = typeof stkData.error === 'string' ? stkData.error : (stkData.error.message || JSON.stringify(stkData.error));
+            } else if (stkData && stkData.data && stkData.data.ResponseDescription) {
+              errorMsg = stkData.data.ResponseDescription;
+            }
+            throw new Error(errorMsg);
           }
         } else {
           throw new Error("Unexpected response from payment setup");
