@@ -206,7 +206,7 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
           );
 
           if (stkError) {
-            throw stkError;
+            throw new Error(toErrorString(stkError));
           }
 
           if (stkData?.data?.CheckoutRequestID) {
