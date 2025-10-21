@@ -204,7 +204,8 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
           setSelectedRole(result);
         }
       } catch (error) {
-        console.error("Error fetching user role:", error);
+        logErrorDetails(error, 'Fetch User Role');
+        console.error("Error fetching user role:", toErrorString(error));
         // Don't downgrade on error - keep current role if set
         if (!selectedRole && !userRole) {
           setUserRole("tenant");
