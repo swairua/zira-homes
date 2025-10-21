@@ -638,9 +638,18 @@ export const EnhancedBillingPage = () => {
         logErrorDetails(error, 'M-Pesa Enhanced Billing');
         const { message, details } = extractErrorMessage(error);
         // Ensure we have valid strings and not "[object Object]"
-        const msg = toErrorString(message) || 'Payment failed';
-        const det = details && toErrorString(details) || '';
-        const displayMessage = det && det !== msg && det !== 'undefined'
+        let msg = toErrorString(message) || 'Payment failed';
+        let det = toErrorString(details) || '';
+
+        // Double-check that we don't have [object Object]
+        if (msg && msg.includes('[object Object]')) {
+          msg = 'Payment initiation failed. Please try again or contact support.';
+        }
+        if (det && det.includes('[object Object]')) {
+          det = '';
+        }
+
+        const displayMessage = det && det !== msg && det !== 'undefined' && det.length > 0
           ? `${msg}\n\n${det}`
           : msg;
         toast({
