@@ -33,6 +33,7 @@ export const ServiceChargeMpesaDialog: React.FC<ServiceChargeMpesaDialogProps> =
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'success' | 'error'>('idle');
   const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [rawResponse, setRawResponse] = useState<any>(null);
 
   const formatPhoneNumber = (phone: string): string => {
     let cleaned = phone.replace(/\D/g, '');
