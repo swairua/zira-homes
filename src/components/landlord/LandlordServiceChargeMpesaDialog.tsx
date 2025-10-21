@@ -39,6 +39,7 @@ export const LandlordServiceChargeMpesaDialog: React.FC<LandlordServiceChargeMpe
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'success' | 'error'>('idle');
   const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Fetch saved phone numbers when dialog opens
   useEffect(() => {
@@ -125,6 +126,7 @@ export const LandlordServiceChargeMpesaDialog: React.FC<LandlordServiceChargeMpe
 
     setLoading(true);
     setStatus('sending');
+    setErrorMessage(null);
 
     try {
       const formattedPhone = formatPhoneNumber(selectedPhone);
@@ -170,6 +172,7 @@ export const LandlordServiceChargeMpesaDialog: React.FC<LandlordServiceChargeMpe
         ? `${toErrorString(message)}\n\n${toErrorString(details)}`
         : toErrorString(message);
       setStatus('error');
+      setErrorMessage(displayMessage);
       toast({
         title: "Payment Failed",
         description: displayMessage,
@@ -254,6 +257,7 @@ export const LandlordServiceChargeMpesaDialog: React.FC<LandlordServiceChargeMpe
     setLoading(false);
     setStatus('idle');
     setCheckoutRequestId(null);
+    setErrorMessage(null);
   };
 
   const handleClose = () => {
@@ -291,7 +295,7 @@ export const LandlordServiceChargeMpesaDialog: React.FC<LandlordServiceChargeMpe
       case 'success':
         return "Payment completed successfully!";
       case 'error':
-        return "Payment failed. Please try again.";
+        return errorMessage || "Payment failed. Please try again.";
       default:
         return null;
     }
