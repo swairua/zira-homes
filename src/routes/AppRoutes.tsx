@@ -3,6 +3,7 @@ import { Routes, Route } from "react-router-dom";
 import { RequireAuth } from "@/components/RequireAuth";
 import { RoleBasedRoute } from "@/components/RoleBasedRoute";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { PlanAccessProvider } from "@/context/PlanAccessContext";
 import { LandlordOnlyRoute } from "@/components/LandlordOnlyRoute";
 import { AdminOnlyRoute } from "@/components/AdminOnlyRoute";
 import { SubUserBlockedRoute } from "@/components/SubUserBlockedRoute";
@@ -38,10 +39,16 @@ import Support from "@/pages/Support";
 import Notifications from "@/pages/Notifications";
 import Leases from "@/pages/Leases";
 import SubUsers from "@/pages/SubUsers";
+import { Upgrade } from "@/pages/Upgrade";
+import UpgradeSuccess from "@/pages/UpgradeSuccess";
 import KnowledgeBase from "@/pages/KnowledgeBase";
 
-// Template pages
+// Billing pages
+import Billing from "@/pages/landlord/Billing";
+import BillingPanel from "@/pages/landlord/BillingPanel";  
+import BillingSettings from "@/pages/landlord/BillingSettings";
 import EmailTemplates from "@/pages/landlord/EmailTemplates";
+import LandlordBillingPage from "@/pages/landlord/LandlordBillingPage";
 import MessageTemplates from "@/pages/landlord/MessageTemplates";
 import PaymentSettings from "@/pages/landlord/PaymentSettings";
 import { Navigate } from "react-router-dom";
@@ -53,6 +60,7 @@ import UserManagement from "@/pages/settings/UserManagement";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminInvoicesManagement from "@/pages/admin/AdminInvoicesManagement";
 import AuditLogs from "@/pages/admin/AuditLogs";
+import BillingDashboard from "@/pages/admin/BillingDashboard";
 import BulkMessaging from "@/pages/admin/BulkMessaging";
 import CommunicationSettings from "@/pages/admin/CommunicationSettings";
 import AdminEmailTemplates from "@/pages/admin/EmailTemplates";
@@ -64,8 +72,10 @@ import PaymentConfiguration from "@/pages/admin/PaymentConfiguration";
 import PlatformAnalytics from "@/pages/admin/PlatformAnalytics";
 import AdminSupportCenter from "@/pages/admin/SupportCenter";
 import SystemConfiguration from "@/pages/admin/SystemConfiguration";
+import TrialManagement from "@/pages/admin/TrialManagement";
 import AdminUserManagement from "@/pages/admin/UserManagement";
 import SelfHostedMonitoring from "@/pages/admin/SelfHostedMonitoring";
+import BillingPlanManager from "@/pages/admin/BillingPlanManager";
 
 const LoadingSpinner = () => (
   <div className="flex items-center justify-center min-h-screen">
@@ -113,6 +123,7 @@ export const AppRoutes = () => {
         element={
           <RequireAuth>
             <RoleBasedRoute>
+              <PlanAccessProvider>
                 <Routes>
                 <Route path="/" element={<Index />} />
                 {/* Redirect from /agent/dashboard to main dashboard */}
@@ -176,6 +187,12 @@ export const AppRoutes = () => {
                     </LandlordOnlyRoute>
                   </SubUserBlockedRoute>
                 } />
+                <Route path="/upgrade" element={
+                  <SubUserBlockedRoute>
+                    <Upgrade />
+                  </SubUserBlockedRoute>
+                } />
+                <Route path="/upgrade-success" element={<UpgradeSuccess />} />
                 <Route path="/knowledge-base" element={<KnowledgeBase />} />
                 <Route path="/feature-demo" element={
                   <React.Suspense fallback={<LoadingSpinner />}>
@@ -197,17 +214,40 @@ export const AppRoutes = () => {
                 {/* Legacy Sub-Users Route (redirect) */}
                 <Route path="/landlord/sub-users" element={<Navigate to="/sub-users" replace />} />
                 
-                {/* Template Routes */}
-                <Route path="/email-templates" element={
+                {/* Legacy Template Routes (redirects) */}
+                <Route path="/email-templates" element={<Navigate to="/billing/email-templates" replace />} />
+                <Route path="/message-templates" element={<Navigate to="/billing/message-templates" replace />} />
+                
+                {/* Unified Billing Route */}
+                <Route path="/billing" element={
+                  <SubUserBlockedRoute>
+                    <Billing />
+                  </SubUserBlockedRoute>
+                } />
+                <Route path="/billing/email-templates" element={
                   <PermissionGuard permission="send_messages">
                     <EmailTemplates />
                   </PermissionGuard>
                 } />
-                <Route path="/message-templates" element={
+                <Route path="/billing/message-templates" element={
                   <PermissionGuard permission="send_messages">
                     <MessageTemplates />
                   </PermissionGuard>
                 } />
+                
+                {/* Legacy routes for backward compatibility */}
+                <Route path="/billing/details" element={<Navigate to="/billing" replace />} />
+                <Route path="/billing/panel" element={
+                  <SubUserBlockedRoute>
+                    <BillingPanel />
+                  </SubUserBlockedRoute>
+                } />
+                <Route path="/billing/settings" element={
+                  <SubUserBlockedRoute>
+                    <BillingSettings />
+                  </SubUserBlockedRoute>
+                } />
+                <Route path="/billing/landlord-billing" element={<LandlordBillingPage />} />
                 
                 {/* Settings routes */}
                 <Route path="/settings/users" element={<UserManagement />} />
@@ -215,6 +255,7 @@ export const AppRoutes = () => {
                 {/* Catch all unknown routes within protected area */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              </PlanAccessProvider>
             </RoleBasedRoute>
           </RequireAuth>
         }
@@ -231,6 +272,7 @@ export const AppRoutes = () => {
                 <Route path="/" element={<AdminDashboard />} />
                 <Route path="/invoices" element={<AdminInvoicesManagement />} />
                 <Route path="/audit-logs" element={<AuditLogs />} />
+                <Route path="/billing" element={<BillingDashboard />} />
                 <Route path="/bulk-messaging" element={<BulkMessaging />} />
                 <Route path="/communication" element={<CommunicationSettings />} />
                 <Route path="/email-templates" element={<AdminEmailTemplates />} />
@@ -242,8 +284,10 @@ export const AppRoutes = () => {
                 <Route path="/analytics" element={<PlatformAnalytics />} />
                 <Route path="/support" element={<AdminSupportCenter />} />
                 <Route path="/system" element={<SystemConfiguration />} />
+                <Route path="/trials" element={<TrialManagement />} />
                 <Route path="/users" element={<AdminUserManagement />} />
                 <Route path="/self-hosted" element={<SelfHostedMonitoring />} />
+                <Route path="/billing-plans" element={<BillingPlanManager />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
               </AdminOnlyRoute>
