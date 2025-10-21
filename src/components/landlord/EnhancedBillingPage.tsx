@@ -621,10 +621,11 @@ export const EnhancedBillingPage = () => {
           throw new Error(data?.error || 'STK push failed');
         }
       } catch (error) {
-        console.error('M-Pesa payment error:', error);
+        logErrorDetails(error, 'M-Pesa Enhanced Billing');
+        const { message, details } = extractErrorMessage(error);
         toast({
           title: "Payment Failed",
-          description: error instanceof Error ? error.message : "Failed to initiate M-Pesa payment. Please try again.",
+          description: details ? `${message}\n\n${details}` : message,
           variant: "destructive",
         });
       }
