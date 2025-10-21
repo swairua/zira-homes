@@ -58,7 +58,7 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
     try {
       setLoading(true);
       console.log('🔍 UpgradeModal: Fetching active billing plans...');
-      
+
       const { data, error } = await supabase
         .from('billing_plans')
         .select('*, is_custom, contact_link')
@@ -73,7 +73,7 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
       // Process the plans and add display properties
       const processedPlans = (data || []).map((plan, index) => ({
         ...plan,
-        features: Array.isArray(plan.features) ? (plan.features as string[]) : 
+        features: Array.isArray(plan.features) ? (plan.features as string[]) :
                  typeof plan.features === 'string' ? [plan.features] : [],
         popular: index === 1, // Mark second plan as popular
         recommended: plan.name.toLowerCase().includes('professional')
@@ -82,8 +82,17 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
       console.log('✅ UpgradeModal: Processed plans:', processedPlans);
       setBillingPlans(processedPlans);
     } catch (error) {
-      console.error('❌ UpgradeModal: Error fetching billing plans:', error);
-      toast.error('Failed to load billing plans');
+      // Extract proper error message from error object
+      let errorMsg = 'Failed to load billing plans';
+      if (typeof error === 'string') {
+        errorMsg = error;
+      } else if (error instanceof Error) {
+        errorMsg = error.message;
+      } else if (error && typeof error === 'object') {
+        errorMsg = (error as any).message || (error as any).error || JSON.stringify(error);
+      }
+      console.error('❌ UpgradeModal: Error fetching billing plans:', errorMsg);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
