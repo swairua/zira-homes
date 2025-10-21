@@ -231,7 +231,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
           description: `STK Push sent successfully using shortcode ${data.data?.BusinessShortCode}! Check your phone.`,
         });
       } else {
-        throw new Error(data?.error || 'Test failed');
+        throw new Error(toErrorString(data?.error) || 'Test failed');
       }
     } catch (error) {
       console.error('STK test error:', error);
