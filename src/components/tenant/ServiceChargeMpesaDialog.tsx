@@ -275,6 +275,16 @@ export const ServiceChargeMpesaDialog: React.FC<ServiceChargeMpesaDialogProps> =
             </Alert>
           )}
 
+          {rawResponse && (
+            <div className="bg-red-50 border border-red-200 rounded p-3">
+              <div className="text-sm font-medium text-destructive">Function error details</div>
+              <details className="mt-2 text-xs text-muted-foreground">
+                <summary className="cursor-pointer">Show raw response</summary>
+                <pre className="mt-2 text-xs bg-muted/10 p-2 rounded overflow-auto max-h-40">{JSON.stringify(rawResponse, null, 2)}</pre>
+              </details>
+            </div>
+          )}
+
           {/* Phone Number Input */}
           {status === 'idle' && (
             <div className="space-y-2">
