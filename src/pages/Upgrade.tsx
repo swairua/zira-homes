@@ -253,15 +253,19 @@ export function Upgrade() {
         );
 
         if (stkError) {
-          const stkErrorDetail = stkError instanceof Error
-            ? stkError.message
-            : typeof stkError === 'object' && stkError !== null
-            ? (stkError as any).error || (stkError as any).message || 'STK push failed'
-            : String(stkError);
-          throw new Error(`M-Pesa error: ${stkErrorDetail}`);
+          // Extract proper error message from error object
+          let errorMsg = 'Failed to initiate M-Pesa payment';
+          if (typeof stkError === 'string') {
+            errorMsg = stkError;
+          } else if (stkError instanceof Error) {
+            errorMsg = stkError.message;
+          } else if (stkError && typeof stkError === 'object') {
+            errorMsg = stkError.message || stkError.error || JSON.stringify(stkError);
+          }
+          throw new Error(`M-Pesa error: ${errorMsg}`);
         }
 
-        if (stkData?.data?.CheckoutRequestID) {
+        if (stkData && stkData.data && stkData.data.CheckoutRequestID) {
           toast.success("M-Pesa prompt sent to your phone. Please complete the payment.");
           setConfirmModalOpen(false);
           setPhoneNumber('');
@@ -273,7 +277,14 @@ export function Upgrade() {
           // Redirect after a short delay
           setTimeout(() => window.location.href = '/', 2000);
         } else {
-          throw new Error("Failed to initiate M-Pesa payment");
+          // Extract error from response data
+          let errorMsg = 'Failed to initiate M-Pesa payment';
+          if (stkData && stkData.error) {
+            errorMsg = typeof stkData.error === 'string' ? stkData.error : (stkData.error.message || JSON.stringify(stkData.error));
+          } else if (stkData && stkData.data && stkData.data.ResponseDescription) {
+            errorMsg = stkData.data.ResponseDescription;
+          }
+          throw new Error(errorMsg);
         }
       } else {
         throw new Error("Unexpected response from payment setup");
