@@ -623,9 +623,12 @@ export const EnhancedBillingPage = () => {
       } catch (error) {
         logErrorDetails(error, 'M-Pesa Enhanced Billing');
         const { message, details } = extractErrorMessage(error);
+        const displayMessage = details && details !== message
+          ? `${toErrorString(message)}\n\n${toErrorString(details)}`
+          : toErrorString(message);
         toast({
           title: "Payment Failed",
-          description: details ? `${message}\n\n${details}` : message,
+          description: displayMessage,
           variant: "destructive",
         });
       }
@@ -727,7 +730,7 @@ export const EnhancedBillingPage = () => {
                 {billingData.current_usage.units_count}
               </div>
               <div className="text-sm text-muted-foreground">
-                Units ({billingData.current_plan.max_units === 0 ? '∞' : billingData.current_plan.max_units} limit)
+                Units ({billingData.current_plan.max_units === 0 ? '���' : billingData.current_plan.max_units} limit)
               </div>
             </div>
             <div className="text-center">
