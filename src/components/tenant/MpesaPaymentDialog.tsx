@@ -121,7 +121,7 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
         // Reset form
         setPhoneNumber("");
       } else {
-        throw new Error(data?.error || 'Payment request failed');
+        throw new Error(toErrorString(data?.error) || 'Payment request failed');
       }
     } catch (error: any) {
       logErrorDetails(error, 'M-Pesa Payment');
