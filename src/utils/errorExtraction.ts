@@ -21,48 +21,73 @@ export const extractErrorMessage = (error: any): ErrorDetails => {
 
   // Handle Error objects
   if (error instanceof Error) {
+    // Special handling for Supabase FunctionsHttpError
+    if ((error as any).context) {
+      try {
+        const contextStr = (error as any).context;
+        // Try parsing context as JSON
+        const contextData = typeof contextStr === 'string'
+          ? JSON.parse(contextStr)
+          : contextStr;
+
+        if (typeof contextData === 'object' && contextData !== null) {
+          // Extract error from context
+          if (contextData.error) {
+            const errorMsg = typeof contextData.error === 'string'
+              ? contextData.error
+              : (contextData.error.message || 'Request failed');
+            return {
+              message: errorMsg,
+              details: contextData.details || contextData.message || contextData.error_description,
+              fullError: contextData
+            };
+          }
+
+          // If no explicit error field, return stringified context
+          if (Object.keys(contextData).length > 0) {
+            return {
+              message: JSON.stringify(contextData),
+              fullError: contextData
+            };
+          }
+        }
+      } catch (e) {
+        // Fall through to error.message handling
+      }
+    }
+
+    // Fall back to error message
     return {
       message: error.message || 'An error occurred',
       fullError: error
     };
   }
 
-  // Handle FunctionsHttpError or similar objects with context/json
-  if (error.context) {
-    try {
-      const contextData = typeof error.context === 'string' 
-        ? JSON.parse(error.context) 
-        : error.context;
-      
-      if (contextData.error) {
-        return {
-          message: contextData.error,
-          details: contextData.details || contextData.message,
-          fullError: contextData
-        };
-      }
-    } catch (e) {
-      // Fall through to other checks
-    }
-  }
-
   // Handle objects with error/message properties
   if (typeof error === 'object') {
-    // Try multiple common error property names
+    // Try multiple common error property names in priority order
     if (error.error) {
+      const errorValue = error.error;
+      const message = typeof errorValue === 'string'
+        ? errorValue
+        : (errorValue.message || errorValue.error || 'Request failed');
       return {
-        message: typeof error.error === 'string' ? error.error : error.error.message || 'Request failed',
-        details: error.details || error.message,
+        message,
+        details: error.details || error.message || error.description,
         fullError: error
       };
     }
 
     if (error.message) {
-      return {
-        message: error.message,
-        details: error.details || error.description,
-        fullError: error
-      };
+      const msg = error.message;
+      // Avoid returning "[object Object]" or other non-useful messages
+      if (msg && typeof msg === 'string' && msg !== '[object Object]') {
+        return {
+          message: msg,
+          details: error.details || error.description,
+          fullError: error
+        };
+      }
     }
 
     if (error.detail) {
@@ -79,9 +104,58 @@ export const extractErrorMessage = (error: any): ErrorDetails => {
       };
     }
 
-    // Try to stringify as last resort
+    if (error.description) {
+      return {
+        message: error.description,
+        fullError: error
+      };
+    }
+
+    // Check for status and try to use it
+    if (error.status && error.statusText) {
+      return {
+        message: `Error ${error.status}: ${error.statusText}`,
+        details: error.message || error.detail,
+        fullError: error
+      };
+    }
+
+    // Try common response structures
+    if (error.response) {
+      const response = error.response;
+      if (response.data?.error) {
+        return {
+          message: typeof response.data.error === 'string'
+            ? response.data.error
+            : response.data.error.message || 'Request failed',
+          details: response.data.details || response.data.message,
+          fullError: error
+        };
+      }
+      if (response.statusText) {
+        return {
+          message: `Error ${response.status}: ${response.statusText}`,
+          fullError: error
+        };
+      }
+    }
+
+    // Try to get useful properties
+    const keys = Object.keys(error).filter(k => typeof error[k] === 'string');
+    if (keys.length > 0) {
+      const firstKey = keys[0];
+      const value = error[firstKey];
+      if (value && value !== '[object Object]') {
+        return {
+          message: value,
+          fullError: error
+        };
+      }
+    }
+
+    // Last resort: stringify (but avoid [object Object])
     const stringified = JSON.stringify(error);
-    if (stringified && stringified !== '{}') {
+    if (stringified && stringified !== '{}' && stringified !== '[object Object]') {
       return {
         message: stringified,
         fullError: error
