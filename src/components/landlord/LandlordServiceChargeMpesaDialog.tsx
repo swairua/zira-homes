@@ -166,10 +166,13 @@ export const LandlordServiceChargeMpesaDialog: React.FC<LandlordServiceChargeMpe
     } catch (error) {
       logErrorDetails(error, 'M-Pesa STK Push');
       const { message, details } = extractErrorMessage(error);
+      const displayMessage = details && details !== message
+        ? `${toErrorString(message)}\n\n${toErrorString(details)}`
+        : toErrorString(message);
       setStatus('error');
       toast({
         title: "Payment Failed",
-        description: details ? `${message}\n\n${details}` : message,
+        description: displayMessage,
         variant: "destructive",
       });
     } finally {
