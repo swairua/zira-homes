@@ -125,10 +125,31 @@ const BillingPanel = () => {
       setSmsBundles(bundlesData || []);
 
     } catch (error) {
-      console.error("Error fetching billing data:", error);
+      // Properly serialize error for logging
+      let errorMessage = 'Unknown error';
+      let errorDetails = '';
+
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        errorDetails = error.stack || '';
+      } else if (typeof error === 'object' && error !== null) {
+        errorMessage = JSON.stringify(error, Object.getOwnPropertyNames(error));
+        if ((error as any).message) {
+          errorMessage = (error as any).message;
+        }
+        if ((error as any).details) {
+          errorDetails = (error as any).details;
+        }
+      } else {
+        errorMessage = String(error);
+      }
+
+      console.error("Error fetching billing data:", errorMessage);
+      if (errorDetails) console.error("Error details:", errorDetails);
+
       toast({
         title: "Error",
-        description: "Failed to load billing data",
+        description: errorDetails || errorMessage || "Failed to load billing data",
         variant: "destructive",
       });
     } finally {
