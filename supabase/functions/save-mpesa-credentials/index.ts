@@ -144,8 +144,27 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Error saving M-Pesa credentials:', error);
+
+    // Extract error message safely
+    let errorMessage = 'Failed to save M-Pesa credentials';
+    let errorDetails = '';
+
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      errorDetails = error.stack || '';
+    } else if (typeof error === 'object' && error !== null) {
+      errorMessage = (error as any).message || JSON.stringify(error);
+      errorDetails = (error as any).details || JSON.stringify(error);
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Failed to save M-Pesa credentials' }),
+      JSON.stringify({
+        error: errorMessage,
+        details: errorDetails,
+        timestamp: new Date().toISOString()
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
