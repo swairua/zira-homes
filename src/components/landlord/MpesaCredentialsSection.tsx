@@ -223,21 +223,44 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        // Extract proper error message from error object
+        let errorMsg = 'Failed to send test STK Push';
+        if (typeof error === 'string') {
+          errorMsg = error;
+        } else if (error && typeof error === 'object') {
+          errorMsg = error.message || error.error || JSON.stringify(error);
+        }
+        throw new Error(errorMsg);
+      }
 
-      if (data?.success) {
+      if (data && data.success) {
         toast({
           title: "Test Successful",
           description: `STK Push sent successfully using shortcode ${data.data?.BusinessShortCode}! Check your phone.`,
         });
       } else {
-        throw new Error(toErrorString(data?.error) || 'Test failed');
+        // Extract error from response data
+        let errorMsg = 'Test failed';
+        if (data && data.error) {
+          errorMsg = typeof data.error === 'string' ? data.error : (data.error.message || JSON.stringify(data.error));
+        } else if (data && data.data && data.data.ResponseDescription) {
+          errorMsg = data.data.ResponseDescription;
+        }
+        throw new Error(errorMsg);
       }
     } catch (error) {
       console.error('STK test error:', error);
+      const { message, details } = extractErrorMessage(error);
+      // Ensure we have valid strings and not "[object Object]"
+      const msg = toErrorString(message) || 'Failed to send test STK Push';
+      const det = details && toErrorString(details) || '';
+      const displayMessage = det && det !== msg && det !== 'undefined'
+        ? `${msg}\n\n${det}`
+        : msg;
       toast({
         title: "Test Failed",
-        description: "Failed to send test STK Push. Please check your credentials.",
+        description: displayMessage,
         variant: "destructive",
       });
     } finally {
