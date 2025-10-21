@@ -250,12 +250,21 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         throw new Error(errorMsg);
       }
     } catch (error) {
-      console.error('STK test error:', error);
+      logErrorDetails(error, 'M-Pesa Test STK Push');
       const { message, details } = extractErrorMessage(error);
       // Ensure we have valid strings and not "[object Object]"
-      const msg = toErrorString(message) || 'Failed to send test STK Push';
-      const det = details && toErrorString(details) || '';
-      const displayMessage = det && det !== msg && det !== 'undefined'
+      let msg = toErrorString(message) || 'Failed to send test STK Push';
+      let det = toErrorString(details) || '';
+
+      // Double-check that we don't have [object Object]
+      if (msg && msg.includes('[object Object]')) {
+        msg = 'Test STK push failed. Please check your credentials and try again.';
+      }
+      if (det && det.includes('[object Object]')) {
+        det = '';
+      }
+
+      const displayMessage = det && det !== msg && det !== 'undefined' && det.length > 0
         ? `${msg}\n\n${det}`
         : msg;
       toast({
