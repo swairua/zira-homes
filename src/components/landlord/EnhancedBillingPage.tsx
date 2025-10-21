@@ -176,16 +176,29 @@ export const EnhancedBillingPage = () => {
       setLoading(true);
       
       // Fetch current subscription
-      const { data: subscription, error: subError } = await supabase
+      const { data: subscriptionData, error: subError } = await supabase
         .from('landlord_subscriptions')
         .select(`
           *,
           billing_plan:billing_plans(*)
         `)
         .eq('landlord_id', user?.id)
-        .single();
+        .maybeSingle();
 
       if (subError) throw subError;
+
+      const subscription = subscriptionData;
+
+      // If no subscription, show a message instead of failing
+      if (!subscription) {
+        toast({
+          title: "No Active Subscription",
+          description: "Please contact support to set up your subscription.",
+          variant: "default",
+        });
+        setLoading(false);
+        return;
+      }
 
       // Fetch current usage metrics
       const { data: propertiesData } = await supabase
