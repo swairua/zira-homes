@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Smartphone, CreditCard, Info } from "lucide-react";
-import { extractErrorMessage, logErrorDetails } from "@/utils/errorExtraction";
+import { extractErrorMessage, logErrorDetails, toErrorString } from "@/utils/errorExtraction";
 
 interface MpesaPaymentDialogProps {
   open: boolean;
