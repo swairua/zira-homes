@@ -30,6 +30,7 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
   const [phoneNumber, setPhoneNumber] = useState("");
   const [loading, setLoading] = useState(false);
   const [landlordShortcode, setLandlordShortcode] = useState<string | null>(null);
+  const [rawResponse, setRawResponse] = useState<any>(null);
 
   // Get landlord M-Pesa config info when dialog opens
   useEffect(() => {
@@ -125,7 +126,8 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
       }
     } catch (error: any) {
       logErrorDetails(error, 'M-Pesa Payment');
-      const { message, details } = extractErrorMessage(error);
+      const { message, details, fullError } = extractErrorMessage(error);
+      setRawResponse(fullError || error);
       const displayMessage = details && details !== message
         ? `${toErrorString(message)}\n\n${toErrorString(details)}`
         : toErrorString(message);
@@ -179,6 +181,16 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
               </div>
             </div>
           </div>
+
+          {rawResponse && (
+            <div className="bg-red-50 border border-red-200 rounded p-3">
+              <div className="text-sm font-medium text-destructive">Function error details</div>
+              <details className="mt-2 text-xs text-muted-foreground">
+                <summary className="cursor-pointer">Show raw response</summary>
+                <pre className="mt-2 text-xs bg-muted/10 p-2 rounded overflow-auto max-h-40">{JSON.stringify(rawResponse, null, 2)}</pre>
+              </details>
+            </div>
+          )}
 
           {/* Phone number input */}
           <div className="space-y-2">
