@@ -32,6 +32,7 @@ export const ServiceChargeMpesaDialog: React.FC<ServiceChargeMpesaDialogProps> =
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'success' | 'error'>('idle');
   const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const formatPhoneNumber = (phone: string): string => {
     let cleaned = phone.replace(/\D/g, '');
@@ -55,6 +56,7 @@ export const ServiceChargeMpesaDialog: React.FC<ServiceChargeMpesaDialogProps> =
 
     setLoading(true);
     setStatus('sending');
+    setErrorMessage(null);
 
     try {
       const formattedPhone = formatPhoneNumber(phoneNumber);
@@ -100,6 +102,7 @@ export const ServiceChargeMpesaDialog: React.FC<ServiceChargeMpesaDialogProps> =
         ? `${toErrorString(message)}\n\n${toErrorString(details)}`
         : toErrorString(message);
       setStatus('error');
+      setErrorMessage(displayMessage);
       toast({
         title: "Payment Failed",
         description: displayMessage,
@@ -184,6 +187,7 @@ export const ServiceChargeMpesaDialog: React.FC<ServiceChargeMpesaDialogProps> =
     setLoading(false);
     setStatus('idle');
     setCheckoutRequestId(null);
+    setErrorMessage(null);
   };
 
   const handleClose = () => {
@@ -221,7 +225,7 @@ export const ServiceChargeMpesaDialog: React.FC<ServiceChargeMpesaDialogProps> =
       case 'success':
         return "Payment completed successfully!";
       case 'error':
-        return "Payment failed. Please try again.";
+        return errorMessage || "Payment failed. Please try again.";
       default:
         return null;
     }
