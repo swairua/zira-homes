@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { CheckCircle, XCircle, Loader2, Play, AlertTriangle } from "lucide-react";
+import { extractErrorMessage, logErrorDetails } from "@/utils/errorExtraction";
 
 interface TestResult {
   name: string;
