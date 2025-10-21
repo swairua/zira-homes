@@ -41,17 +41,19 @@ export function FlowTester() {
     try {
       await testFn();
       const duration = Date.now() - startTime;
-      updateTest(index, { 
-        status: 'passed', 
+      updateTest(index, {
+        status: 'passed',
         message: `✓ Completed successfully`,
-        duration 
+        duration
       });
     } catch (error) {
+      logErrorDetails(error, `Test: ${testName}`);
+      const { message } = extractErrorMessage(error);
       const duration = Date.now() - startTime;
-      updateTest(index, { 
-        status: 'failed', 
-        message: `✗ ${error instanceof Error ? error.message : 'Test failed'}`,
-        duration 
+      updateTest(index, {
+        status: 'failed',
+        message: `✗ ${message}`,
+        duration
       });
       throw error;
     }
