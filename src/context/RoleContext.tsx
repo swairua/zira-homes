@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { measureApiCall } from "@/utils/performanceMonitor";
+import { logErrorDetails, toErrorString } from "@/utils/errorExtraction";
 
 interface RoleContextType {
   userRole: string | null;
