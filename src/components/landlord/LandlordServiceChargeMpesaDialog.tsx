@@ -115,7 +115,7 @@ export const LandlordServiceChargeMpesaDialog: React.FC<LandlordServiceChargeMpe
 
   const handleStkPush = async () => {
     const selectedPhone = getSelectedPhoneNumber();
-    
+
     if (!selectedPhone.trim()) {
       toast({
         title: "Phone Number Required",
@@ -143,9 +143,18 @@ export const LandlordServiceChargeMpesaDialog: React.FC<LandlordServiceChargeMpe
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        // Extract proper error message from error object
+        let errorMsg = 'Failed to initiate M-Pesa payment';
+        if (typeof error === 'string') {
+          errorMsg = error;
+        } else if (error && typeof error === 'object') {
+          errorMsg = error.message || error.error || JSON.stringify(error);
+        }
+        throw new Error(errorMsg);
+      }
 
-      if (data.success) {
+      if (data && data.success) {
         setCheckoutRequestId(data.data.CheckoutRequestID);
         setStatus('sent');
         startStatusPolling(data.data.CheckoutRequestID);
@@ -164,14 +173,24 @@ export const LandlordServiceChargeMpesaDialog: React.FC<LandlordServiceChargeMpe
           description: "Please check your phone and enter your M-Pesa PIN",
         });
       } else {
-        throw new Error(toErrorString(data.error) || 'STK push failed');
+        // Extract error from response data
+        let errorMsg = 'STK push failed';
+        if (data && data.error) {
+          errorMsg = typeof data.error === 'string' ? data.error : (data.error.message || JSON.stringify(data.error));
+        } else if (data && data.data && data.data.ResponseDescription) {
+          errorMsg = data.data.ResponseDescription;
+        }
+        throw new Error(errorMsg);
       }
     } catch (error) {
       logErrorDetails(error, 'M-Pesa STK Push');
       const { message, details } = extractErrorMessage(error);
-      const displayMessage = details && details !== message
-        ? `${toErrorString(message)}\n\n${toErrorString(details)}`
-        : toErrorString(message);
+      // Ensure we have valid strings and not "[object Object]"
+      const msg = toErrorString(message) || 'Payment failed';
+      const det = details && toErrorString(details) || '';
+      const displayMessage = det && det !== msg && det !== 'undefined'
+        ? `${msg}\n\n${det}`
+        : msg;
       setStatus('error');
       setErrorMessage(displayMessage);
       toast({
