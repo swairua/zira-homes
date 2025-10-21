@@ -81,7 +81,7 @@ export function MpesaPaymentModal({
         onPaymentInitiated?.();
         onOpenChange(false);
       } else {
-        throw new Error(data?.error || "Failed to initiate payment");
+        throw new Error(toErrorString(data?.error) || "Failed to initiate payment");
       }
     } catch (error) {
       logErrorDetails(error, 'M-Pesa Payment Modal');
