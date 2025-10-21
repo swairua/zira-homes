@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { extractErrorMessage, logErrorDetails } from "@/utils/errorExtraction";
 import { LandlordServiceChargeMpesaDialog } from "./LandlordServiceChargeMpesaDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { ServiceChargeInvoiceModal } from "./ServiceChargeInvoiceModal";
