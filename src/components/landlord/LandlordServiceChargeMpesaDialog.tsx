@@ -40,6 +40,7 @@ export const LandlordServiceChargeMpesaDialog: React.FC<LandlordServiceChargeMpe
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'success' | 'error'>('idle');
   const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [rawResponse, setRawResponse] = useState<any>(null);
 
   // Fetch saved phone numbers when dialog opens
   useEffect(() => {
