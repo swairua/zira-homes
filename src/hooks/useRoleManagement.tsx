@@ -193,7 +193,8 @@ export const useRoleManagement = () => {
       if (error) throw error;
       return data?.map(r => r.role as AppRole) || [];
     } catch (error) {
-      console.error('Error fetching user roles:', error);
+      logErrorDetails(error, 'Fetch User Roles');
+      console.error('Error fetching user roles:', toErrorString(error));
       return [];
     }
   }, []);
