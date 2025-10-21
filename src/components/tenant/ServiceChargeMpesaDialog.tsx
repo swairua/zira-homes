@@ -98,7 +98,8 @@ export const ServiceChargeMpesaDialog: React.FC<ServiceChargeMpesaDialogProps> =
       }
     } catch (error) {
       logErrorDetails(error, 'M-Pesa STK Push');
-      const { message, details } = extractErrorMessage(error);
+      const { message, details, fullError } = extractErrorMessage(error);
+      setRawResponse(fullError || error);
       const displayMessage = details && details !== message
         ? `${toErrorString(message)}\n\n${toErrorString(details)}`
         : toErrorString(message);
