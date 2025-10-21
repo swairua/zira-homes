@@ -618,7 +618,7 @@ export const EnhancedBillingPage = () => {
             description: `STK push sent to ${phoneNumber}. Please complete payment on your phone.`,
           });
         } else {
-          throw new Error(data?.error || 'STK push failed');
+          throw new Error(toErrorString(data?.error) || 'STK push failed');
         }
       } catch (error) {
         logErrorDetails(error, 'M-Pesa Enhanced Billing');
