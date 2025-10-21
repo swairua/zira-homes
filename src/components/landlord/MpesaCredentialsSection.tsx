@@ -172,7 +172,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       });
 
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) throw new Error(toErrorString(data.error));
 
       setHasConfig(true);
       onConfigChange(true);
