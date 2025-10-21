@@ -10,6 +10,7 @@ import { useTrialManagement } from "@/hooks/useTrialManagement";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { toErrorString } from "@/utils/errorExtraction";
 
 interface BillingPlan {
   id: string;
