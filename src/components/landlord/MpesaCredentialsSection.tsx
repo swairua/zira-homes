@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +9,7 @@ import { ChevronDown, ChevronRight, Shield, CheckCircle, XCircle, Zap, Info } fr
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { toErrorString } from "@/utils/errorExtraction";
 import { Badge } from "@/components/ui/badge";
 
 interface MpesaConfig {
