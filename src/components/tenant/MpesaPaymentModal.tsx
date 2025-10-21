@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Smartphone, DollarSign } from "lucide-react";
 import { formatAmount, getGlobalCurrencySync } from "@/utils/currency";
+import { extractErrorMessage, logErrorDetails } from "@/utils/errorExtraction";
 
 interface MpesaPaymentModalProps {
   open: boolean;
