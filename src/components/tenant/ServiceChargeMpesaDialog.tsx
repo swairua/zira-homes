@@ -93,7 +93,7 @@ export const ServiceChargeMpesaDialog: React.FC<ServiceChargeMpesaDialogProps> =
           description: "Please check your phone and enter your M-Pesa PIN to complete the payment",
         });
       } else {
-        throw new Error(data.error || 'STK push failed');
+        throw new Error(toErrorString(data.error) || 'STK push failed');
       }
     } catch (error) {
       logErrorDetails(error, 'M-Pesa STK Push');
