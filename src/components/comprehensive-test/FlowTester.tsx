@@ -179,12 +179,15 @@ export function FlowTester() {
       .limit(1);
 
     if (error) throw new Error(`M-Pesa config test failed: ${error.message}`);
-    
+
     // If no config exists, that's also a valid state for testing
     if (data && data.length > 0) {
       const config = data[0];
-      if (!config.consumer_key || !config.business_shortcode) {
-        throw new Error('M-Pesa configuration is incomplete');
+      if (!config.consumer_key_encrypted || !config.shortcode_encrypted) {
+        throw new Error('M-Pesa configuration is incomplete or not encrypted');
+      }
+      if (!config.environment) {
+        throw new Error('M-Pesa environment not configured');
       }
     }
   };
