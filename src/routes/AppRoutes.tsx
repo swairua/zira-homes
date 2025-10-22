@@ -77,6 +77,7 @@ import AdminUserManagement from "@/pages/admin/UserManagement";
 import SelfHostedMonitoring from "@/pages/admin/SelfHostedMonitoring";
 import BillingPlanManager from "@/pages/admin/BillingPlanManager";
 import { MpesaTest } from "@/pages/MpesaTest";
+import { AdminSetup } from "@/pages/AdminSetup";
 
 const LoadingSpinner = () => (
   <div className="flex items-center justify-center min-h-screen">
