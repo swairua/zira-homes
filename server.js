@@ -35,6 +35,90 @@
       }
     };
 
+    // One-time, idempotent seeding for admin user (dev-only helper)
+    const seedAdminIfConfigured = async () => {
+      try {
+        const seedPath = path.join(__dirname, 'supabase', 'seed-admin.json');
+        const runtimePath = path.join(__dirname, 'supabase', 'runtime.json');
+        if (!fs.existsSync(seedPath) || !fs.existsSync(runtimePath)) return;
+
+        const seedRaw = fs.readFileSync(seedPath, 'utf-8');
+        if (!seedRaw) return;
+        let seed;
+        try { seed = JSON.parse(seedRaw); } catch { console.warn('[SEED] Invalid seed-admin.json JSON'); return; }
+        const runtime = JSON.parse(fs.readFileSync(runtimePath, 'utf-8'));
+        const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || runtime.url || '').replace(/\/$/, '');
+        const serviceRole = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY || runtime.serviceRole;
+        if (!supabaseUrl || !serviceRole) { console.warn('[SEED] Missing Supabase url/serviceRole'); return; }
+
+        const headersJSON = { 'Content-Type': 'application/json', 'apikey': serviceRole, 'Authorization': `Bearer ${serviceRole}` };
+
+        // 1) Check existing profile by email
+        const profilesUrl = `${supabaseUrl}/rest/v1/profiles?select=id,email&email=eq.${encodeURIComponent(seed.email)}`;
+        const profilesRes = await safeFetch(profilesUrl, { headers: headersJSON });
+        const profilesText = await profilesRes.text();
+        let profilesData; try { profilesData = JSON.parse(profilesText); } catch { profilesData = null; }
+        let userId = (Array.isArray(profilesData) && profilesData[0]?.id) ? profilesData[0].id : null;
+
+        // 2) If no profile/user, create auth user via Admin API
+        if (!userId) {
+          const createUrl = `${supabaseUrl}/auth/v1/admin/users`;
+          const createRes = await safeFetch(createUrl, {
+            method: 'POST',
+            headers: headersJSON,
+            body: JSON.stringify({
+              email: seed.email,
+              password: seed.password,
+              email_confirm: true,
+              user_metadata: {
+                first_name: seed.first_name || 'Test',
+                last_name: seed.last_name || 'Admin',
+                role: seed.role || 'Admin'
+              }
+            })
+          });
+          const createText = await createRes.text();
+          let createData; try { createData = JSON.parse(createText); } catch { createData = null; }
+          if (!createRes.ok && !(createData && String(createData?.message || '').includes('already'))) {
+            console.warn('[SEED] Failed to create auth user:', createData || createText);
+            return;
+          }
+          userId = createData?.user?.id || createData?.id || userId;
+
+          // Create profile if missing
+          if (userId) {
+            const profileInsertUrl = `${supabaseUrl}/rest/v1/profiles`;
+            await safeFetch(profileInsertUrl, {
+              method: 'POST',
+              headers: { ...headersJSON, 'Prefer': 'return=representation' },
+              body: JSON.stringify({ id: userId, first_name: seed.first_name || 'Test', last_name: seed.last_name || 'Admin', email: seed.email })
+            }).catch(() => {});
+          }
+        }
+
+        if (!userId) { console.warn('[SEED] Could not resolve user id'); return; }
+
+        // 3) Ensure Admin role exists
+        const roleCheckUrl = `${supabaseUrl}/rest/v1/user_roles?select=role&user_id=eq.${encodeURIComponent(userId)}`;
+        const roleRes = await safeFetch(roleCheckUrl, { headers: headersJSON });
+        const roleText = await roleRes.text();
+        let roleData; try { roleData = JSON.parse(roleText); } catch { roleData = []; }
+        const hasAdmin = Array.isArray(roleData) && roleData.some(r => r.role === 'Admin');
+        if (!hasAdmin) {
+          const roleInsertUrl = `${supabaseUrl}/rest/v1/user_roles`;
+          await safeFetch(roleInsertUrl, {
+            method: 'POST',
+            headers: { ...headersJSON, 'Prefer': 'return=representation' },
+            body: JSON.stringify({ user_id: userId, role: 'Admin' })
+          }).catch(() => {});
+        }
+
+        console.log('[SEED] Admin user ensured for', seed.email);
+      } catch (e) {
+        console.warn('[SEED] Error seeding admin user:', e && e.message ? e.message : e);
+      }
+    };
+
     const handleRpcProxy = async (rpcPath, req, res, mapBody = (b)=>b) => {
       try {
         // Load runtime for defaults
