@@ -289,6 +289,7 @@ export const AppRoutes = () => {
                 <Route path="/users" element={<AdminUserManagement />} />
                 <Route path="/self-hosted" element={<SelfHostedMonitoring />} />
                 <Route path="/billing-plans" element={<BillingPlanManager />} />
+                <Route path="/mpesa-test" element={<MpesaTest />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
               </AdminOnlyRoute>
