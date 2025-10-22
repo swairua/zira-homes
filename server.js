@@ -60,7 +60,20 @@
         let profilesData; try { profilesData = JSON.parse(profilesText); } catch { profilesData = null; }
         let userId = (Array.isArray(profilesData) && profilesData[0]?.id) ? profilesData[0].id : null;
 
-        // 2) If no profile/user, create auth user via Admin API
+        // 2) Try resolve existing auth user by email via Admin API
+        if (!userId) {
+          try {
+            const lookupUrl = `${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(seed.email)}`;
+            const lookupRes = await safeFetch(lookupUrl, { headers: headersJSON });
+            const lookupText = await lookupRes.text();
+            let lookupData; try { lookupData = JSON.parse(lookupText); } catch { lookupData = null; }
+            if (lookupRes.ok && lookupData && (lookupData.user || lookupData.id)) {
+              userId = lookupData.user?.id || lookupData.id;
+            }
+          } catch {}
+        }
+
+        // 3) If still no user, create auth user via Admin API
         if (!userId) {
           const createUrl = `${supabaseUrl}/auth/v1/admin/users`;
           const createRes = await safeFetch(createUrl, {
@@ -83,17 +96,30 @@
             console.warn('[SEED] Failed to create auth user:', createData || createText);
             return;
           }
-          userId = createData?.user?.id || createData?.id || userId;
-
-          // Create profile if missing
-          if (userId) {
-            const profileInsertUrl = `${supabaseUrl}/rest/v1/profiles`;
-            await safeFetch(profileInsertUrl, {
-              method: 'POST',
-              headers: { ...headersJSON, 'Prefer': 'return=representation' },
-              body: JSON.stringify({ id: userId, first_name: seed.first_name || 'Test', last_name: seed.last_name || 'Admin', email: seed.email })
-            }).catch(() => {});
+          // If "already" then attempt lookup again
+          if (!createRes.ok) {
+            try {
+              const lookupUrl2 = `${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(seed.email)}`;
+              const lookupRes2 = await safeFetch(lookupUrl2, { headers: headersJSON });
+              const lookupText2 = await lookupRes2.text();
+              let lookupData2; try { lookupData2 = JSON.parse(lookupText2); } catch { lookupData2 = null; }
+              if (lookupRes2.ok && lookupData2 && (lookupData2.user || lookupData2.id)) {
+                userId = lookupData2.user?.id || lookupData2.id;
+              }
+            } catch {}
+          } else {
+            userId = createData?.user?.id || createData?.id || userId;
           }
+        }
+
+        // Create profile if missing
+        if (userId) {
+          const profileInsertUrl = `${supabaseUrl}/rest/v1/profiles`;
+          await safeFetch(profileInsertUrl, {
+            method: 'POST',
+            headers: { ...headersJSON, 'Prefer': 'return=representation' },
+            body: JSON.stringify({ id: userId, first_name: seed.first_name || 'Test', last_name: seed.last_name || 'Admin', email: seed.email })
+          }).catch(() => {});
         }
 
         if (!userId) { console.warn('[SEED] Could not resolve user id'); return; }
