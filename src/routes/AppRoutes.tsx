@@ -90,6 +90,7 @@ export const AppRoutes = () => {
     <Routes>
       {/* Public routes */}
       <Route path="/auth" element={<Auth />} />
+      <Route path="/admin-setup" element={<AdminSetup />} />
       <Route path="/test-sms" element={
         <React.Suspense fallback={<LoadingSpinner />}>
           <TestSMS />
