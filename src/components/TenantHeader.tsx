@@ -20,11 +20,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// Prefetch tenant routes for faster navigation
+// Prefetch tenant routes for faster navigation (explicit paths for build compatibility)
+const routePrefetchMap: Record<string, () => Promise<any>> = {
+  TenantProfile: () => import("@/pages/tenant/TenantProfile.tsx"),
+  TenantPaymentPreferences: () => import("@/pages/tenant/TenantPaymentPreferences.tsx"),
+};
 const prefetchTenantRoute = (path: string) => {
-  import(`../pages/tenant/${path}`).catch(() => {
-    // Silently handle prefetch failures
-  });
+  const loader = routePrefetchMap[path];
+  if (loader) loader().catch(() => {});
 };
 
 export function TenantHeader() {
