@@ -299,6 +299,95 @@
           }));
         }
 
+        if (url.startsWith('/api/create-admin')) {
+          try {
+            const body = await parseJSONBody(req) || {};
+            const { email, password } = body;
+            if (!email || !password) return sendJSON(res, 400, { error: 'email and password are required' });
+
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+            const serviceRole = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY;
+            if (!supabaseUrl) return sendJSON(res, 500, { error: 'Supabase URL not configured' });
+            if (!serviceRole) return sendJSON(res, 500, { error: 'Supabase service role key not configured' });
+
+            // 1) Create auth user
+            const createUserUrl = supabaseUrl.replace(/\/$/, '') + '/auth/v1/admin/users';
+            const createUserRes = await safeFetch(createUserUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': serviceRole,
+                'Authorization': `Bearer ${serviceRole}`
+              },
+              body: JSON.stringify({
+                email,
+                password,
+                email_confirm: true,
+                user_metadata: { first_name: 'Test', last_name: 'Admin' }
+              })
+            });
+
+            const createUserText = await createUserRes.text();
+            let createUserData; try { createUserData = JSON.parse(createUserText); } catch { createUserData = null; }
+            if (!createUserRes.ok) {
+              return sendJSON(res, createUserRes.status, { error: 'Failed to create auth user', details: createUserData });
+            }
+
+            const userId = createUserData?.id;
+            if (!userId) return sendJSON(res, 500, { error: 'Auth user created but no id returned' });
+
+            // 2) Create profile
+            const profileUrl = supabaseUrl.replace(/\/$/, '') + '/rest/v1/profiles';
+            await safeFetch(profileUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': serviceRole,
+                'Authorization': `Bearer ${serviceRole}`,
+                'Prefer': 'return=representation'
+              },
+              body: JSON.stringify({
+                id: userId,
+                email,
+                first_name: 'Test',
+                last_name: 'Admin'
+              })
+            });
+
+            // 3) Assign Admin role
+            const roleUrl = supabaseUrl.replace(/\/$/, '') + '/rest/v1/user_roles';
+            const roleRes = await safeFetch(roleUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': serviceRole,
+                'Authorization': `Bearer ${serviceRole}`,
+                'Prefer': 'return=representation'
+              },
+              body: JSON.stringify({
+                user_id: userId,
+                role: 'Admin'
+              })
+            });
+
+            const roleText = await roleRes.text();
+            let roleData; try { roleData = JSON.parse(roleText); } catch { roleData = null; }
+            if (!roleRes.ok) {
+              console.warn('[DEV SERVER] Role assignment failed, but user was created:', roleData);
+            }
+
+            return sendJSON(res, 200, {
+              success: true,
+              message: 'Admin user created successfully',
+              user: { id: userId, email },
+              credentials: { email, password }
+            });
+          } catch (err) {
+            console.error('Error in /api/create-admin:', err);
+            return sendJSON(res, 500, { error: 'Internal server error', details: String(err) });
+          }
+        }
+
         if (url.startsWith('/api/invoices/create')) {
           // This will post to /rest/v1/invoices
           try {
