@@ -98,6 +98,24 @@
 
         if (!userId) { console.warn('[SEED] Could not resolve user id'); return; }
 
+        // Update password and confirm email to ensure credentials are current
+        try {
+          const updateUrl = `${supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(userId)}`;
+          const updateRes = await safeFetch(updateUrl, {
+            method: 'PUT',
+            headers: headersJSON,
+            body: JSON.stringify({ password: seed.password, email_confirm: true })
+          });
+          const updateText = await updateRes.text();
+          if (!updateRes.ok) {
+            console.warn('[SEED] Failed to update password:', updateText);
+          } else {
+            console.log('[SEED] Password updated for', seed.email);
+          }
+        } catch (e) {
+          console.warn('[SEED] Error updating password:', e && e.message ? e.message : e);
+        }
+
         // 3) Ensure Admin role exists
         const roleCheckUrl = `${supabaseUrl}/rest/v1/user_roles?select=role&user_id=eq.${encodeURIComponent(userId)}`;
         const roleRes = await safeFetch(roleCheckUrl, { headers: headersJSON });
