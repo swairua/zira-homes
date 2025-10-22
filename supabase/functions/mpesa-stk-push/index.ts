@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -264,35 +263,79 @@ serve(async (req) => {
         .eq('landlord_id', landlordConfigId)
         .eq('is_active', true)
         .maybeSingle();
-      
+
       mpesaConfig = config;
       console.log('Landlord M-Pesa config found:', !!mpesaConfig);
+    }
+
+    // Helper function to decrypt credentials
+    async function decryptCredential(encrypted: string, key: string): Promise<string> {
+      try {
+        const encoder = new TextEncoder();
+        const keyData = encoder.encode(key.padEnd(32, '0').slice(0, 32));
+        const cryptoKey = await crypto.subtle.importKey(
+          'raw',
+          keyData,
+          { name: 'AES-GCM' },
+          false,
+          ['decrypt']
+        );
+
+        // Decode from base64
+        const combined = Uint8Array.from(atob(encrypted), c => c.charCodeAt(0));
+        const iv = combined.slice(0, 12);
+        const ciphertext = combined.slice(12);
+
+        const decrypted = await crypto.subtle.decrypt(
+          { name: 'AES-GCM', iv },
+          cryptoKey,
+          ciphertext
+        );
+
+        return new TextDecoder().decode(decrypted);
+      } catch (e) {
+        console.error('Decryption error:', e);
+        throw new Error('Failed to decrypt credential');
+      }
     }
 
     // M-Pesa credentials - SECURITY: Use environment variables, decrypt landlord config
     let consumerKey, consumerSecret, shortcode, passkey;
     const environment = mpesaConfig?.environment || Deno.env.get('MPESA_ENVIRONMENT') || 'sandbox';
-    
+
     if (mpesaConfig && mpesaConfig.consumer_key_encrypted) {
       // Decrypt landlord-specific encrypted credentials
       const encryptionKey = Deno.env.get('DATA_ENCRYPTION_KEY');
       if (!encryptionKey) {
-        throw new Error('Encryption key not configured');
-      }
-      
-      try {
-        // Note: In production, implement proper decryption using the database decrypt function
-        consumerKey = mpesaConfig.consumer_key;
-        consumerSecret = mpesaConfig.consumer_secret;
-        shortcode = mpesaConfig.business_shortcode;
-        passkey = mpesaConfig.passkey;
-      } catch (decryptError) {
-        console.error('Failed to decrypt landlord M-Pesa config:', decryptError);
+        console.error('Encryption key not configured');
         // Fallback to environment variables
         consumerKey = Deno.env.get('MPESA_CONSUMER_KEY');
         consumerSecret = Deno.env.get('MPESA_CONSUMER_SECRET');
         shortcode = Deno.env.get('MPESA_SHORTCODE') || '174379';
         passkey = Deno.env.get('MPESA_PASSKEY');
+      } else {
+        try {
+          // Decrypt all credentials in parallel
+          const [decryptedKey, decryptedSecret, decryptedShortcode, decryptedPasskey] = await Promise.all([
+            decryptCredential(mpesaConfig.consumer_key_encrypted, encryptionKey),
+            decryptCredential(mpesaConfig.consumer_secret_encrypted, encryptionKey),
+            decryptCredential(mpesaConfig.shortcode_encrypted, encryptionKey),
+            decryptCredential(mpesaConfig.passkey_encrypted, encryptionKey)
+          ]);
+
+          consumerKey = decryptedKey;
+          consumerSecret = decryptedSecret;
+          shortcode = decryptedShortcode;
+          passkey = decryptedPasskey;
+          console.log('Successfully decrypted landlord M-Pesa credentials');
+        } catch (decryptError) {
+          console.error('Failed to decrypt landlord M-Pesa config:', decryptError);
+          // Fallback to environment variables
+          consumerKey = Deno.env.get('MPESA_CONSUMER_KEY');
+          consumerSecret = Deno.env.get('MPESA_CONSUMER_SECRET');
+          shortcode = Deno.env.get('MPESA_SHORTCODE') || '174379';
+          passkey = Deno.env.get('MPESA_PASSKEY');
+        }
       }
     } else {
       // Use secure environment variables
