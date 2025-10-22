@@ -201,9 +201,10 @@ export function FlowTester() {
       body: {
         phone: '254712345678',
         amount: 1, // Minimal amount for testing
-        invoice_id: invoiceId,
-        account_reference: 'TEST-INV-001',
-        transaction_desc: 'Test payment',
+        invoiceId: invoiceId,
+        accountReference: 'TEST-INV-001',
+        transactionDesc: 'Test payment',
+        paymentType: 'rent',
         dryRun: true // This should prevent actual payment initiation
       }
     });
