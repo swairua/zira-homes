@@ -165,6 +165,9 @@
       }
     };
 
+    // Ensure admin user if seed file present
+    await seedAdminIfConfigured();
+
     const server = http.createServer(async (req, res) => {
       try {
         // Log incoming request (avoid printing auth token value)
