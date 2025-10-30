@@ -396,10 +396,12 @@
             }
 
             const fnUrl = supabaseUrl.replace(/\/$/, '') + `/functions/v1/${fnName}`;
+            const incomingAuth = req.headers['authorization'] || req.headers['Authorization'];
             const headers = {
               'Content-Type': 'application/json',
               'apikey': key,
-              'Authorization': `Bearer ${key}`,
+              // Prefer passing the user's token so edge functions using supabase.auth.getUser() work
+              'Authorization': incomingAuth ? String(incomingAuth) : `Bearer ${key}`,
             };
             // pass through force header when creating tenant
             if (fnName === 'create-tenant-account' || body.force) headers['x-force-create'] = 'true';
