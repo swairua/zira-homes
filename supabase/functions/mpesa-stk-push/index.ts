@@ -633,14 +633,18 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Error in STK push:', error)
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : '';
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: 'Internal server error',
-        details: error.message 
+        details: errorMessage,
+        stack: errorStack,
+        timestamp: new Date().toISOString()
       }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     )
   }
