@@ -159,11 +159,24 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
         // For other billing models that require upfront payment, use M-Pesa
         console.log('💳 Initiating M-Pesa payment...');
 
+        // Fetch user profile to get phone number
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('phone')
+          .eq('id', user.id)
+          .single();
+
+        if (profileError || !profile?.phone) {
+          throw new Error('Phone number not found. Please update your profile with a valid phone number.');
+        }
+
         const { data, error } = await supabase.functions.invoke('mpesa-stk-push', {
           body: {
-            planId: selectedPlan,
-            planName: selectedPlanData.name,
-            amount: selectedPlanData.price
+            phone: profile.phone,
+            amount: selectedPlanData.price,
+            accountReference: `PLAN-${selectedPlan}`,
+            transactionDesc: `Subscription upgrade to ${selectedPlanData.name}`,
+            paymentType: 'subscription'
           }
         });
 
