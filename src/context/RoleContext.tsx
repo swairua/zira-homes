@@ -83,106 +83,63 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
             return "tenant";
           }
 
-          // Query user_roles FIRST (avoids tenants recursion for Admins)
-          const { data: userRolesResult, error: rolesError } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", user.id);
+          // Prefer RPC-based role checks (works with server proxy fallback)
+          const rolesToCheck = ["Admin", "Landlord", "Manager", "Agent"] as const;
+          const roleChecks = await Promise.all(
+            rolesToCheck.map(async (r) => {
+              const { data } = await supabase.rpc('has_role_safe', { _user_id: user.id, _role: r as any });
+              return { role: r.toLowerCase(), has: Boolean(data) } as { role: string; has: boolean };
+            })
+          );
 
-          if (rolesError) throw rolesError;
+          const allRoles = roleChecks.filter(rc => rc.has).map(rc => rc.role);
+          setAssignedRoles(allRoles);
 
-          // Check user roles FIRST (higher priority roles)
-          if (userRolesResult && userRolesResult.length > 0) {
-            const allRoles = userRolesResult.map(r => r.role.toLowerCase());
-            
-            setAssignedRoles(allRoles);
-            
-            // Check if user is a SubUser - IMMEDIATELY set role before fetching permissions
-            if (allRoles.includes("subuser") || allRoles.includes("landlord_subuser")) {
-              // SECURITY FIX: Set role immediately to prevent bypass
-              setSelectedRole("subuser");
-              
-              // Fetch permissions via secure RPC (bypasses RLS issues)
-              const { data: subUserData, error: subUserError } = await supabase
-                .rpc("get_my_sub_user_permissions");
-              
-              if (subUserError) {
-                console.error("Error fetching sub-user permissions:", subUserError);
-              }
-              
-              // Type-safe access to RPC response
-              const subUserInfo = subUserData as { permissions?: Record<string, boolean>; landlord_id?: string; status?: string } | null;
-              
-              if (subUserInfo?.permissions) {
-                setSubUserPermissions(subUserInfo.permissions);
-                setLandlordId(subUserInfo.landlord_id || null);
-                
-                // Check if landlord is on trial
-                if (subUserInfo.landlord_id) {
-                  const { data: landlordSubscription } = await supabase
-                    .from('landlord_subscriptions')
-                    .select('status, trial_end_date')
-                    .eq('landlord_id', subUserInfo.landlord_id)
-                    .eq('status', 'trial')
-                    .maybeSingle();
-                  
-                  if (landlordSubscription) {
-                    const trialEndDate = new Date(landlordSubscription.trial_end_date);
-                    const today = new Date();
-                    const isActive = trialEndDate > today;
-                    setIsOnLandlordTrial(isActive);
-                  }
+          // Sub-user check via secure RPC
+          if (allRoles.includes("subuser") || allRoles.includes("landlord_subuser")) {
+            setSelectedRole("subuser");
+            const { data: subUserData } = await supabase.rpc("get_my_sub_user_permissions");
+            const subUserInfo = subUserData as { permissions?: Record<string, boolean>; landlord_id?: string; status?: string } | null;
+            if (subUserInfo?.permissions) {
+              setSubUserPermissions(subUserInfo.permissions);
+              setLandlordId(subUserInfo.landlord_id || null);
+              if (subUserInfo.landlord_id) {
+                const { data: landlordSubscription } = await supabase
+                  .from('landlord_subscriptions')
+                  .select('status, trial_end_date')
+                  .eq('landlord_id', subUserInfo.landlord_id)
+                  .eq('status', 'trial')
+                  .maybeSingle();
+                if (landlordSubscription) {
+                  const trialEndDate = new Date(landlordSubscription.trial_end_date);
+                  const today = new Date();
+                  const isActive = trialEndDate > today;
+                  setIsOnLandlordTrial(isActive);
                 }
-              } else {
-                // No permissions found - set to empty object (deny all)
-                setSubUserPermissions({});
               }
-              
-              return "subuser";
-            }
-            
-            // SECURITY FIX: Only trust selectedRole if it exists in server-verified roles
-            const selectedRole = localStorage.getItem('selectedRole');
-            if (selectedRole && allRoles.includes(selectedRole.toLowerCase())) {
-              setSelectedRole(selectedRole.toLowerCase());
             } else {
-              // Set primary role (highest priority first)
-              if (allRoles.includes("admin")) {
-                setSelectedRole("admin");
-                return "admin";
-              }
-              if (allRoles.includes("landlord")) {
-                setSelectedRole("landlord");
-                return "landlord";
-              }
-              if (allRoles.includes("manager")) {
-                setSelectedRole("manager");
-                return "manager";
-              }
-              if (allRoles.includes("agent")) {
-                setSelectedRole("agent");
-                return "agent";
-              }
-              if (selectedRole && !allRoles.includes(selectedRole.toLowerCase())) {
-                localStorage.removeItem('selectedRole');
-              }
+              setSubUserPermissions({});
             }
-            
-            // Return the primary role for userRole state
-            if (allRoles.includes("admin")) return "admin";
-            if (allRoles.includes("landlord")) return "landlord";
-            if (allRoles.includes("manager")) return "manager";
-            if (allRoles.includes("agent")) return "agent";
+            return "subuser";
           }
 
-          // Only query tenants if no roles found (avoids recursion for Admin/Landlord)
-          const { data: tenantResult } = await supabase
-            .from("tenants")
-            .select("id")
-            .eq("user_id", user.id)
-            .maybeSingle();
+          // SECURITY: Only trust stored selection if included in server-verified roles
+          const storedSelectedRole = localStorage.getItem('selectedRole');
+          if (storedSelectedRole && allRoles.includes(storedSelectedRole.toLowerCase())) {
+            setSelectedRole(storedSelectedRole.toLowerCase());
+          } else {
+            if (allRoles.includes("admin")) { setSelectedRole("admin"); return "admin"; }
+            if (allRoles.includes("landlord")) { setSelectedRole("landlord"); return "landlord"; }
+            if (allRoles.includes("manager")) { setSelectedRole("manager"); return "manager"; }
+            if (allRoles.includes("agent")) { setSelectedRole("agent"); return "agent"; }
+            if (storedSelectedRole && !allRoles.includes(storedSelectedRole.toLowerCase())) {
+              localStorage.removeItem('selectedRole');
+            }
+          }
 
-          if (tenantResult) {
+          // Only check tenant if no other roles matched
+          const { data: isTenant } = await supabase.rpc('is_user_tenant', { _user_id: user.id });
+          if (isTenant) {
             return "tenant";
           }
 
@@ -204,7 +161,6 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
         }
       } catch (error) {
         console.error("Error fetching user role:", error);
-        // Don't downgrade on error - keep current role if set
         if (!selectedRole && !userRole) {
           setUserRole("tenant");
           setAssignedRoles(["tenant"]);
