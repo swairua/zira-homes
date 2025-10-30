@@ -503,7 +503,7 @@ serve(async (req) => {
       // For service charge payments, store additional metadata
       if (paymentType === 'service-charge') {
         console.log('Processing service charge payment, validating invoice:', invoiceId);
-        
+
         // Validate that the service charge invoice exists before processing
         if (invoiceId) {
           // Use admin client to bypass RLS for invoice validation
@@ -527,9 +527,9 @@ serve(async (req) => {
                 invoiceId: invoiceId,
                 details: invoiceCheckError?.message
               }),
-              { 
-                status: 400, 
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+              {
+                status: 400,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
               }
             )
           }
@@ -550,9 +550,9 @@ serve(async (req) => {
                 error: 'Service charge invoice already paid',
                 invoiceId: invoiceId
               }),
-              { 
-                status: 400, 
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+              {
+                status: 400,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
               }
             )
           }
@@ -564,6 +564,15 @@ serve(async (req) => {
           landlord_id: landlordConfigId
         }
         console.log('Service charge metadata added to transaction:', transactionData.metadata);
+      } else if (paymentType === 'subscription') {
+        // For subscription payments, store subscription metadata
+        console.log('Processing subscription payment for user:', user.id);
+        transactionData.metadata = {
+          payment_type: 'subscription',
+          landlord_id: user.id,
+          account_reference: accountReference
+        }
+        console.log('Subscription metadata added to transaction:', transactionData.metadata);
       }
 
       console.log('Creating M-Pesa transaction record:', {
