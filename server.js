@@ -497,18 +497,19 @@
               if (fs.existsSync(runtimePath)) runtimeConf = JSON.parse(fs.readFileSync(runtimePath, 'utf-8'));
             } catch (e) {}
 
-            // Resolve Supabase URL and service key from environment (fallback to known runtime value)
-            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://kdpqimetajnhcqseajok.supabase.co';
+            // Resolve Supabase URL and key from env, with runtime.json fallback
+            const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || runtimeConf.url || 'https://kdpqimetajnhcqseajok.supabase.co').replace(/\/$/, '');
             if (!supabaseUrl) return sendJSON(res, 500, { error: 'Supabase URL not configured' });
-            if (!targetUrl || !targetUrl.startsWith(supabaseUrl.replace(/\/$/, ''))) return sendJSON(res, 400, { error: 'Invalid target URL' });
+            if (!targetUrl || !targetUrl.startsWith(supabaseUrl)) return sendJSON(res, 400, { error: 'Invalid target URL' });
 
-            // Use service role for apikey; prefer explicit env
-            const key = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+            // Prefer service role; fallback to runtime serviceRole; else anon key for safe reads
+            const key = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY || runtimeConf.serviceRole || runtimeConf.anonKey || '';
             if (!key) return sendJSON(res, 500, { error: 'Supabase key not configured' });
 
             const headers = {
               'Content-Type': 'application/json',
               'apikey': key,
+              // Forward user auth when available; otherwise use server key
               'Authorization': incomingAuth ? String(incomingAuth) : `Bearer ${key}`
             };
 
