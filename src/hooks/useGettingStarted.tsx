@@ -73,7 +73,50 @@ export function useGettingStarted(): UseGettingStartedReturn {
         tenants: tenantsRes.count || 0,
       });
     } catch (error) {
-      console.error("Error fetching getting started progress:", error);
+      let serialized: any;
+      try { serialized = JSON.stringify(error, Object.getOwnPropertyNames(error as any)); } catch { serialized = String(error); }
+      console.error("Error fetching getting started progress:", serialized);
+
+      // Network/CORS fallback via server proxy
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        const access = session?.session?.access_token;
+        const base = SUPABASE_URL.replace(/\/$/, '');
+
+        // 1) Progress rows
+        {
+          const url = `${base}/rest/v1/user_getting_started_progress?select=*&user_id=eq.${encodeURIComponent(user.id)}`;
+          const res = await fetch('/api/proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(access ? { Authorization: `Bearer ${access}` } : {}) },
+            body: JSON.stringify({ url, method: 'GET' })
+          });
+          const data = await res.json();
+          if (res.ok && Array.isArray(data)) setStepProgress(data as StepProgress[]);
+        }
+
+        // 2) Counts (fallback by fetching ids and counting length client-side)
+        const fetchCount = async (table: string) => {
+          const url = `${base}/rest/v1/${table}?select=id`; // light select
+          const res = await fetch('/api/proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(access ? { Authorization: `Bearer ${access}` } : {}) },
+            body: JSON.stringify({ url, method: 'GET' })
+          });
+          const data = await res.json();
+          return Array.isArray(data) ? data.length : 0;
+        };
+
+        const [p, u, t] = await Promise.all([
+          fetchCount('properties'),
+          fetchCount('units'),
+          fetchCount('tenants'),
+        ]);
+        setCounts({ properties: p, units: u, tenants: t });
+      } catch (proxyErr) {
+        console.error('Getting started proxy fallback failed:', proxyErr);
+        // Leave defaults
+      }
     } finally {
       setIsLoading(false);
     }
