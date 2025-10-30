@@ -157,16 +157,16 @@ serve(async (req) => {
     // Authorization checks based on payment type
     let authorized = false;
     let landlordConfigId = landlordId;
-    
+
     if (paymentType === 'service-charge') {
       // Service charge: Only landlords can pay their own service charges or admins
       const { data: userRoles } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', user.id);
-      
+
       const isAdmin = userRoles?.some(r => r.role === 'Admin');
-      
+
       if (isAdmin) {
         authorized = true;
       } else if (invoiceId) {
@@ -177,12 +177,16 @@ serve(async (req) => {
           .eq('id', invoiceId)
           .eq('landlord_id', user.id)
           .single();
-        
+
         if (serviceInvoice) {
           authorized = true;
           landlordConfigId = serviceInvoice.landlord_id;
         }
       }
+    } else if (paymentType === 'subscription') {
+      // Subscription payment: Any authenticated user can pay for their own subscription
+      authorized = true;
+      landlordConfigId = user.id;
     } else {
       // Rent payment: Check if user is tenant for this invoice OR property owner/manager OR admin
       if (invoiceId) {
@@ -207,13 +211,13 @@ serve(async (req) => {
           const isTenant = invoiceAuth.tenants.user_id === user.id;
           const isOwner = invoiceAuth.leases.units.properties.owner_id === user.id;
           const isManager = invoiceAuth.leases.units.properties.manager_id === user.id;
-          
+
           const { data: userRoles } = await supabase
             .from('user_roles')
             .select('role')
             .eq('user_id', user.id);
           const isAdmin = userRoles?.some(r => r.role === 'Admin');
-          
+
           if (isTenant || isOwner || isManager || isAdmin) {
             authorized = true;
             landlordConfigId = invoiceAuth.leases.units.properties.owner_id;
