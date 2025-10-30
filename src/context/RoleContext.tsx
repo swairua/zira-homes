@@ -95,13 +95,13 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
           const allRoles = roleChecks.filter(rc => rc.has).map(rc => rc.role);
           setAssignedRoles(allRoles);
 
-          // Sub-user check via secure RPC
-          if (allRoles.includes("subuser") || allRoles.includes("landlord_subuser")) {
-            setSelectedRole("subuser");
+          // Sub-user check via secure RPC (detect even if roles list didn't include it)
+          try {
             const { data: subUserData } = await supabase.rpc("get_my_sub_user_permissions");
             const subUserInfo = subUserData as { permissions?: Record<string, boolean>; landlord_id?: string; status?: string } | null;
-            if (subUserInfo?.permissions) {
-              setSubUserPermissions(subUserInfo.permissions);
+            if (subUserInfo && (subUserInfo.permissions || subUserInfo.status)) {
+              setSelectedRole("subuser");
+              if (subUserInfo.permissions) setSubUserPermissions(subUserInfo.permissions);
               setLandlordId(subUserInfo.landlord_id || null);
               if (subUserInfo.landlord_id) {
                 const { data: landlordSubscription } = await supabase
@@ -117,11 +117,9 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
                   setIsOnLandlordTrial(isActive);
                 }
               }
-            } else {
-              setSubUserPermissions({});
+              return "subuser";
             }
-            return "subuser";
-          }
+          } catch {}
 
           // SECURITY: Only trust stored selection if included in server-verified roles
           const storedSelectedRole = localStorage.getItem('selectedRole');
