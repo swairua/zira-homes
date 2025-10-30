@@ -191,24 +191,32 @@ export function Upgrade() {
         return;
       }
 
-      // For regular plans, create Stripe checkout session
-      console.log('💳 Creating Stripe checkout session...');
-      
-      const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
-        'create-billing-checkout',
+      // For regular plans, initiate M-Pesa STK push
+      console.log('💳 Initiating M-Pesa payment...');
+
+      const { data: mpesaData, error: mpesaError } = await supabase.functions.invoke(
+        'mpesa-stk-push',
         {
-          body: { planId: selectedPlan }
+          body: {
+            planId: selectedPlan,
+            planName: selectedPlanData.name,
+            amount: selectedPlanData.price
+          }
         }
       );
 
-      if (checkoutError) throw checkoutError;
+      if (mpesaError) throw mpesaError;
 
-      if (checkoutData?.url) {
+      if (mpesaData?.success) {
         setConfirmModalOpen(false);
-        // Open Stripe checkout in a new tab
-        window.open(checkoutData.url, '_blank');
+        toast.info('💳 M-Pesa payment prompt sent to your phone. Please enter your PIN to complete payment.');
+
+        // Wait for payment confirmation
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 3000);
       } else {
-        throw new Error('No checkout URL returned');
+        throw new Error(mpesaData?.message || 'Failed to initiate M-Pesa payment');
       }
       
     } catch (error: any) {

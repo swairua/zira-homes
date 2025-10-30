@@ -156,24 +156,34 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
           window.location.reload();
         }, 1000);
       } else {
-        // For other billing models that require upfront payment, use Stripe
-        console.log('💳 Creating Stripe checkout session...');
-        
-        const { data, error } = await supabase.functions.invoke('create-billing-checkout', {
-          body: { planId: selectedPlan }
+        // For other billing models that require upfront payment, use M-Pesa
+        console.log('💳 Initiating M-Pesa payment...');
+
+        const { data, error } = await supabase.functions.invoke('mpesa-stk-push', {
+          body: {
+            planId: selectedPlan,
+            planName: selectedPlanData.name,
+            amount: selectedPlanData.price
+          }
         });
 
         if (error) {
-          console.error('❌ Stripe checkout error:', error);
+          console.error('❌ M-Pesa payment error:', error);
           throw error;
         }
 
-        if (data?.url) {
-          console.log('✅ Redirecting to Stripe checkout...');
-          window.location.href = data.url;
+        if (data?.success) {
+          console.log('✅ M-Pesa STK push initiated...');
+          toast.info('💳 M-Pesa payment prompt sent to your phone. Please enter your PIN to complete payment.');
+          onClose();
+
+          // Redirect after a delay
+          setTimeout(() => {
+            window.location.reload();
+          }, 3000);
           return;
         } else {
-          throw new Error("Failed to create checkout session");
+          throw new Error(data?.message || "Failed to initiate M-Pesa payment");
         }
       }
     } catch (error: any) {
