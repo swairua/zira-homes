@@ -50,6 +50,7 @@ export function LandlordDataDebugPanel() {
       }
 
       const foundIssues: PropertyIssue[] = [];
+      const foundValid: ValidProperty[] = [];
       setTotalChecked(propertyData.length);
 
       // For each property, check if it has invoices
@@ -125,10 +126,21 @@ export function LandlordDataDebugPanel() {
             invoiceCount,
             missingFields,
           });
+        } else {
+          // All data is valid - add to valid list
+          foundValid.push({
+            propertyId: property.id,
+            propertyName: property.name,
+            ownerName: `${profileData.first_name} ${profileData.last_name}`.trim(),
+            ownerEmail: profileData.email || "-",
+            ownerPhone: profileData.phone || "-",
+            invoiceCount,
+          });
         }
       }
 
       setIssues(foundIssues);
+      setValidProperties(foundValid);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       console.error("Error checking landlord data:", errorMessage);
