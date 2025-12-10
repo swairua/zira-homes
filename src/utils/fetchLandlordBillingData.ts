@@ -150,8 +150,12 @@ export async function fetchLandlordBillingData(
       }
     };
 
-    console.log('Successfully fetched landlord billing data:', {
+    console.log('✅ Successfully fetched landlord billing data:', {
       name: result.billFrom.name,
+      phone: result.billFrom.phone,
+      email: result.billFrom.email,
+      address: result.billFrom.address,
+      companyName: result.billFrom.companyName,
       hasPhone: !!result.billFrom.phone,
       hasEmail: !!result.billFrom.email,
       hasAddress: !!result.billFrom.address
@@ -159,7 +163,7 @@ export async function fetchLandlordBillingData(
 
     return result;
   } catch (error) {
-    console.error('Unexpected error fetching landlord billing data:', error);
+    console.error('❌ Unexpected error fetching landlord billing data:', error);
     return null;
   }
 }
