@@ -216,37 +216,45 @@ export function LandlordDataDebugPanel() {
           )}
 
           {validProperties.length > 0 && !error && (
-            <div className="space-y-3">
-              <div className="text-sm font-semibold text-gray-700 bg-blue-50 p-2 rounded">
-                Valid Landlord Details ({validProperties.length}):
+            <div className="space-y-3 border-t pt-4">
+              <div className="text-sm font-bold text-blue-900 bg-blue-100 p-3 rounded-lg border border-blue-300">
+                ✓ Valid Landlord Details ({validProperties.length})
               </div>
-              {validProperties.map((prop) => (
-                <div
-                  key={prop.propertyId}
-                  className="p-3 bg-blue-50 border border-blue-200 rounded space-y-2"
-                >
-                  <div className="font-semibold text-sm text-blue-900">
-                    {prop.propertyName}
-                    <span className="text-xs text-muted-foreground ml-2">
-                      ({prop.invoiceCount} invoices)
-                    </span>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {validProperties.map((prop) => (
+                  <div
+                    key={prop.propertyId}
+                    className="p-4 bg-gradient-to-r from-blue-50 to-cyan-50 border-2 border-blue-300 rounded-lg shadow-sm"
+                  >
+                    <div className="font-bold text-base text-blue-900 mb-3">
+                      {prop.propertyName}
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-blue-800 flex-1">Owner Name:</span>
+                        <span className="text-gray-700 font-mono bg-white px-2 py-1 rounded flex-1 text-right">
+                          {prop.ownerName}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-blue-800 flex-1">Email:</span>
+                        <span className="text-gray-700 font-mono bg-white px-2 py-1 rounded flex-1 text-right break-all">
+                          {prop.ownerEmail}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-blue-800 flex-1">Phone:</span>
+                        <span className="text-gray-700 font-mono bg-white px-2 py-1 rounded flex-1 text-right">
+                          {prop.ownerPhone}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-2 pt-2 border-t">
+                        {prop.invoiceCount} invoice{prop.invoiceCount > 1 ? "s" : ""}
+                      </div>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="font-semibold text-gray-700">Owner:</span>{" "}
-                      <span className="text-gray-600">{prop.ownerName}</span>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-gray-700">Email:</span>{" "}
-                      <span className="text-gray-600">{prop.ownerEmail}</span>
-                    </div>
-                    <div className="col-span-2">
-                      <span className="font-semibold text-gray-700">Phone:</span>{" "}
-                      <span className="text-gray-600">{prop.ownerPhone}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
 
