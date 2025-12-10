@@ -30,6 +30,7 @@ export function LandlordDataDebugPanel() {
   const [loading, setLoading] = useState(false);
   const [totalChecked, setTotalChecked] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [lastInvoiceData, setLastInvoiceData] = useState<any>(null);
 
   const checkData = async () => {
     setLoading(true);
