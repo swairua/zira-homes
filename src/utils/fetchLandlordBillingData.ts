@@ -19,14 +19,17 @@ export async function fetchLandlordBillingData(
 ): Promise<LandlordBillingData | null> {
   try {
     // Debug: Log invoice structure to understand data format
-    console.log('fetchLandlordBillingData - Invoice structure:', {
+    console.log('🔍 fetchLandlordBillingData - Starting with invoice:', {
+      id: invoice.id,
+      invoiceNumber: invoice.invoice_number,
       hasId: !!invoice.id,
       hasPropertyId: !!invoice.property_id,
       hasTenantId: !!invoice.tenant_id,
       hasLeases: !!invoice.leases,
       hasUnits: !!invoice.leases?.units,
       hasProperties: !!invoice.leases?.units?.properties,
-      propertiesHasId: !!invoice.leases?.units?.properties?.id
+      propertyId: invoice.leases?.units?.properties?.id,
+      leaseId: invoice.lease_id
     });
 
     // Method 1: Try to get property ID from nested lease structure (most common)
