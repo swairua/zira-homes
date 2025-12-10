@@ -13,6 +13,7 @@ import { FileText, Search, Filter, Plus, Eye, Edit, Download, Send, Calendar, Do
 import { InvoiceDetailsDialog } from "@/components/invoices/InvoiceDetailsDialog";
 import { CreateInvoiceDialog } from "@/components/invoices/CreateInvoiceDialog";
 import { BulkInvoiceGenerationDialog } from "@/components/invoices/BulkInvoiceGenerationDialog";
+import { LandlordDataDebugPanel } from "@/components/invoices/LandlordDataDebugPanel";
 import { useInvoiceActions } from "@/hooks/useInvoiceActions";
 import { KpiGrid } from "@/components/kpi/KpiGrid";
 import { KpiStatCard } from "@/components/kpi/KpiStatCard";
