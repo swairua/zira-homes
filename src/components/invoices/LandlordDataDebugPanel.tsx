@@ -34,6 +34,7 @@ export function LandlordDataDebugPanel() {
   const checkData = async () => {
     setLoading(true);
     setError(null);
+    setIssues([]);
     setValidProperties([]);
     try {
       // Get all properties first
