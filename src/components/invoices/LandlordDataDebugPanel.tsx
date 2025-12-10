@@ -26,6 +26,7 @@ interface ValidProperty {
 export function LandlordDataDebugPanel() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [issues, setIssues] = useState<PropertyIssue[]>([]);
+  const [validProperties, setValidProperties] = useState<ValidProperty[]>([]);
   const [loading, setLoading] = useState(false);
   const [totalChecked, setTotalChecked] = useState(0);
   const [error, setError] = useState<string | null>(null);
