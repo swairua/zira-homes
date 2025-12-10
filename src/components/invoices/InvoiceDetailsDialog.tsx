@@ -132,48 +132,51 @@ export function InvoiceDetailsDialog({ invoice, mode, trigger }: InvoiceDetailsD
       };
 
       const { BrandingFetcher } = await import('@/utils/brandingFetcher');
-      const { UnifiedPDFRenderer } = await import('@/utils/unifiedPDFRenderer');
+      const { PDFTemplateService } = await import('@/utils/pdfTemplateService');
       const { fetchLandlordBillingData } = await import('@/utils/fetchLandlordBillingData');
 
       const brandingData = await BrandingFetcher.fetchBranding();
+
+      // Get template for consistent styling
+      const { template } = await PDFTemplateService.getTemplateAndBranding('invoice', 'Admin');
 
       // Fetch landlord billing data with real owner information
       const billingData = await fetchLandlordBillingData(receiptInvoice);
 
       const renderer = new UnifiedPDFRenderer();
 
+      // Get tenant name and property info
+      const tenantName = receiptInvoice.tenants
+        ? `${receiptInvoice.tenants.first_name || ''} ${receiptInvoice.tenants.last_name || ''}`.trim()
+        : 'Tenant';
+
+      const propertyName = receiptInvoice.leases?.units?.properties?.name || 'Property';
+      const unitNumber = receiptInvoice.leases?.units?.unit_number || 'N/A';
+      const recipientAddress = `${propertyName}\nUnit: ${unitNumber}`;
+
       const documentData = {
         type: 'invoice' as const,
         title: `Receipt ${receiptInvoice.invoice_number}`,
         content: {
-          invoice: receiptInvoice,
-          recipient: {
-            name: receiptInvoice.tenants?.first_name && receiptInvoice.tenants?.last_name
-              ? `${receiptInvoice.tenants.first_name} ${receiptInvoice.tenants.last_name}`
-              : 'Tenant',
-            email: receiptInvoice.tenants?.email || 'No email',
-            phone: 'No phone',
-            address: receiptInvoice.leases?.units?.unit_number
-              ? `Unit ${receiptInvoice.leases.units.unit_number}, ${receiptInvoice.leases.units.properties?.name || 'Property'}`
-              : 'No address'
-          },
+          invoiceNumber: receiptInvoice.invoice_number,
+          dueDate: new Date(receiptInvoice.due_date),
           items: [
             {
               description: receiptInvoice.description || 'Rent Payment',
-              quantity: 1,
-              rate: receiptInvoice.amount,
-              amount: receiptInvoice.amount
+              amount: receiptInvoice.amount,
+              quantity: 1
             }
           ],
-          totals: {
-            subtotal: receiptInvoice.amount,
-            tax: 0,
-            total: receiptInvoice.amount
-          }
+          total: receiptInvoice.amount,
+          recipient: {
+            name: tenantName,
+            address: recipientAddress
+          },
+          notes: 'Payment received. Thank you!'
         }
       };
 
-      await renderer.generateDocument(documentData, brandingData, billingData);
+      await renderer.generateDocument(documentData, brandingData, billingData, null, template);
       toast.success(`Receipt ${receiptInvoice.invoice_number} downloaded successfully`);
     } catch (error) {
       console.error('Error generating receipt PDF:', error);
