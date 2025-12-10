@@ -212,6 +212,41 @@ export function LandlordDataDebugPanel() {
             </div>
           )}
 
+          {validProperties.length > 0 && !error && (
+            <div className="space-y-3">
+              <div className="text-sm font-semibold text-gray-700 bg-blue-50 p-2 rounded">
+                Valid Landlord Details ({validProperties.length}):
+              </div>
+              {validProperties.map((prop) => (
+                <div
+                  key={prop.propertyId}
+                  className="p-3 bg-blue-50 border border-blue-200 rounded space-y-2"
+                >
+                  <div className="font-semibold text-sm text-blue-900">
+                    {prop.propertyName}
+                    <span className="text-xs text-muted-foreground ml-2">
+                      ({prop.invoiceCount} invoices)
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="font-semibold text-gray-700">Owner:</span>{" "}
+                      <span className="text-gray-600">{prop.ownerName}</span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-gray-700">Email:</span>{" "}
+                      <span className="text-gray-600">{prop.ownerEmail}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="font-semibold text-gray-700">Phone:</span>{" "}
+                      <span className="text-gray-600">{prop.ownerPhone}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {issueCount > 0 && !error && (
             <div className="space-y-3 max-h-96 overflow-y-auto">
               {issues.map((issue) => (
