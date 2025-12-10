@@ -366,14 +366,15 @@ export default function TenantPayments() {
         title: "Generating Receipt",
         description: "Please wait while we prepare your receipt for download...",
       });
-      
+
       const { PDFTemplateService } = await import('@/utils/pdfTemplateService');
       const { UnifiedPDFRenderer } = await import('@/utils/unifiedPDFRenderer');
-      
+      const { fetchLandlordBillingData } = await import('@/utils/fetchLandlordBillingData');
+
       // Enhanced payment data with tenant details from available sources
       let tenantName = 'Tenant';
       let propertyInfo = 'Property Address';
-      
+
       // Get tenant info from session
       if (paymentData?.tenant) {
         tenantName = `${paymentData.tenant.first_name || ''} ${paymentData.tenant.last_name || ''}`.trim();
@@ -382,17 +383,17 @@ export default function TenantPayments() {
       } else if (user?.email) {
         tenantName = user.email.split('@')[0];
       }
-      
+
       const paymentWithBilling = {
         payment: payment,
         billingData: {
-          billTo: { 
-            name: tenantName, 
-            address: propertyInfo 
+          billTo: {
+            name: tenantName,
+            address: propertyInfo
           }
         }
       };
-      
+
       if (!paymentWithBilling) {
         toast({
           title: "Error",
@@ -409,9 +410,23 @@ export default function TenantPayments() {
         'Admin' // Use Admin template for consistency across platform
       );
       console.log('Admin template branding data received for receipt:', brandingData);
-      
+
+      // For receipts, we need an invoice object to fetch landlord data
+      // Try to link the payment to an invoice if available
+      const linkedInvoice = paymentData?.invoices?.find((inv: any) =>
+        inv.amount === payment.amount
+      );
+
+      // Fetch landlord billing data with real owner information if we have an invoice
+      let billingData = null;
+      if (linkedInvoice) {
+        console.log('Fetching landlord billing data for receipt...');
+        billingData = await fetchLandlordBillingData(linkedInvoice);
+        console.log('Landlord billing data:', billingData);
+      }
+
       const renderer = new UnifiedPDFRenderer();
-      
+
       const documentData = {
         type: 'invoice' as const,
         title: `Receipt ${formatReceiptNumber(payment.payment_reference || payment.transaction_id)}`,
