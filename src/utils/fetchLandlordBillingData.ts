@@ -19,14 +19,17 @@ export async function fetchLandlordBillingData(
 ): Promise<LandlordBillingData | null> {
   try {
     // Debug: Log invoice structure to understand data format
-    console.log('fetchLandlordBillingData - Invoice structure:', {
+    console.log('🔍 fetchLandlordBillingData - Starting with invoice:', {
+      id: invoice.id,
+      invoiceNumber: invoice.invoice_number,
       hasId: !!invoice.id,
       hasPropertyId: !!invoice.property_id,
       hasTenantId: !!invoice.tenant_id,
       hasLeases: !!invoice.leases,
       hasUnits: !!invoice.leases?.units,
       hasProperties: !!invoice.leases?.units?.properties,
-      propertiesHasId: !!invoice.leases?.units?.properties?.id
+      propertyId: invoice.leases?.units?.properties?.id,
+      leaseId: invoice.lease_id
     });
 
     // Method 1: Try to get property ID from nested lease structure (most common)
@@ -79,43 +82,47 @@ export async function fetchLandlordBillingData(
 
     // Query to get property owner details with profile information
     console.log('Fetching property and owner details for property ID:', propertyId);
-    const { data, error } = await supabase
+    const { data: propertyData, error: propertyQueryError } = await supabase
       .from('properties')
-      .select(`
-        id,
-        name,
-        address,
-        city,
-        state,
-        owner_id,
-        profiles:owner_id (
-          id,
-          first_name,
-          last_name,
-          email,
-          phone
-        )
-      `)
+      .select('id, name, address, city, state, owner_id')
       .eq('id', propertyId)
       .single();
 
-    if (error) {
-      console.error('Error fetching property from database:', error);
+    if (propertyQueryError) {
+      console.error('Error fetching property from database:', propertyQueryError);
       return null;
     }
 
-    if (!data) {
+    if (!propertyData) {
       console.warn('No property data found for ID:', propertyId);
       return null;
     }
 
-    // Extract owner profile (handle both direct object and array response)
-    const ownerProfile = Array.isArray(data.profiles)
-      ? data.profiles[0]
-      : data.profiles;
+    console.log('Property data found:', {
+      propertyId: propertyData.id,
+      propertyName: propertyData.name,
+      ownerId: propertyData.owner_id
+    });
+
+    // Now fetch the owner profile separately
+    if (!propertyData.owner_id) {
+      console.warn('Property has no owner_id set:', propertyId);
+      return null;
+    }
+
+    const { data: ownerProfile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, email, phone')
+      .eq('id', propertyData.owner_id)
+      .single();
+
+    if (profileError) {
+      console.error('Error fetching owner profile:', profileError);
+      return null;
+    }
 
     if (!ownerProfile) {
-      console.warn('No owner profile found for property:', propertyId);
+      console.warn('No owner profile found for owner_id:', propertyData.owner_id);
       return null;
     }
 
@@ -126,9 +133,9 @@ export async function fetchLandlordBillingData(
 
     // Build address from property details
     const propertyAddress = [
-      data.address,
-      data.city,
-      data.state
+      propertyData.address,
+      propertyData.city,
+      propertyData.state
     ]
       .filter(Boolean)
       .join(', ') || 'Property';
@@ -139,12 +146,16 @@ export async function fetchLandlordBillingData(
         address: propertyAddress,
         phone: ownerProfile.phone || '',
         email: ownerProfile.email || '',
-        companyName: data.name || undefined
+        companyName: propertyData.name || undefined
       }
     };
 
-    console.log('Successfully fetched landlord billing data:', {
+    console.log('✅ Successfully fetched landlord billing data:', {
       name: result.billFrom.name,
+      phone: result.billFrom.phone,
+      email: result.billFrom.email,
+      address: result.billFrom.address,
+      companyName: result.billFrom.companyName,
       hasPhone: !!result.billFrom.phone,
       hasEmail: !!result.billFrom.email,
       hasAddress: !!result.billFrom.address
@@ -152,7 +163,7 @@ export async function fetchLandlordBillingData(
 
     return result;
   } catch (error) {
-    console.error('Unexpected error fetching landlord billing data:', error);
+    console.error('❌ Unexpected error fetching landlord billing data:', error);
     return null;
   }
 }
