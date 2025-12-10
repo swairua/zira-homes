@@ -245,6 +245,9 @@ const Invoices = () => {
           />
         </KpiGrid>
 
+        {/* Landlord Data Debug Panel */}
+        <LandlordDataDebugPanel />
+
         {/* Search and Filters */}
         <Card className="bg-card p-6">
           <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
