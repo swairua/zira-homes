@@ -71,10 +71,14 @@ export function InvoiceDetailsDialog({ invoice, mode, trigger }: InvoiceDetailsD
     try {
       // Get branding data using global branding system
       const { BrandingFetcher } = await import('@/utils/brandingFetcher');
+      const { fetchLandlordBillingData } = await import('@/utils/fetchLandlordBillingData');
       const brandingData = await BrandingFetcher.fetchBranding();
 
+      // Fetch landlord billing data with real owner information
+      const billingData = await fetchLandlordBillingData(invoice);
+
       const renderer = new UnifiedPDFRenderer();
-      
+
       const documentData = {
         type: 'invoice' as const,
         title: `Invoice - ${invoice.invoice_number}`,
@@ -90,7 +94,7 @@ export function InvoiceDetailsDialog({ invoice, mode, trigger }: InvoiceDetailsD
         }
       };
 
-      await renderer.generateDocument(documentData, brandingData);
+      await renderer.generateDocument(documentData, brandingData, billingData);
       toast.success(`Invoice ${invoice.invoice_number} downloaded successfully`);
     } catch (error) {
       console.error('Error generating PDF:', error);
