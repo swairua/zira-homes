@@ -69,6 +69,15 @@ export function InvoiceDetailsDialog({ invoice, mode, trigger }: InvoiceDetailsD
 
   const handleDownloadInvoice = async () => {
     try {
+      console.log('📥 handleDownloadInvoice - Invoice object:', {
+        id: invoice.id,
+        invoiceNumber: invoice.invoice_number,
+        propertyId: invoice.leases?.units?.properties?.id,
+        propertyName: invoice.leases?.units?.properties?.name,
+        tenantId: invoice.tenant_id,
+        leaseId: invoice.lease_id
+      });
+
       // Get branding data using global branding system
       const { BrandingFetcher } = await import('@/utils/brandingFetcher');
       const { fetchLandlordBillingData } = await import('@/utils/fetchLandlordBillingData');
@@ -76,7 +85,9 @@ export function InvoiceDetailsDialog({ invoice, mode, trigger }: InvoiceDetailsD
       const brandingData = await BrandingFetcher.fetchBranding();
 
       // Fetch landlord billing data with real owner information
+      console.log('📥 Calling fetchLandlordBillingData...');
       const billingData = await fetchLandlordBillingData(invoice);
+      console.log('📥 billingData returned:', billingData);
 
       // Get template for consistent styling
       const { template } = await PDFTemplateService.getTemplateAndBranding('invoice', 'Admin');
