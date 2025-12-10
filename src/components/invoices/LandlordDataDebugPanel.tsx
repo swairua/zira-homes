@@ -14,6 +14,15 @@ interface PropertyIssue {
   missingFields?: string[];
 }
 
+interface ValidProperty {
+  propertyId: string;
+  propertyName: string;
+  ownerName: string;
+  ownerEmail: string;
+  ownerPhone: string;
+  invoiceCount: number;
+}
+
 export function LandlordDataDebugPanel() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [issues, setIssues] = useState<PropertyIssue[]>([]);
