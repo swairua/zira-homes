@@ -125,6 +125,7 @@ const Invoices = () => {
           units: {
             unit_number: invoice.unit_number || '',
             properties: {
+              id: invoice.property_id,
               name: invoice.property_name || ''
             }
           }
