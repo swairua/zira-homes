@@ -249,15 +249,16 @@ export default function TenantPayments() {
         title: "Generating Invoice",
         description: "Please wait while we prepare your invoice for download...",
       });
-      
+
       const { PDFTemplateService } = await import('@/utils/pdfTemplateService');
       const { UnifiedPDFRenderer } = await import('@/utils/unifiedPDFRenderer');
-      
+      const { fetchLandlordBillingData } = await import('@/utils/fetchLandlordBillingData');
+
       // Enhanced invoice data with tenant details from available sources
       let tenantName = 'Tenant';
       let propertyInfo = 'Property';
       let unitInfo = 'N/A';
-      
+
       // Get tenant info from invoice data or session
       if (invoice.tenants?.first_name || invoice.tenants?.last_name) {
         tenantName = `${invoice.tenants.first_name || ''} ${invoice.tenants.last_name || ''}`.trim();
@@ -268,20 +269,20 @@ export default function TenantPayments() {
       } else if (user?.email) {
         tenantName = user.email.split('@')[0];
       }
-      
+
       // Get property info from invoice or inferred sources
       if (invoice.leases?.units?.properties?.name) {
         propertyInfo = invoice.leases.units.properties.name;
       } else if (invoice.sourcePayment?.property_name) {
         propertyInfo = invoice.sourcePayment.property_name;
       }
-      
+
       if (invoice.leases?.units?.unit_number) {
         unitInfo = invoice.leases.units.unit_number;
       } else if (invoice.sourcePayment?.unit_number) {
         unitInfo = invoice.sourcePayment.unit_number;
       }
-      
+
       const enhancedInvoice = {
         id: invoice.id,
         invoice_number: invoice.invoice_number,
@@ -294,7 +295,7 @@ export default function TenantPayments() {
           }
         }
       };
-      
+
       if (!enhancedInvoice) {
         toast({
           title: "Error",
@@ -311,9 +312,14 @@ export default function TenantPayments() {
         'Admin' // Use Admin template for consistency across platform
       );
       console.log('Admin template branding data received:', brandingData);
-      
+
+      // Fetch landlord billing data with real owner information
+      console.log('Fetching landlord billing data...');
+      const billingData = await fetchLandlordBillingData(invoice);
+      console.log('Landlord billing data:', billingData);
+
       const renderer = new UnifiedPDFRenderer();
-      
+
       const documentData = {
         type: 'invoice' as const,
         title: `Invoice ${invoice.invoice_number}`,
@@ -337,7 +343,7 @@ export default function TenantPayments() {
       };
 
       console.log('Generating PDF with template and branding...');
-      await renderer.generateDocument(documentData, brandingData, null, null, template);
+      await renderer.generateDocument(documentData, brandingData, billingData, null, template);
       console.log('PDF generated successfully with Admin template and branding');
       toast({
         title: "Download Ready",
