@@ -40,6 +40,7 @@ interface Invoice {
     units?: {
       unit_number: string;
       properties?: {
+        id: string;
         name: string;
       };
     };
@@ -91,7 +92,7 @@ const Invoices = () => {
           const transformedInvoices = (data || []).map((invoice: any) => ({
             ...invoice,
             tenants: { first_name: invoice.first_name || '', last_name: invoice.last_name || '', email: invoice.email || '' },
-            leases: { units: { unit_number: invoice.unit_number || '', properties: { name: invoice.property_name || '' } } }
+            leases: { units: { unit_number: invoice.unit_number || '', properties: { id: invoice.property_id, name: invoice.property_name || '' } } }
           }));
           setInvoices(transformedInvoices as Invoice[]);
           setTotalCount((data || []).length);
@@ -124,6 +125,7 @@ const Invoices = () => {
           units: {
             unit_number: invoice.unit_number || '',
             properties: {
+              id: invoice.property_id,
               name: invoice.property_name || ''
             }
           }
