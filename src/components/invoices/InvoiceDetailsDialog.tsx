@@ -72,29 +72,49 @@ export function InvoiceDetailsDialog({ invoice, mode, trigger }: InvoiceDetailsD
       // Get branding data using global branding system
       const { BrandingFetcher } = await import('@/utils/brandingFetcher');
       const { fetchLandlordBillingData } = await import('@/utils/fetchLandlordBillingData');
+      const { PDFTemplateService } = await import('@/utils/pdfTemplateService');
       const brandingData = await BrandingFetcher.fetchBranding();
 
       // Fetch landlord billing data with real owner information
       const billingData = await fetchLandlordBillingData(invoice);
 
+      // Get template for consistent styling
+      const { template } = await PDFTemplateService.getTemplateAndBranding('invoice', 'Admin');
+
       const renderer = new UnifiedPDFRenderer();
+
+      // Get tenant name and property info
+      const tenantName = invoice.tenants
+        ? `${invoice.tenants.first_name || ''} ${invoice.tenants.last_name || ''}`.trim()
+        : 'Tenant';
+
+      const propertyName = invoice.leases?.units?.properties?.name || 'Property';
+      const unitNumber = invoice.leases?.units?.unit_number || 'N/A';
+      const recipientAddress = `${propertyName}\nUnit: ${unitNumber}`;
 
       const documentData = {
         type: 'invoice' as const,
-        title: `Invoice - ${invoice.invoice_number}`,
+        title: `Invoice ${invoice.invoice_number}`,
         content: {
           invoiceNumber: invoice.invoice_number,
-          dueDate: invoice.due_date,
-          amount: invoice.amount,
-          tenant: invoice.tenants ? `${invoice.tenants.first_name} ${invoice.tenants.last_name}` : 'N/A',
-          description: invoice.description || 'Monthly rent payment',
+          dueDate: new Date(invoice.due_date),
           items: [
-            { description: invoice.description || 'Monthly rent payment', amount: invoice.amount }
-          ]
+            {
+              description: invoice.description || 'Monthly rent payment',
+              amount: invoice.amount,
+              quantity: 1
+            }
+          ],
+          total: invoice.amount,
+          recipient: {
+            name: tenantName,
+            address: recipientAddress
+          },
+          notes: 'Thank you for your prompt payment.'
         }
       };
 
-      await renderer.generateDocument(documentData, brandingData, billingData);
+      await renderer.generateDocument(documentData, brandingData, billingData, null, template);
       toast.success(`Invoice ${invoice.invoice_number} downloaded successfully`);
     } catch (error) {
       console.error('Error generating PDF:', error);
