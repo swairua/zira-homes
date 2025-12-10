@@ -69,7 +69,8 @@ export function TenantInvoiceDetailsDialog({ invoice, trigger, onPayNow }: Tenan
       console.log('Starting invoice download...');
       const { PDFTemplateService } = await import('@/utils/pdfTemplateService');
       const { UnifiedPDFRenderer } = await import('@/utils/unifiedPDFRenderer');
-      
+      const { fetchLandlordBillingData } = await import('@/utils/fetchLandlordBillingData');
+
       // Get template and branding from the unified service - use Admin invoice template
       console.log('Fetching Admin invoice template and branding...');
       const { template, branding: brandingData } = await PDFTemplateService.getTemplateAndBranding(
@@ -77,9 +78,14 @@ export function TenantInvoiceDetailsDialog({ invoice, trigger, onPayNow }: Tenan
         'Admin' // Use Admin template for consistency across platform
       );
       console.log('Admin template branding data received:', brandingData);
-      
+
+      // Fetch landlord billing data with real owner information
+      console.log('Fetching landlord billing data...');
+      const billingData = await fetchLandlordBillingData(invoice);
+      console.log('Landlord billing data:', billingData);
+
       const renderer = new UnifiedPDFRenderer();
-      
+
       const documentData = {
         type: 'invoice' as const,
         title: `Invoice ${formatInvoiceNumber(invoice.invoice_number)}`,
@@ -103,7 +109,7 @@ export function TenantInvoiceDetailsDialog({ invoice, trigger, onPayNow }: Tenan
       };
 
       console.log('Generating PDF document using Admin template...');
-      await renderer.generateDocument(documentData, brandingData, null, null, template);
+      await renderer.generateDocument(documentData, brandingData, billingData, null, template);
       console.log('PDF generated successfully with Admin template and branding');
       toast.success(`Invoice ${formatInvoiceNumber(invoice.invoice_number)} downloaded successfully`);
     } catch (error) {
