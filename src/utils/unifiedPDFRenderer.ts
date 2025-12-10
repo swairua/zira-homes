@@ -928,11 +928,11 @@ export class UnifiedPDFRenderer {
     this.pdf.setFontSize(12);
     this.pdf.setFont('helvetica', 'bold');
     this.pdf.text('Bill From:', 20, this.currentY);
-    
+
     this.pdf.setTextColor(0, 0, 0);
     this.pdf.setFontSize(10);
     this.pdf.setFont('helvetica', 'normal');
-    
+
     // Use real billing data instead of generic landlord info
     const billFrom = billingData?.billFrom || {
       name: 'Property Owner',
@@ -940,21 +940,42 @@ export class UnifiedPDFRenderer {
       phone: '+254 700 000 000',
       email: 'landlord@property.com'
     };
-    
-    this.pdf.text(billFrom.name, 20, this.currentY + 8);
+
+    let currentYOffset = 8;
+
+    // Display owner/company name
+    this.pdf.setFont('helvetica', 'bold');
+    this.pdf.text(billFrom.name, 20, this.currentY + currentYOffset);
+    currentYOffset += 8;
+
+    // Display company/property name if different from owner name
     if (billFrom.companyName && billFrom.companyName !== billFrom.name) {
+      this.pdf.setFont('helvetica', 'normal');
       this.pdf.setFontSize(9);
       this.pdf.setTextColor(80, 80, 80);
-      this.pdf.text(`Property: ${billFrom.companyName}`, 20, this.currentY + 16);
+      this.pdf.text(`Property: ${billFrom.companyName}`, 20, this.currentY + currentYOffset);
+      currentYOffset += 6;
       this.pdf.setFontSize(10);
       this.pdf.setTextColor(0, 0, 0);
-      this.pdf.text(billFrom.address, 20, this.currentY + 24);
-      this.pdf.text(billFrom.phone, 20, this.currentY + 32);
-      this.pdf.text(billFrom.email, 20, this.currentY + 40);
-    } else {
-      this.pdf.text(billFrom.address, 20, this.currentY + 16);
-      this.pdf.text(billFrom.phone, 20, this.currentY + 24);
-      this.pdf.text(billFrom.email, 20, this.currentY + 32);
+    }
+
+    // Display address lines
+    const addressLines = billFrom.address ? billFrom.address.split('\n') : ['Property'];
+    addressLines.forEach((line) => {
+      this.pdf.text(line, 20, this.currentY + currentYOffset);
+      currentYOffset += 6;
+    });
+
+    // Display phone
+    if (billFrom.phone) {
+      this.pdf.text(billFrom.phone, 20, this.currentY + currentYOffset);
+      currentYOffset += 6;
+    }
+
+    // Display email
+    if (billFrom.email) {
+      this.pdf.text(billFrom.email, 20, this.currentY + currentYOffset);
+      currentYOffset += 6;
     }
 
     // Bill To section with real tenant data
