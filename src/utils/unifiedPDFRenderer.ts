@@ -960,8 +960,8 @@ export class UnifiedPDFRenderer {
     }
 
     // Display address lines
-    const addressLines = billFrom.address ? billFrom.address.split('\n') : ['Property'];
-    addressLines.forEach((line) => {
+    const landlordAddressLines = billFrom.address ? billFrom.address.split('\n') : ['Property'];
+    landlordAddressLines.forEach((line) => {
       this.pdf.text(line, 20, this.currentY + currentYOffset);
       currentYOffset += 6;
     });
