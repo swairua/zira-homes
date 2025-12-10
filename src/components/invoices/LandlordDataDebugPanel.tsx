@@ -142,6 +142,14 @@ export function LandlordDataDebugPanel() {
         }
       }
 
+      console.log('🔍 Debug check results:', {
+        totalChecked,
+        foundIssuesCount: foundIssues.length,
+        foundValidCount: foundValid.length,
+        foundValid,
+        foundIssues
+      });
+
       setIssues(foundIssues);
       setValidProperties(foundValid);
     } catch (err) {
