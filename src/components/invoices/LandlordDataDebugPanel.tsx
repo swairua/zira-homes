@@ -23,6 +23,7 @@ export function LandlordDataDebugPanel() {
 
   const checkData = async () => {
     setLoading(true);
+    setError(null);
     try {
       // Get all properties with their invoices
       const { data: propertyData, error: propertyError } = await supabase
@@ -34,8 +35,14 @@ export function LandlordDataDebugPanel() {
           invoices (id)
         `);
 
-      if (propertyError) throw propertyError;
-      if (!propertyData) return;
+      if (propertyError) {
+        throw new Error(`Failed to fetch properties: ${propertyError.message}`);
+      }
+
+      if (!propertyData) {
+        setError("No properties found");
+        return;
+      }
 
       const foundIssues: PropertyIssue[] = [];
       setTotalChecked(propertyData.length);
@@ -62,7 +69,19 @@ export function LandlordDataDebugPanel() {
           .eq("id", property.owner_id)
           .single();
 
-        if (profileError || !profileData) {
+        if (profileError) {
+          console.warn(`Profile error for ${property.name}:`, profileError);
+          foundIssues.push({
+            propertyId: property.id,
+            propertyName: property.name,
+            issue: "invalid_owner_id",
+            ownerId: property.owner_id,
+            invoiceCount,
+          });
+          continue;
+        }
+
+        if (!profileData) {
           foundIssues.push({
             propertyId: property.id,
             propertyName: property.name,
@@ -93,8 +112,11 @@ export function LandlordDataDebugPanel() {
       }
 
       setIssues(foundIssues);
-    } catch (error) {
-      console.error("Error checking landlord data:", error);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error("Error checking landlord data:", errorMessage);
+      setError(errorMessage);
+      setIssues([]);
     } finally {
       setLoading(false);
     }
