@@ -110,25 +110,30 @@ export function InvoiceDetailsDialog({ invoice, mode, trigger }: InvoiceDetailsD
         status: 'paid',
         payment_date: new Date().toISOString(),
       };
-      
+
       const { BrandingFetcher } = await import('@/utils/brandingFetcher');
       const { UnifiedPDFRenderer } = await import('@/utils/unifiedPDFRenderer');
-      
+      const { fetchLandlordBillingData } = await import('@/utils/fetchLandlordBillingData');
+
       const brandingData = await BrandingFetcher.fetchBranding();
+
+      // Fetch landlord billing data with real owner information
+      const billingData = await fetchLandlordBillingData(receiptInvoice);
+
       const renderer = new UnifiedPDFRenderer();
-      
+
       const documentData = {
         type: 'invoice' as const,
         title: `Receipt ${receiptInvoice.invoice_number}`,
         content: {
           invoice: receiptInvoice,
           recipient: {
-            name: receiptInvoice.tenants?.first_name && receiptInvoice.tenants?.last_name 
+            name: receiptInvoice.tenants?.first_name && receiptInvoice.tenants?.last_name
               ? `${receiptInvoice.tenants.first_name} ${receiptInvoice.tenants.last_name}`
               : 'Tenant',
             email: receiptInvoice.tenants?.email || 'No email',
             phone: 'No phone',
-            address: receiptInvoice.leases?.units?.unit_number 
+            address: receiptInvoice.leases?.units?.unit_number
               ? `Unit ${receiptInvoice.leases.units.unit_number}, ${receiptInvoice.leases.units.properties?.name || 'Property'}`
               : 'No address'
           },
@@ -148,7 +153,7 @@ export function InvoiceDetailsDialog({ invoice, mode, trigger }: InvoiceDetailsD
         }
       };
 
-      await renderer.generateDocument(documentData, brandingData);
+      await renderer.generateDocument(documentData, brandingData, billingData);
       toast.success(`Receipt ${receiptInvoice.invoice_number} downloaded successfully`);
     } catch (error) {
       console.error('Error generating receipt PDF:', error);
