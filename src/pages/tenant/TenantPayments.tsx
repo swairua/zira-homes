@@ -450,7 +450,7 @@ export default function TenantPayments() {
       };
 
       console.log('Generating receipt PDF with template and branding...');
-      await renderer.generateDocument(documentData, brandingData, null, null, template);
+      await renderer.generateDocument(documentData, brandingData, billingData, null, template);
       console.log('Receipt PDF generated successfully with Admin template and branding');
       toast({
         title: "Receipt Ready",
