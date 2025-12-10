@@ -58,7 +58,7 @@ export function Header() {
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 sm:w-8 sm:h-8 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm p-1">
               <img 
-                src="/lovable-uploads/5143fc86-0273-406f-b5f9-67cc9d4bc7f6.png" 
+                src="/zira-logo.png" 
                 alt="Zira Homes Logo" 
                 className="w-6 h-6 object-contain"
               />

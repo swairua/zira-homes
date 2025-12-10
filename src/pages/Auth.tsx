@@ -431,7 +431,7 @@ const Auth = () => {
             <div className="flex items-center gap-3 mb-8">
               <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
                 <img 
-                  src="/lovable-uploads/5143fc86-0273-406f-b5f9-67cc9d4bc7f6.png" 
+                  src="/zira-logo.png" 
                   alt="Zira Homes Logo" 
                   className="w-8 h-8 object-contain"
                 />
@@ -496,7 +496,7 @@ const Auth = () => {
           <div className="lg:hidden text-center space-y-4">
             <div className="mx-auto w-16 h-16 bg-white rounded-2xl shadow-lg flex items-center justify-center border border-primary/20">
               <img 
-                src="/lovable-uploads/5143fc86-0273-406f-b5f9-67cc9d4bc7f6.png" 
+                src="/zira-logo.png" 
                 alt="Zira Homes Logo" 
                 className="w-10 h-10 object-contain"
               />
