@@ -130,9 +130,9 @@ export async function fetchLandlordBillingData(
 
     // Build address from property details
     const propertyAddress = [
-      data.address,
-      data.city,
-      data.state
+      propertyData.address,
+      propertyData.city,
+      propertyData.state
     ]
       .filter(Boolean)
       .join(', ') || 'Property';
@@ -143,7 +143,7 @@ export async function fetchLandlordBillingData(
         address: propertyAddress,
         phone: ownerProfile.phone || '',
         email: ownerProfile.email || '',
-        companyName: data.name || undefined
+        companyName: propertyData.name || undefined
       }
     };
 
