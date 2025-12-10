@@ -40,6 +40,7 @@ interface Invoice {
     units?: {
       unit_number: string;
       properties?: {
+        id: string;
         name: string;
       };
     };
