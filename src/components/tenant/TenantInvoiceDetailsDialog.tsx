@@ -66,23 +66,32 @@ export function TenantInvoiceDetailsDialog({ invoice, trigger, onPayNow }: Tenan
 
   const handleDownloadInvoice = async () => {
     try {
-      console.log('Starting invoice download...');
+      console.log('📥 Starting invoice download...');
+      console.log('📥 Invoice object:', {
+        id: invoice.id,
+        invoiceNumber: invoice.invoice_number,
+        propertyId: invoice.leases?.units?.properties?.id,
+        propertyName: invoice.leases?.units?.properties?.name,
+        tenantId: invoice.tenant_id,
+        leaseId: invoice.lease_id
+      });
+
       const { PDFTemplateService } = await import('@/utils/pdfTemplateService');
       const { UnifiedPDFRenderer } = await import('@/utils/unifiedPDFRenderer');
       const { fetchLandlordBillingData } = await import('@/utils/fetchLandlordBillingData');
 
       // Get template and branding from the unified service - use Admin invoice template
-      console.log('Fetching Admin invoice template and branding...');
+      console.log('📥 Fetching Admin invoice template and branding...');
       const { template, branding: brandingData } = await PDFTemplateService.getTemplateAndBranding(
         'invoice',
         'Admin' // Use Admin template for consistency across platform
       );
-      console.log('Admin template branding data received:', brandingData);
+      console.log('📥 Admin template branding data received:', brandingData);
 
       // Fetch landlord billing data with real owner information
-      console.log('Fetching landlord billing data...');
+      console.log('📥 Calling fetchLandlordBillingData...');
       const billingData = await fetchLandlordBillingData(invoice);
-      console.log('Landlord billing data:', billingData);
+      console.log('📥 Landlord billing data returned:', billingData);
 
       const renderer = new UnifiedPDFRenderer();
 
