@@ -923,6 +923,14 @@ export class UnifiedPDFRenderer {
 
   private addInvoiceContent(content: InvoiceContent, platformBranding: BrandingData, template?: any, billingData?: any): void {
     // Bill From section with real landlord data
+    console.log('📄 addInvoiceContent - billingData received:', {
+      hasBillingData: !!billingData,
+      hasBillFrom: !!billingData?.billFrom,
+      billFromName: billingData?.billFrom?.name,
+      billFromPhone: billingData?.billFrom?.phone,
+      billFromEmail: billingData?.billFrom?.email
+    });
+
     const brandColor = this.hexToRgb(platformBranding.primaryColor);
     this.pdf.setTextColor(brandColor.r, brandColor.g, brandColor.b);
     this.pdf.setFontSize(12);
@@ -940,6 +948,13 @@ export class UnifiedPDFRenderer {
       phone: '+254 700 000 000',
       email: 'landlord@property.com'
     };
+
+    console.log('📄 Using billFrom:', {
+      source: billingData?.billFrom ? 'from billingData' : 'using placeholder',
+      name: billFrom.name,
+      phone: billFrom.phone,
+      email: billFrom.email
+    });
 
     let currentYOffset = 8;
 
