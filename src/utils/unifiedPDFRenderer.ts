@@ -1008,8 +1008,8 @@ export class UnifiedPDFRenderer {
 
     // Property and unit information
     const address = billTo?.address || content.recipient.address;
-    const addressLines = address.split('\n');
-    addressLines.forEach((line) => {
+    const tenantAddressLines = address.split('\n');
+    tenantAddressLines.forEach((line) => {
       this.pdf.text(line, billToX, billToY);
       billToY += 6;
     });
