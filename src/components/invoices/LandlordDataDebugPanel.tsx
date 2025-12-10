@@ -34,6 +34,7 @@ export function LandlordDataDebugPanel() {
   const checkData = async () => {
     setLoading(true);
     setError(null);
+    setValidProperties([]);
     try {
       // Get all properties first
       const { data: propertyData, error: propertyError } = await supabase
