@@ -51,7 +51,7 @@ export function TenantSidebar() {
           className="flex items-center space-x-2 p-2 hover:bg-accent rounded-lg transition-colors"
         >
           <img 
-            src="/lovable-uploads/5143fc86-0273-406f-b5f9-67cc9d4bc7f6.png" 
+            src="/zira-logo.png" 
             alt="Zira Homes" 
             className="h-8 w-8 flex-shrink-0 object-contain"
             onError={(e) => {
