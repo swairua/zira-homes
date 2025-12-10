@@ -183,7 +183,7 @@ export function LandlordDataDebugPanel() {
             </div>
           )}
 
-          {issueCount > 0 && (
+          {issueCount > 0 && !error && (
             <div className="space-y-3 max-h-96 overflow-y-auto">
               {issues.map((issue) => (
                 <div
