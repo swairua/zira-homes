@@ -153,10 +153,19 @@ export function LandlordDataDebugPanel() {
 
       {isExpanded && (
         <CardContent className="space-y-4">
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-300 rounded text-red-800 text-sm">
+              <strong>Error:</strong> {error}
+            </div>
+          )}
+
           <div className="flex justify-between items-center">
             <p className="text-sm text-amber-800">
-              Checked {totalChecked} properties
-              {issueCount > 0 && ` • Found ${issueCount} issues`}
+              {totalChecked > 0
+                ? `Checked ${totalChecked} properties${
+                    issueCount > 0 ? ` • Found ${issueCount} issues` : ""
+                  }`
+                : "Click re-check to scan your database"}
             </p>
             <Button
               size="sm"
@@ -168,7 +177,7 @@ export function LandlordDataDebugPanel() {
             </Button>
           </div>
 
-          {issueCount === 0 && totalChecked > 0 && (
+          {issueCount === 0 && totalChecked > 0 && !error && (
             <div className="p-3 bg-green-50 border border-green-200 rounded text-green-800 text-sm">
               ✓ All properties with invoices have valid landlord data
             </div>
