@@ -18,27 +18,49 @@ export async function fetchLandlordBillingData(
   invoice: any
 ): Promise<LandlordBillingData | null> {
   try {
-    // Method 1: Try to get property ID from nested lease structure
+    // Debug: Log invoice structure to understand data format
+    console.log('fetchLandlordBillingData - Invoice structure:', {
+      hasId: !!invoice.id,
+      hasPropertyId: !!invoice.property_id,
+      hasTenantId: !!invoice.tenant_id,
+      hasLeases: !!invoice.leases,
+      hasUnits: !!invoice.leases?.units,
+      hasProperties: !!invoice.leases?.units?.properties,
+      propertiesHasId: !!invoice.leases?.units?.properties?.id
+    });
+
+    // Method 1: Try to get property ID from nested lease structure (most common)
     let propertyId = invoice.leases?.units?.properties?.id;
+
+    if (propertyId) {
+      console.log('Found property ID in nested structure:', propertyId);
+    }
 
     // Method 2: If not in leases, try direct property_id field
     if (!propertyId && invoice.property_id) {
       propertyId = invoice.property_id;
+      console.log('Found property ID in direct field:', propertyId);
     }
 
     // Method 3: If still no property ID, try to get from tenant's leases
     if (!propertyId && invoice.tenant_id) {
-      console.log('Attempting to fetch property from tenant leases...');
-      const { data: tenantLeases } = await supabase
+      console.log('Attempting to fetch property from tenant leases for tenant:', invoice.tenant_id);
+      const { data: tenantLeases, error: leaseError } = await supabase
         .from('leases')
         .select('unit_id, units!inner(property_id)')
         .eq('tenant_id', invoice.tenant_id)
         .eq('status', 'active')
         .maybeSingle();
 
+      if (leaseError) {
+        console.error('Error fetching tenant leases:', leaseError);
+      }
+
       if (tenantLeases?.units?.property_id) {
         propertyId = tenantLeases.units.property_id;
         console.log('Found property ID from tenant leases:', propertyId);
+      } else {
+        console.warn('No active lease found for tenant:', invoice.tenant_id);
       }
     }
 
@@ -47,8 +69,10 @@ export async function fetchLandlordBillingData(
         hasLeases: !!invoice.leases,
         hasUnits: !!invoice.leases?.units,
         hasProperties: !!invoice.leases?.units?.properties,
+        leasePropertiesKeys: Object.keys(invoice.leases?.units?.properties || {}),
         hasPropertyId: !!invoice.property_id,
-        hasTenantId: !!invoice.tenant_id
+        hasTenantId: !!invoice.tenant_id,
+        invoiceKeys: Object.keys(invoice).slice(0, 10)
       });
       return null;
     }
