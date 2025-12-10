@@ -25,15 +25,10 @@ export function LandlordDataDebugPanel() {
     setLoading(true);
     setError(null);
     try {
-      // Get all properties with their invoices
+      // Get all properties first
       const { data: propertyData, error: propertyError } = await supabase
         .from("properties")
-        .select(`
-          id,
-          name,
-          owner_id,
-          invoices (id)
-        `);
+        .select("id, name, owner_id");
 
       if (propertyError) {
         throw new Error(`Failed to fetch properties: ${propertyError.message}`);
@@ -47,8 +42,20 @@ export function LandlordDataDebugPanel() {
       const foundIssues: PropertyIssue[] = [];
       setTotalChecked(propertyData.length);
 
+      // For each property, check if it has invoices
       for (const property of propertyData) {
-        const invoiceCount = property.invoices?.length || 0;
+        // Count invoices for this property
+        const { count, error: countError } = await supabase
+          .from("invoices")
+          .select("id", { count: "exact" })
+          .eq("property_id", property.id);
+
+        if (countError) {
+          console.warn(`Error counting invoices for property ${property.id}:`, countError);
+          continue;
+        }
+
+        const invoiceCount = count || 0;
         if (invoiceCount === 0) continue;
 
         // Check if owner_id is missing
