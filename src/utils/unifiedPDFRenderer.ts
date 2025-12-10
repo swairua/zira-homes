@@ -979,35 +979,44 @@ export class UnifiedPDFRenderer {
     }
 
     // Bill To section with real tenant data
+    // Position it relative to Bill From section
+    const billToX = this.pageWidth - 100;
+    let billToY = this.currentY;
+
     const billColor = this.hexToRgb(platformBranding.primaryColor);
     this.pdf.setTextColor(billColor.r, billColor.g, billColor.b);
     this.pdf.setFontSize(12);
     this.pdf.setFont('helvetica', 'bold');
-    this.pdf.text('Bill To:', this.pageWidth - 100, this.currentY);
-    
+    this.pdf.text('Bill To:', billToX, billToY);
+
     this.pdf.setTextColor(0, 0, 0);
     this.pdf.setFontSize(10);
     this.pdf.setFont('helvetica', 'normal');
-    
+
     // Use real tenant data from billing relationships
     const billTo = billingData?.billTo;
     const tenantName = billTo?.name || content.recipient.name;
-    this.pdf.text(tenantName, this.pageWidth - 100, this.currentY + 8);
-    
+    billToY += 8;
+    this.pdf.text(tenantName, billToX, billToY);
+    billToY += 6;
+
     // Add tenant email if available
     if (billTo?.email) {
-      this.pdf.text(billTo.email, this.pageWidth - 100, this.currentY + 16);
+      this.pdf.text(billTo.email, billToX, billToY);
+      billToY += 6;
     }
-    
+
     // Property and unit information
     const address = billTo?.address || content.recipient.address;
     const addressLines = address.split('\n');
-    const startLine = billTo?.email ? 24 : 16;
-    addressLines.forEach((line, index) => {
-      this.pdf.text(line, this.pageWidth - 100, this.currentY + startLine + (index * 4));
+    addressLines.forEach((line) => {
+      this.pdf.text(line, billToX, billToY);
+      billToY += 6;
     });
-    
-    this.currentY += 55;
+
+    // Update main Y position based on the taller of the two sections
+    const maxY = Math.max(this.currentY + currentYOffset, billToY);
+    this.currentY = maxY + 10;
     
     // Invoice details
     this.pdf.setTextColor(0, 0, 0);
