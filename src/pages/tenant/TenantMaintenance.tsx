@@ -1,4 +1,4 @@
-import React, { useState, Suspense } from "react";
+import React, { useState } from "react";
 import { TenantLayout } from "@/components/TenantLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,8 +17,6 @@ export default function TenantMaintenance() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
-  const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const requests = data?.requests || [];
   const stats = data?.stats;
@@ -37,6 +35,7 @@ export default function TenantMaintenance() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
+      case "resolved":
       case "completed":
         return <CheckCircle className="h-4 w-4 text-green-600" />;
       case "in_progress":
@@ -50,6 +49,7 @@ export default function TenantMaintenance() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case "resolved":
       case "completed":
         return "bg-green-100 text-green-800 border-green-200";
       case "in_progress":
@@ -193,18 +193,18 @@ export default function TenantMaintenance() {
                   />
                 </div>
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-40">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-full sm:w-40">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="in_progress">In Progress</SelectItem>
+                    <SelectItem value="resolved">Completed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
               <Select value={priorityFilter} onValueChange={setPriorityFilter}>
                 <SelectTrigger className="w-full sm:w-40">
                   <SelectValue placeholder="Priority" />
@@ -283,30 +283,20 @@ export default function TenantMaintenance() {
                       </div>
                     </div>
                     
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedRequest(request);
-                        setDetailsOpen(true);
-                      }}
-                    >
-                      View Details
-                    </Button>
+                    <TenantMaintenanceDetailsDialog
+                      request={request}
+                      trigger={
+                        <Button variant="outline" size="sm">
+                          View Details
+                        </Button>
+                      }
+                    />
                   </div>
                 </CardContent>
               </Card>
             ))
           )}
         </div>
-
-        {selectedRequest && (
-          <Suspense fallback={<div className="flex items-center justify-center p-4"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
-            <TenantMaintenanceDetailsDialog
-              request={selectedRequest}
-            />
-          </Suspense>
-        )}
       </div>
     </TenantLayout>
   );

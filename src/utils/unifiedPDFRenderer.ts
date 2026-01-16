@@ -971,22 +971,32 @@ export class UnifiedPDFRenderer {
     // Use real tenant data from billing relationships
     const billTo = billingData?.billTo;
     const tenantName = billTo?.name || content.recipient.name;
-    this.pdf.text(tenantName, this.pageWidth - 100, this.currentY + 8);
+    let nextLineOffset = 8;
+    
+    // Tenant name
+    this.pdf.text(tenantName, this.pageWidth - 100, this.currentY + nextLineOffset);
+    nextLineOffset += 8;
+    
+    // Add tenant phone if available
+    if (billTo?.phone) {
+      this.pdf.text(billTo.phone, this.pageWidth - 100, this.currentY + nextLineOffset);
+      nextLineOffset += 8;
+    }
     
     // Add tenant email if available
     if (billTo?.email) {
-      this.pdf.text(billTo.email, this.pageWidth - 100, this.currentY + 16);
+      this.pdf.text(billTo.email, this.pageWidth - 100, this.currentY + nextLineOffset);
+      nextLineOffset += 8;
     }
     
     // Property and unit information
     const address = billTo?.address || content.recipient.address;
     const addressLines = address.split('\n');
-    const startLine = billTo?.email ? 24 : 16;
     addressLines.forEach((line, index) => {
-      this.pdf.text(line, this.pageWidth - 100, this.currentY + startLine + (index * 4));
+      this.pdf.text(line, this.pageWidth - 100, this.currentY + nextLineOffset + (index * 4));
     });
     
-    this.currentY += 55;
+    this.currentY += 60;
     
     // Invoice details
     this.pdf.setTextColor(0, 0, 0);
@@ -1019,18 +1029,55 @@ export class UnifiedPDFRenderer {
       this.currentY += 8;
     });
 
-    // Total with primary color background
-    const totalColor = this.hexToRgb(platformBranding.primaryColor);
-    this.pdf.setFillColor(totalColor.r, totalColor.g, totalColor.b);
-    this.pdf.rect(this.pageWidth - 80, this.currentY, 60, 8, 'F');
-    
-    this.pdf.setTextColor(255, 255, 255);
-    this.pdf.setFontSize(10);
-    this.pdf.setFont('helvetica', 'bold');
-    this.pdf.text('TOTAL', this.pageWidth - 75, this.currentY + 5);
-    this.pdf.text(formatAmount(content.total), this.pageWidth - 25, this.currentY + 5, { align: 'right' });
+    // Check if this is a partially paid invoice
+    const amountPaid = (content as any).amountPaid || 0;
+    const outstandingAmount = (content as any).outstandingAmount;
+    const isPartiallyPaid = amountPaid > 0 && outstandingAmount !== undefined && outstandingAmount > 0;
 
-    this.currentY += 20;
+    // Subtotal row
+    this.pdf.setFillColor(245, 245, 245);
+    this.pdf.rect(this.pageWidth - 100, this.currentY, 80, 8, 'F');
+    this.pdf.setTextColor(60, 60, 60);
+    this.pdf.setFontSize(10);
+    this.pdf.setFont('helvetica', 'normal');
+    this.pdf.text('Subtotal', this.pageWidth - 95, this.currentY + 5);
+    this.pdf.text(formatAmount(content.total), this.pageWidth - 25, this.currentY + 5, { align: 'right' });
+    this.currentY += 8;
+
+    // Show payment breakdown for partially paid invoices
+    if (isPartiallyPaid) {
+      // Amount Paid row
+      this.pdf.setFillColor(220, 252, 231); // Light green
+      this.pdf.rect(this.pageWidth - 100, this.currentY, 80, 8, 'F');
+      this.pdf.setTextColor(22, 101, 52); // Green text
+      this.pdf.text('Amount Paid', this.pageWidth - 95, this.currentY + 5);
+      this.pdf.text(`(${formatAmount(amountPaid)})`, this.pageWidth - 25, this.currentY + 5, { align: 'right' });
+      this.currentY += 8;
+
+      // Outstanding Balance row (highlighted)
+      const outstandingColor = this.hexToRgb('#DC2626'); // Red
+      this.pdf.setFillColor(254, 226, 226); // Light red background
+      this.pdf.rect(this.pageWidth - 100, this.currentY, 80, 10, 'F');
+      this.pdf.setTextColor(outstandingColor.r, outstandingColor.g, outstandingColor.b);
+      this.pdf.setFont('helvetica', 'bold');
+      this.pdf.text('BALANCE DUE', this.pageWidth - 95, this.currentY + 6);
+      this.pdf.text(formatAmount(outstandingAmount), this.pageWidth - 25, this.currentY + 6, { align: 'right' });
+      this.currentY += 12;
+    } else {
+      // Total with primary color background (for fully unpaid invoices)
+      const totalColor = this.hexToRgb(platformBranding.primaryColor);
+      this.pdf.setFillColor(totalColor.r, totalColor.g, totalColor.b);
+      this.pdf.rect(this.pageWidth - 100, this.currentY, 80, 8, 'F');
+      
+      this.pdf.setTextColor(255, 255, 255);
+      this.pdf.setFontSize(10);
+      this.pdf.setFont('helvetica', 'bold');
+      this.pdf.text('TOTAL DUE', this.pageWidth - 95, this.currentY + 5);
+      this.pdf.text(formatAmount(content.total), this.pageWidth - 25, this.currentY + 5, { align: 'right' });
+      this.currentY += 10;
+    }
+
+    this.currentY += 10;
   }
 
   private async addReportContent(content: ReportContent, platformBranding: BrandingData, chartData?: any, template?: any): Promise<void> {
@@ -1240,7 +1287,8 @@ export class UnifiedPDFRenderer {
       this.addDocumentTitle(document.title, branding, template);
       
       // Step 3: Add landlord section if provided (from billing data)
-      if (billingData?.billFrom) {
+      // Skip for invoices since addInvoiceContent has its own Bill From section
+      if (billingData?.billFrom && document.type !== 'invoice') {
         this.updateProgress(25, 'Adding landlord information...');
         await this.addLandlordSection(billingData.billFrom, branding);
       }

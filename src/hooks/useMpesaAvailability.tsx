@@ -1,13 +1,29 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { logger } from '@/utils/logger';
+
+interface MpesaCheckDiagnostics {
+  invoiceId?: string;
+  leaseId?: string;
+  unitId?: string;
+  propertyId?: string;
+  landlordId?: string;
+  hasCustomConfig?: boolean;
+  usesPlatformDefault?: boolean;
+  step?: string;
+}
 
 interface MpesaAvailabilityResult {
   isAvailable: boolean;
   isChecking: boolean;
   checkAvailability: (invoiceId: string) => Promise<boolean>;
   error: string | null;
+  lastErrorType: MpesaCheckError | null;
+  lastErrorDetails: string | null;
+  lastCheck: MpesaCheckDiagnostics | null;
+  lastCheckTimestamp: string | null;
+  configSource?: 'custom' | 'platform';
 }
 
 type MpesaCheckError = 
@@ -16,6 +32,10 @@ type MpesaCheckError =
   | 'unit_not_found' 
   | 'property_not_found' 
   | 'landlord_not_found'
+  | 'no_mpesa_config'
+  | 'credentials_not_verified'
+  | 'config_inactive'
+  | 'payment_preference_check_failed'
   | 'config_check_failed'
   | 'network_error'
   | 'unknown_error';
@@ -26,6 +46,10 @@ const ERROR_MESSAGES: Record<MpesaCheckError, string> = {
   unit_not_found: 'Unit information not found. Please contact support.',
   property_not_found: 'Property information not found. Please contact support.',
   landlord_not_found: 'Landlord information not found. Please contact support.',
+  no_mpesa_config: 'M-Pesa payment not configured for this property',
+  credentials_not_verified: 'M-Pesa credentials require verification',
+  config_inactive: 'M-Pesa configuration is inactive',
+  payment_preference_check_failed: 'Unable to verify payment preferences',
   config_check_failed: 'Unable to verify M-Pesa configuration. Please try again.',
   network_error: 'Network error. Please check your connection and try again.',
   unknown_error: 'An unexpected error occurred. Please try again.',
@@ -35,159 +59,176 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
   const [isChecking, setIsChecking] = useState(false);
   const [isAvailable, setIsAvailable] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastErrorType, setLastErrorType] = useState<MpesaCheckError | null>(null);
+  const [lastErrorDetails, setLastErrorDetails] = useState<string | null>(null);
+  const [lastCheck, setLastCheck] = useState<MpesaCheckDiagnostics | null>(null);
+  const [lastCheckTimestamp, setLastCheckTimestamp] = useState<string | null>(null);
+  const [configSource, setConfigSource] = useState<'custom' | 'platform' | undefined>(undefined);
 
-  const handleError = (errorType: MpesaCheckError, details?: string) => {
+  const handleError = (errorType: MpesaCheckError, details?: string, diagnosticData?: MpesaCheckDiagnostics) => {
+    const timestamp = new Date().toISOString();
     const message = ERROR_MESSAGES[errorType];
+    
+    console.group('🔴 M-Pesa Availability Check Failed');
+    console.error('Error Type:', errorType);
+    console.error('Message:', message);
+    console.error('Details:', details);
+    console.error('Timestamp:', timestamp);
+    console.error('Diagnostic Data:', diagnosticData);
+    console.groupEnd();
+    
     setError(message);
+    setLastErrorType(errorType);
+    setLastErrorDetails(details || null);
     setIsAvailable(false);
-    toast.error(message, { duration: 5000 });
+    setLastCheckTimestamp(timestamp);
+    toast.error(`${message}`, { duration: 5000 });
     
     logger.error(`M-Pesa availability check failed: ${errorType}`, new Error(message), {
       errorType,
-      details
+      details,
+      timestamp,
+      diagnosticData
     });
   };
 
   const checkAvailability = async (invoiceId: string): Promise<boolean> => {
+    const checkStartTime = Date.now();
+    const timestamp = new Date().toISOString();
+    
+    console.group('🔍 M-Pesa Availability Check Started (Backend Function)');
+    console.log('Invoice ID:', invoiceId);
+    console.log('Timestamp:', timestamp);
+    console.groupEnd();
+    
     setIsChecking(true);
     setError(null);
+    setLastErrorType(null);
+    setLastErrorDetails(null);
+    
+    const diagnostics: MpesaCheckDiagnostics = { invoiceId, step: 'calling_backend' };
+    setLastCheck(diagnostics);
     
     try {
-      // First, get the lease_id from the invoice
-      const { data: invoice, error: invoiceError } = await supabase
-        .from('invoices')
-        .select('id, lease_id')
-        .eq('id', invoiceId)
-        .maybeSingle();
-
-      if (invoiceError) {
-        if (invoiceError.code === 'PGRST116') {
-          handleError('invoice_not_found', invoiceId);
-        } else if (invoiceError.message?.includes('network') || invoiceError.message?.includes('fetch')) {
-          handleError('network_error', invoiceError.message);
-        } else {
-          handleError('unknown_error', invoiceError.message);
+      // Call the backend edge function with service role permissions
+      // This bypasses RLS issues for tenants without auth accounts
+      console.log('📡 Calling check-mpesa-availability edge function...');
+      
+      const { data, error: functionError } = await supabase.functions.invoke(
+        'check-mpesa-availability',
+        {
+          body: { invoiceId }
         }
+      );
+
+      if (functionError) {
+        console.error('❌ Edge function error:', functionError);
+        diagnostics.step = 'backend_error';
+        setLastCheck(diagnostics);
+        handleError('network_error', functionError.message, diagnostics);
         return false;
       }
 
-      if (!invoice || !invoice.lease_id) {
-        handleError('invoice_not_found', invoiceId);
+      if (!data) {
+        console.error('❌ No data returned from edge function');
+        diagnostics.step = 'no_response';
+        setLastCheck(diagnostics);
+        handleError('network_error', 'No response from server', diagnostics);
         return false;
       }
 
-      // Get the unit_id from the lease
-      const { data: lease, error: leaseError } = await supabase
-        .from('leases')
-        .select('id, unit_id')
-        .eq('id', invoice.lease_id)
-        .maybeSingle();
+      console.log('📦 Edge function response:', data);
 
-      if (leaseError || !lease) {
-        handleError('lease_not_found', leaseError?.message);
+      // Handle unsuccessful responses
+      if (!data.available) {
+        const errorType: MpesaCheckError = 
+          data.error?.includes('not configured') ? 'no_mpesa_config' :
+          data.error?.includes('Invoice not found') ? 'invoice_not_found' :
+          data.error?.includes('Lease not found') ? 'lease_not_found' :
+          data.error?.includes('Unit not found') ? 'unit_not_found' :
+          data.error?.includes('Property not found') ? 'property_not_found' :
+          'config_check_failed';
+
+        diagnostics.step = 'unavailable';
+        setLastCheck(diagnostics);
+        handleError(errorType, data.details || data.error, diagnostics);
         return false;
       }
 
-      // Get the property_id from the unit
-      const { data: unit, error: unitError } = await supabase
-        .from('units')
-        .select('id, property_id')
-        .eq('id', lease.unit_id)
-        .maybeSingle();
+      // M-Pesa is available!
+      console.log('✅ M-Pesa is available!');
+      console.log(`   Source: ${data.source || 'custom'}`);
+      console.log(`   Provider: ${data.provider}`);
+      console.log(`   Type: ${data.configType}`);
+      if (data.tillNumber) console.log(`   Till: ${data.tillNumber}`);
+      if (data.paybillNumber) console.log(`   Paybill: ${data.paybillNumber}`);
 
-      if (unitError || !unit) {
-        handleError('unit_not_found', unitError?.message);
-        return false;
-      }
+      diagnostics.step = 'complete';
+      diagnostics.hasCustomConfig = data.source === 'custom';
+      diagnostics.usesPlatformDefault = data.source === 'platform';
+      setLastCheck(diagnostics);
+      setIsAvailable(true);
+      setError(null);
+      setLastErrorType(null);
+      setLastCheckTimestamp(timestamp);
+      setConfigSource(data.source);
 
-      // Get the landlord_id from the property
-      const { data: property, error: propertyError } = await supabase
-        .from('properties')
-        .select('id, owner_id')
-        .eq('id', unit.property_id)
-        .maybeSingle();
-
-      if (propertyError || !property) {
-        handleError('property_not_found', propertyError?.message);
-        return false;
-      }
-
-      const landlordId = property.owner_id;
-
-      if (!landlordId) {
-        handleError('landlord_not_found', 'Property has no owner');
-        return false;
-      }
-
-      // Check if landlord has M-Pesa configured
-      const { data: mpesaConfig, error: configError } = await supabase
-        .from('landlord_mpesa_configs')
-        .select('id')
-        .eq('landlord_id', landlordId)
-        .eq('is_active', true)
-        .maybeSingle();
-
-      if (configError) {
-        handleError('config_check_failed', configError.message);
-        return false;
-      }
-
-      let available = !!mpesaConfig;
-
-      // If no custom config, check for platform default preference
-      if (!available) {
-        const { data: paymentPrefs, error: prefsError } = await supabase
-          .from('landlord_payment_preferences')
-          .select('mpesa_config_preference')
-          .eq('landlord_id', landlordId)
-          .maybeSingle();
-
-        if (prefsError) {
-          console.error('Error checking payment preferences:', prefsError);
-        } else if (paymentPrefs?.mpesa_config_preference === 'platform_default') {
-          // Explicit platform default preference
-          available = true;
-        } else if (!paymentPrefs || !paymentPrefs.mpesa_config_preference) {
-          // No preference set - default to platform availability for backward compatibility
-          console.log('No M-Pesa preference set, defaulting to platform availability');
-          available = true;
-        }
-      }
-
-      setIsAvailable(available);
-
-      if (!available) {
-        setError('M-Pesa payments are not available for this property yet.');
-        toast.error(
-          'M-Pesa payments are not available for this property yet. Please contact your landlord to enable M-Pesa payments.',
-          {
-            duration: 5000,
-          }
-        );
-        return false;
-      }
-
-      logger.info('M-Pesa availability check successful', {
+      logger.info('M-Pesa availability check successful (backend)', {
         invoiceId,
-        landlordId,
-        hasCustomConfig: !!mpesaConfig,
-        usesPlatformDefault: available && !mpesaConfig
+        provider: data.provider,
+        configType: data.configType,
+        source: data.source
       });
 
       return true;
+
     } catch (error: any) {
+      console.error('💥 Unexpected error:', error);
+      diagnostics.step = 'exception';
+      setLastCheck(diagnostics);
       logger.error('Unexpected error checking M-Pesa availability', error);
-      handleError('unknown_error', error?.message);
+      handleError('unknown_error', error?.message, diagnostics);
       return false;
     } finally {
       setIsChecking(false);
+      const checkDuration = Date.now() - checkStartTime;
+      
+      console.group('✅ M-Pesa Availability Check Completed');
+      console.log('Duration:', `${checkDuration}ms`);
+      console.log('Result:', isAvailable ? 'Available' : 'Not Available');
+      console.log('Final Diagnostics:', diagnostics);
+      console.groupEnd();
     }
   };
+
+  // Polling effect: Re-check M-Pesa availability every 30 seconds if currently unavailable
+  useEffect(() => {
+    if (!isAvailable && lastErrorType === 'no_mpesa_config' && lastCheck?.invoiceId) {
+      console.log('🔄 Setting up M-Pesa availability polling (30s interval)...');
+      
+      const interval = setInterval(() => {
+        if (!isChecking && lastCheck.invoiceId) {
+          console.log('🔄 Auto re-checking M-Pesa availability...');
+          checkAvailability(lastCheck.invoiceId);
+        }
+      }, 30000); // 30 seconds
+
+      return () => {
+        console.log('🛑 Clearing M-Pesa availability polling');
+        clearInterval(interval);
+      };
+    }
+  }, [isAvailable, lastErrorType, isChecking, lastCheck?.invoiceId]);
 
   return {
     isAvailable,
     isChecking,
     checkAvailability,
     error,
+    lastErrorType,
+    lastErrorDetails,
+    lastCheck,
+    lastCheckTimestamp,
+    configSource,
   };
 }

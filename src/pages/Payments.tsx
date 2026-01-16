@@ -52,13 +52,13 @@ const Payments = () => {
   const [totalCount, setTotalCount] = useState(0);
   const [tenants, setTenants] = useState<any[]>([]);
   const [leases, setLeases] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [periodFilter, setPeriodFilter] = useState("last_12_months");
   const { toast } = useToast();
   const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ pageSize: 10 });
-
 
   const fetchPayments = async () => {
     try {
@@ -207,9 +207,79 @@ const Payments = () => {
     }
   };
 
+  const fetchInvoices = async () => {
+    try {
+      // Fetch invoices with pending, overdue, or partially_paid status
+      const { data: invoicesData, error: invoicesError } = await supabase
+        .from("invoices")
+        .select("id, invoice_number, tenant_id, lease_id, amount, status, due_date")
+        .in('status', ['pending', 'overdue', 'partially_paid']);
+      
+      if (invoicesError) throw invoicesError;
+      if (!invoicesData || invoicesData.length === 0) {
+        setInvoices([]);
+        return;
+      }
+
+      // Fetch related data separately (leases, units, properties)
+      const leaseIds = [...new Set(invoicesData.map(inv => inv.lease_id).filter(Boolean))];
+      const [leasesResult, unitsResult, propertiesResult] = await Promise.all([
+        supabase.from("leases").select("id, unit_id").in('id', leaseIds),
+        supabase.from("units").select("id, unit_number, property_id"),
+        supabase.from("properties").select("id, name")
+      ]);
+
+      // Create lookup maps
+      const leaseMap = new Map(leasesResult.data?.map(l => [l.id, l]) || []);
+      const unitMap = new Map(unitsResult.data?.map(u => [u.id, u]) || []);
+      const propertyMap = new Map(propertiesResult.data?.map(p => [p.id, p]) || []);
+
+      // Fetch allocations for calculating outstanding amounts
+      const invoiceIds = invoicesData.map(inv => inv.id);
+      const { data: allocationsData } = await supabase
+        .from('payment_allocations')
+        .select('invoice_id, amount')
+        .in('invoice_id', invoiceIds);
+
+      // Calculate allocated amounts per invoice
+      const allocationMap = new Map<string, number>();
+      allocationsData?.forEach(alloc => {
+        const current = allocationMap.get(alloc.invoice_id) || 0;
+        allocationMap.set(alloc.invoice_id, current + Number(alloc.amount));
+      });
+
+      // Join data and calculate outstanding amounts
+      const invoicesWithData = invoicesData.map(inv => {
+        const lease = leaseMap.get(inv.lease_id);
+        const unit = lease ? unitMap.get(lease.unit_id) : null;
+        const property = unit ? propertyMap.get(unit.property_id) : null;
+        const allocatedAmount = allocationMap.get(inv.id) || 0;
+        
+        return {
+          ...inv,
+          outstanding_amount: Number(inv.amount) - allocatedAmount,
+          leases: {
+            units: {
+              unit_number: unit?.unit_number || '',
+              properties: {
+                name: property?.name || ''
+              }
+            }
+          }
+        };
+      }).filter(inv => inv.outstanding_amount > 0);
+
+      setInvoices(invoicesWithData);
+    } catch (error) {
+      console.error("Error fetching invoices:", error);
+      setInvoices([]);
+    }
+  };
+
   useEffect(() => {
     fetchPayments();
     fetchTenantsAndLeases();
+    fetchInvoices();
   }, [page, pageSize, searchTerm, statusFilter, periodFilter]);
 
 
@@ -304,7 +374,8 @@ const Payments = () => {
                 <RecordPaymentDialog
                   tenants={tenants}
                   leases={leases}
-                  onPaymentRecorded={fetchPayments}
+                  invoices={invoices}
+                  onPaymentRecorded={() => { fetchPayments(); fetchInvoices(); }}
                 />
               </DisabledActionWrapper>
               <TestPaymentButton tenantNameQuery="David" onPaymentRecorded={fetchPayments} />

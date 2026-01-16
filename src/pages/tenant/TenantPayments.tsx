@@ -26,15 +26,21 @@ import {
   FileText,
   Building,
   Home,
+  RefreshCw,
+  Wallet,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { TenantPaymentSettings } from "@/components/tenant/TenantPaymentSettings";
+import { BankPaymentGuide } from "@/components/tenant/BankPaymentGuide";
 import { MpesaErrorBoundary } from "@/components/mpesa/MpesaErrorBoundary";
 import { formatInvoiceNumber, formatPaymentReference, formatReceiptNumber, getInvoiceDescription, linkPaymentToInvoice } from "@/utils/invoiceFormat";
 import { fmtCurrency, fmtDate } from "@/lib/format";
 import { measureApiCall } from "@/utils/performanceMonitor";
 import { useMpesaAvailability } from "@/hooks/useMpesaAvailability";
+import { isInvoicePayable, isInvoiceOutstanding, getInvoiceStatusLabel } from "@/utils/invoiceStatusUtils";
+import { TenantCreditBalance } from "@/components/tenant/TenantCreditBalance";
+import { ApplyCreditDialog } from "@/components/tenant/ApplyCreditDialog";
 
 // Lazy load dialog components for better performance
 const MpesaPaymentDialog = lazy(() => import("@/components/tenant/MpesaPaymentDialog").then(module => ({ default: module.MpesaPaymentDialog })));
@@ -45,6 +51,8 @@ interface PaymentData {
   payments: any[];
   tenant: any;
   inferredInvoices: any[];
+  credits: any[];
+  totalCreditBalance: number;
 }
 
 interface FilterState {
@@ -58,13 +66,15 @@ interface TenantPaymentsRpcResult {
   tenant: any;
   invoices: any[];
   payments: any[];
+  credits: any[];
+  total_credit_balance: number;
   error?: string;
 }
 
 export default function TenantPayments() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { isChecking, checkAvailability } = useMpesaAvailability();
+  const { isChecking, checkAvailability, lastErrorType, lastErrorDetails, lastCheck, lastCheckTimestamp } = useMpesaAvailability();
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
@@ -137,6 +147,8 @@ export default function TenantPayments() {
             payments: [],
             tenant: null,
             inferredInvoices: [],
+            credits: [],
+            totalCreditBalance: 0,
           });
           return;
         }
@@ -147,29 +159,50 @@ export default function TenantPayments() {
           payments: typedResult.payments?.length || 0
         });
 
-        // Transform invoices to match expected structure
+        // Transform invoices to match expected structure with owner_id, landlord info, and tenant info for PDF generation
         const invoices = (typedResult.invoices || []).map(invoice => ({
           ...invoice,
+          lease_id: invoice.lease_id, // Preserve for landlord lookup
+          // Include outstanding_amount and amount_paid from RPC
+          outstanding_amount: Number(invoice.outstanding_amount) || 0,
+          amount_paid: Number(invoice.amount_paid) || 0,
           leases: {
             units: {
               unit_number: invoice.unit_number,
               properties: {
-                name: invoice.property_name
+                name: invoice.property_name,
+                owner_id: invoice.owner_id // Include for PDF landlord billing data
               }
             }
+          },
+          // Include landlord info from RPC for tenant PDF generation (bypasses RLS)
+          landlordInfo: {
+            firstName: invoice.landlord_first_name,
+            lastName: invoice.landlord_last_name,
+            email: invoice.landlord_email,
+            phone: invoice.landlord_phone
+          },
+          // Include tenant info from RPC for PDF Bill To section
+          tenantInfo: {
+            firstName: invoice.tenant_first_name,
+            lastName: invoice.tenant_last_name,
+            email: invoice.tenant_email,
+            phone: invoice.tenant_phone
           }
         }));
 
         return { 
           tenant: typedResult.tenant, 
           invoices, 
-          payments: typedResult.payments || [] 
+          payments: typedResult.payments || [],
+          credits: typedResult.credits || [],
+          totalCreditBalance: Number(typedResult.total_credit_balance) || 0
         };
       });
 
       if (!result) return;
 
-      const { tenant, invoices, payments } = result;
+      const { tenant, invoices, payments, credits, totalCreditBalance } = result;
 
       // Link payments to invoices and create enhanced payment data
       const enhancedPayments = payments.map(payment => {
@@ -227,6 +260,8 @@ export default function TenantPayments() {
         payments: enhancedPayments,
         tenant,
         inferredInvoices,
+        credits: credits || [],
+        totalCreditBalance: totalCreditBalance || 0,
       });
     } catch (error) {
       console.error("❌ Error fetching payment data:", error);
@@ -250,68 +285,25 @@ export default function TenantPayments() {
       
       const { PDFTemplateService } = await import('@/utils/pdfTemplateService');
       const { UnifiedPDFRenderer } = await import('@/utils/unifiedPDFRenderer');
+      const { getInvoiceBillingData } = await import('@/utils/invoiceBillingHelper');
       
-      // Enhanced invoice data with tenant details from available sources
-      let tenantName = 'Tenant';
-      let propertyInfo = 'Property';
-      let unitInfo = 'N/A';
-      
-      // Get tenant info from invoice data or session
-      if (invoice.tenants?.first_name || invoice.tenants?.last_name) {
-        tenantName = `${invoice.tenants.first_name || ''} ${invoice.tenants.last_name || ''}`.trim();
-      } else if (paymentData?.tenant) {
-        tenantName = `${paymentData.tenant.first_name || ''} ${paymentData.tenant.last_name || ''}`.trim();
-      } else if (user?.user_metadata?.full_name) {
-        tenantName = user.user_metadata.full_name;
-      } else if (user?.email) {
-        tenantName = user.email.split('@')[0];
-      }
-      
-      // Get property info from invoice or inferred sources
-      if (invoice.leases?.units?.properties?.name) {
-        propertyInfo = invoice.leases.units.properties.name;
-      } else if (invoice.sourcePayment?.property_name) {
-        propertyInfo = invoice.sourcePayment.property_name;
-      }
-      
-      if (invoice.leases?.units?.unit_number) {
-        unitInfo = invoice.leases.units.unit_number;
-      } else if (invoice.sourcePayment?.unit_number) {
-        unitInfo = invoice.sourcePayment.unit_number;
-      }
-      
-      const enhancedInvoice = {
-        id: invoice.id,
-        invoice_number: invoice.invoice_number,
-        amount: invoice.amount,
-        tenant_name: tenantName,
-        billingData: {
-          billTo: {
-            name: tenantName,
-            address: `${propertyInfo}\nUnit: ${unitInfo}`
-          }
-        }
-      };
-      
-      if (!enhancedInvoice) {
-        toast({
-          title: "Error",
-          description: "Failed to load invoice data with billing information.",
-          variant: "destructive",
-        });
-        return;
-      }
+      // Fetch actual landlord billing data
+      const billingData = await getInvoiceBillingData(invoice);
 
-      // Get template and branding from the unified service - use Admin template
-      console.log('Fetching Admin template and branding...');
+      // Get template and branding from the unified service
       const { template, branding: brandingData } = await PDFTemplateService.getTemplateAndBranding(
         'invoice',
-        'Admin' // Use Admin template for consistency across platform
+        'Admin'
       );
-      console.log('Admin template branding data received:', brandingData);
       
       const renderer = new UnifiedPDFRenderer();
       
+      // Calculate payment breakdown for partially paid invoices
+      const amountPaid = invoice.amount_paid || (invoice.outstanding_amount !== undefined 
+        ? invoice.amount - invoice.outstanding_amount 
+        : 0);
+      const outstandingAmount = invoice.outstanding_amount ?? invoice.amount;
+
       const documentData = {
         type: 'invoice' as const,
         title: `Invoice ${invoice.invoice_number}`,
@@ -326,17 +318,18 @@ export default function TenantPayments() {
             }
           ],
           total: invoice.amount,
+          // Payment breakdown for partially paid invoices
+          amountPaid: amountPaid,
+          outstandingAmount: outstandingAmount,
           recipient: {
-            name: enhancedInvoice.billingData.billTo.name,
-            address: enhancedInvoice.billingData.billTo.address
+            name: billingData.billTo.name,
+            address: billingData.billTo.address
           },
           notes: 'Thank you for your prompt payment.'
         }
       };
 
-      console.log('Generating PDF with template and branding...');
-      await renderer.generateDocument(documentData, brandingData, null, null, template);
-      console.log('PDF generated successfully with Admin template and branding');
+      await renderer.generateDocument(documentData, brandingData, billingData, null, template);
       toast({
         title: "Download Ready",
         description: `Invoice ${invoice.invoice_number} downloaded successfully!`,
@@ -361,46 +354,33 @@ export default function TenantPayments() {
       
       const { PDFTemplateService } = await import('@/utils/pdfTemplateService');
       const { UnifiedPDFRenderer } = await import('@/utils/unifiedPDFRenderer');
+      const { getInvoiceBillingData } = await import('@/utils/invoiceBillingHelper');
       
-      // Enhanced payment data with tenant details from available sources
-      let tenantName = 'Tenant';
-      let propertyInfo = 'Property Address';
+      // Build invoice-like object from payment for billing lookup
+      // Include landlordInfo from linked invoice or find from matching invoice
+      const matchingInvoice = payment.invoice_id 
+        ? paymentData?.invoices?.find((inv: any) => inv.id === payment.invoice_id)
+        : payment.linkedInvoice;
       
-      // Get tenant info from session
-      if (paymentData?.tenant) {
-        tenantName = `${paymentData.tenant.first_name || ''} ${paymentData.tenant.last_name || ''}`.trim();
-      } else if (user?.user_metadata?.full_name) {
-        tenantName = user.user_metadata.full_name;
-      } else if (user?.email) {
-        tenantName = user.email.split('@')[0];
-      }
-      
-      const paymentWithBilling = {
-        payment: payment,
-        billingData: {
-          billTo: { 
-            name: tenantName, 
-            address: propertyInfo 
-          }
-        }
+      const invoiceLike = {
+        lease_id: payment.lease_id,
+        tenants: paymentData?.tenant ? {
+          first_name: paymentData.tenant.first_name,
+          last_name: paymentData.tenant.last_name
+        } : null,
+        leases: payment.linkedInvoice?.leases || matchingInvoice?.leases,
+        // Include landlord info for PDF Bill From section
+        landlordInfo: payment.linkedInvoice?.landlordInfo || matchingInvoice?.landlordInfo
       };
       
-      if (!paymentWithBilling) {
-        toast({
-          title: "Error",
-          description: "Failed to load payment data with billing information.",
-          variant: "destructive",
-        });
-        return;
-      }
+      // Fetch actual landlord billing data
+      const billingData = await getInvoiceBillingData(invoiceLike);
 
-      // Get template and branding from the unified service - use Admin template for receipts
-      console.log('Fetching Admin template and branding for receipt...');
+      // Get template and branding from the unified service
       const { template, branding: brandingData } = await PDFTemplateService.getTemplateAndBranding(
         'receipt',
-        'Admin' // Use Admin template for consistency across platform
+        'Admin'
       );
-      console.log('Admin template branding data received for receipt:', brandingData);
       
       const renderer = new UnifiedPDFRenderer();
       
@@ -419,16 +399,14 @@ export default function TenantPayments() {
           ],
           total: payment.amount,
           recipient: {
-            name: paymentWithBilling.billingData.billTo.name,
-            address: paymentWithBilling.billingData.billTo.address
+            name: billingData.billTo.name,
+            address: billingData.billTo.address
           },
           notes: `Full Transaction Reference: ${payment.payment_reference || payment.transaction_id || 'N/A'}`
         }
       };
 
-      console.log('Generating receipt PDF with template and branding...');
-      await renderer.generateDocument(documentData, brandingData, null, null, template);
-      console.log('Receipt PDF generated successfully with Admin template and branding');
+      await renderer.generateDocument(documentData, brandingData, billingData, null, template);
       toast({
         title: "Receipt Ready",
         description: `Receipt for payment of ${fmtCurrency(payment.amount)} downloaded successfully!`,
@@ -444,11 +422,87 @@ export default function TenantPayments() {
   };
 
   const handleMpesaPayment = async (invoice: any) => {
+    console.log('💳 [M-Pesa Payment] Button clicked for invoice:', {
+      id: invoice.id,
+      invoice_number: invoice.invoice_number,
+      amount: invoice.amount,
+      tenant_id: invoice.tenant_id
+    });
+    
     // Check M-Pesa availability before opening the dialog
     const isAvailable = await checkAvailability(invoice.id);
-    if (isAvailable) {
+    
+    console.log('💳 [M-Pesa Payment] Availability check result:', {
+      isAvailable,
+      lastErrorType,
+      lastErrorDetails,
+      lastCheck
+    });
+    
+    // Debug bypass flag
+    const debugBypass = import.meta.env.VITE_MPESA_DEBUG_BYPASS_CHECK === 'true';
+    
+    if (isAvailable || debugBypass) {
+      if (debugBypass && !isAvailable) {
+        console.warn('⚠️ [M-Pesa Payment] Debug bypass enabled - opening dialog despite availability check failure');
+        toast({
+          title: "Debug Mode Active",
+          description: "M-Pesa dialog opened in diagnostic mode. Check console for details.",
+          variant: "default",
+        });
+      }
+      
+      console.log('✅ [M-Pesa Payment] Opening payment dialog');
       setSelectedInvoice(invoice);
       setMpesaDialogOpen(true);
+    } else {
+      console.error('❌ [M-Pesa Payment] Cannot open dialog - availability check failed');
+      
+      // Show detailed error message based on diagnostics
+      let errorTitle = "M-Pesa Payment Unavailable";
+      let errorMessage = "M-Pesa payments are not available for this invoice.";
+      
+      if (lastErrorType) {
+        switch (lastErrorType) {
+          case 'config_check_failed':
+            errorTitle = "Configuration Issue";
+            errorMessage = lastErrorDetails?.includes('RLS') || lastErrorDetails?.includes('permission')
+              ? "Unable to verify M-Pesa configuration due to permission restrictions. Please try logging out and back in."
+              : "No active M-Pesa configuration found for this property. Please contact your landlord.";
+            break;
+          case 'landlord_not_found':
+            errorTitle = "Property Configuration Issue";
+            errorMessage = "Property owner information is missing. Please contact support.";
+            break;
+          case 'network_error':
+            errorTitle = "Network Error";
+            errorMessage = "Please check your internet connection and try again.";
+            break;
+          default:
+            errorMessage = lastErrorDetails || "Please contact your landlord to enable M-Pesa payments.";
+        }
+      }
+      
+      toast({
+        title: errorTitle,
+        description: errorMessage,
+        variant: "destructive",
+        duration: 7000,
+      });
+      
+      // Debug UI - show detailed diagnostics
+      if (import.meta.env.VITE_MPESA_DEBUG_UI === 'true' && lastCheck) {
+        console.table({
+          'Invoice ID': lastCheck.invoiceId,
+          'Lease ID': lastCheck.leaseId || 'N/A',
+          'Unit ID': lastCheck.unitId || 'N/A',
+          'Property ID': lastCheck.propertyId || 'N/A',
+          'Landlord ID': lastCheck.landlordId || 'N/A',
+          'Has Custom Config': lastCheck.hasCustomConfig ? 'Yes' : 'No',
+          'Uses Platform Default': lastCheck.usesPlatformDefault ? 'Yes' : 'No',
+          'Failed At Step': lastCheck.step || 'Unknown'
+        });
+      }
     }
   };
 
@@ -456,6 +510,8 @@ export default function TenantPayments() {
     switch (status) {
       case "paid":
         return <CheckCircle className="h-4 w-4 text-green-600" />;
+      case "partially_paid":
+        return <Clock className="h-4 w-4 text-blue-600" />;
       case "pending":
         return <Clock className="h-4 w-4 text-yellow-600" />;
       case "overdue":
@@ -469,6 +525,8 @@ export default function TenantPayments() {
     switch (status) {
       case "paid":
         return "bg-green-100 text-green-800 border-green-200";
+      case "partially_paid":
+        return "bg-blue-100 text-blue-800 border-blue-200";
       case "pending":
         return "bg-yellow-100 text-yellow-800 border-yellow-200";
       case "overdue":
@@ -480,11 +538,13 @@ export default function TenantPayments() {
 
   // Memoized calculations for better performance
   const pendingInvoices = useMemo(() => {
-    return paymentData?.invoices.filter(invoice => invoice.status === "pending" || invoice.status === "overdue") || [];
+    return paymentData?.invoices.filter(invoice => isInvoiceOutstanding(invoice.status)) || [];
   }, [paymentData?.invoices]);
 
   const totalOutstanding = useMemo(() => {
-    return pendingInvoices.reduce((total, invoice) => total + (invoice.amount || 0), 0);
+    // Use outstanding_amount if available, otherwise fall back to full amount
+    return pendingInvoices.reduce((total, invoice) => 
+      total + (invoice.outstanding_amount ?? invoice.amount ?? 0), 0);
   }, [pendingInvoices]);
 
   const filteredInvoices = useMemo(() => {
@@ -493,16 +553,38 @@ export default function TenantPayments() {
     const allInvoices = [...paymentData.invoices, ...(paymentData.inferredInvoices || [])];
     const { search, status } = filters;
     
-    return allInvoices.filter(invoice => {
-      const matchesSearch = !search || 
-        formatInvoiceNumber(invoice.invoice_number).toLowerCase().includes(search.toLowerCase()) ||
-        getInvoiceDescription(invoice).toLowerCase().includes(search.toLowerCase()) ||
-        (invoice.leases?.units?.properties?.name || '').toLowerCase().includes(search.toLowerCase());
-      
-      const matchesStatus = status === 'all' || invoice.status === status;
-      
-      return matchesSearch && matchesStatus;
-    });
+    return allInvoices
+      .filter(invoice => {
+        const matchesSearch = !search || 
+          formatInvoiceNumber(invoice.invoice_number).toLowerCase().includes(search.toLowerCase()) ||
+          getInvoiceDescription(invoice).toLowerCase().includes(search.toLowerCase()) ||
+          (invoice.leases?.units?.properties?.name || '').toLowerCase().includes(search.toLowerCase());
+        
+        const matchesStatus = status === 'all' || invoice.status === status;
+        
+        return matchesSearch && matchesStatus;
+      })
+      .sort((a, b) => {
+        // Status priority: overdue first, then partially_paid, pending, paid last
+        const statusPriority: Record<string, number> = {
+          'overdue': 1,
+          'partially_paid': 2,
+          'pending': 3,
+          'paid': 4
+        };
+        
+        const priorityA = statusPriority[a.status] || 5;
+        const priorityB = statusPriority[b.status] || 5;
+        
+        if (priorityA !== priorityB) {
+          return priorityA - priorityB;
+        }
+        
+        // Within same status, sort by due_date ascending (oldest due first = most urgent)
+        const dateA = new Date(a.due_date || a.invoice_date).getTime();
+        const dateB = new Date(b.due_date || b.invoice_date).getTime();
+        return dateA - dateB;
+      });
   }, [paymentData, filters]);
 
   const paginatedInvoices = useMemo(() => {
@@ -514,13 +596,20 @@ export default function TenantPayments() {
     if (!paymentData?.payments) return [];
     
     const { search } = filters;
-    return paymentData.payments.filter(payment => {
-      const matchesSearch = !search || 
-        payment.formattedReference?.toLowerCase().includes(search.toLowerCase()) ||
-        (payment.linkedInvoice?.invoice_number || '').toLowerCase().includes(search.toLowerCase());
-      
-      return matchesSearch;
-    });
+    return paymentData.payments
+      .filter(payment => {
+        const matchesSearch = !search || 
+          payment.formattedReference?.toLowerCase().includes(search.toLowerCase()) ||
+          (payment.linkedInvoice?.invoice_number || '').toLowerCase().includes(search.toLowerCase());
+        
+        return matchesSearch;
+      })
+      .sort((a, b) => {
+        // Sort by payment_date descending (most recent first)
+        const dateA = new Date(a.payment_date).getTime();
+        const dateB = new Date(b.payment_date).getTime();
+        return dateB - dateA;
+      });
   }, [paymentData?.payments, filters]);
 
   const paginatedPayments = useMemo(() => {
@@ -570,7 +659,7 @@ export default function TenantPayments() {
   }
 
   // Use memoized values
-  const { invoices = [], payments = [], tenant, inferredInvoices = [] } = paymentData || {};
+  const { invoices = [], payments = [], tenant, inferredInvoices = [], credits = [], totalCreditBalance = 0 } = paymentData || {};
   const allInvoices = [...invoices, ...inferredInvoices];
 
   return (
@@ -587,6 +676,11 @@ export default function TenantPayments() {
             <p className="text-muted-foreground">Manage your rent payments and view invoice history</p>
           </div>
         </div>
+      </div>
+
+      {/* Payment Instructions Guide */}
+      <div className="mb-6">
+        <BankPaymentGuide variant="collapsible" defaultOpen={false} />
       </div>
 
       {/* Outstanding Balance Alert */}
@@ -615,10 +709,57 @@ export default function TenantPayments() {
                   <Smartphone className="h-4 w-4 mr-2" />
                   {isChecking ? 'Checking...' : 'Pay with M-Pesa'}
                 </Button>
+                {totalCreditBalance > 0 && (
+                  <ApplyCreditDialog
+                    availableCredit={totalCreditBalance}
+                    credits={credits}
+                    pendingInvoices={pendingInvoices}
+                    onSuccess={fetchPaymentData}
+                    trigger={
+                      <Button size="lg" variant="outline" className="border-green-600 text-green-600 hover:bg-green-50 dark:hover:bg-green-950">
+                        <Wallet className="h-4 w-4 mr-2" />
+                        Apply Credit
+                      </Button>
+                    }
+                  />
+                )}
+                <Button
+                  size="lg"
+                  variant="outline"
+                  disabled={isChecking}
+                  onClick={() => {
+                    if (pendingInvoices.length > 0) {
+                      checkAvailability(pendingInvoices[0].id);
+                      toast({
+                        title: "Refreshing payment options...",
+                        description: "Checking for updated M-Pesa configuration",
+                      });
+                    }
+                  }}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isChecking ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
               </div>
+              {lastCheckTimestamp && lastErrorType && (
+                <div className="text-xs text-muted-foreground mt-2">
+                  Last checked: {new Date(lastCheckTimestamp).toLocaleTimeString()}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Credit Balance Display */}
+      {totalCreditBalance > 0 && (
+        <div className="mb-6">
+          <TenantCreditBalance 
+            credits={credits} 
+            totalBalance={totalCreditBalance} 
+            variant="inline" 
+          />
+        </div>
       )}
 
       {/* Payment Summary Cards */}
@@ -648,7 +789,7 @@ export default function TenantPayments() {
                 <p className="text-sm text-white/90 font-medium">Pending Payments</p>
                 <p className="text-2xl font-bold text-white">
                   {fmtCurrency(invoices
-                    .filter(i => i.status === "pending")
+                    .filter(i => i.status === "pending" || i.status === "unpaid")
                     .reduce((total, i) => total + (i.amount || 0), 0))}
                 </p>
               </div>
@@ -845,16 +986,33 @@ export default function TenantPayments() {
                                   PDF
                                 </Button>
                               )}
-                              {(invoice.status === "pending" || invoice.status === "overdue") && (
-                                <Button
-                                  size="sm"
-                                  className="bg-green-600 hover:bg-green-700 text-white"
-                                  disabled={isChecking}
-                                  onClick={() => handleMpesaPayment(invoice)}
-                                >
-                                  <Smartphone className="h-3 w-3 mr-1" />
-                                  {isChecking ? 'Checking...' : 'Pay'}
-                                </Button>
+                              {isInvoicePayable(invoice.status) && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                    disabled={isChecking}
+                                    onClick={() => handleMpesaPayment(invoice)}
+                                  >
+                                    <Smartphone className="h-3 w-3 mr-1" />
+                                    {isChecking ? 'Checking...' : 'Pay'}
+                                  </Button>
+                                  {totalCreditBalance > 0 && (
+                                    <ApplyCreditDialog
+                                      availableCredit={totalCreditBalance}
+                                      credits={credits}
+                                      pendingInvoices={pendingInvoices}
+                                      preSelectedInvoice={invoice}
+                                      onSuccess={fetchPaymentData}
+                                      trigger={
+                                        <Button size="sm" variant="outline" className="border-green-600 text-green-600">
+                                          <Wallet className="h-3 w-3 mr-1" />
+                                          Credit
+                                        </Button>
+                                      }
+                                    />
+                                  )}
+                                </>
                               )}
                               {invoice.isInferred && (
                                 <Button

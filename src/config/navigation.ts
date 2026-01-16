@@ -42,6 +42,7 @@ import {
   CircleDollarSign,
   UserCog,
   Layers,
+  Image,
 } from "lucide-react";
 
 export interface NavItem {
@@ -80,6 +81,7 @@ export const adminNav: NavGroup[] = [
       { title: "Audit Logs", url: "/admin/audit-logs", icon: Archive },
       { title: "Self-Hosted Monitor", url: "/admin/self-hosted", icon: Server },
       { title: "Invoice Management", url: "/admin/invoices", icon: Receipt },
+      { title: "Partner Logos", url: "/admin/partner-logos", icon: Image },
     ],
   },
 ];
@@ -106,6 +108,7 @@ export const landlordNav: NavGroup[] = [
     items: [
       { title: "Billing Panel", url: "/billing", icon: CreditCard },
       { title: "Payment Settings", url: "/payment-settings", icon: Banknote },
+      { title: "Unmatched Payments", url: "/unmatched-payments", icon: CircleDollarSign },
       { title: "Sub Users", url: "/sub-users", icon: Users2 },
       { title: "Email Templates", url: "/billing/email-templates", icon: Mail },
       { title: "Message Templates", url: "/billing/message-templates", icon: MessageCircle },

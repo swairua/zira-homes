@@ -22,22 +22,26 @@ async function decryptCredential(encrypted: string): Promise<string> {
     throw new Error('Encryption key not configured');
   }
 
-  const [ivHex, encryptedHex] = encrypted.split(':');
-  const iv = new Uint8Array(ivHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
-  const encryptedData = new Uint8Array(encryptedHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
-
-  const key = await crypto.subtle.importKey(
+  // Decode the base64 encryption key
+  const keyData = Uint8Array.from(atob(encryptionKey), c => c.charCodeAt(0));
+  
+  const cryptoKey = await crypto.subtle.importKey(
     'raw',
-    new TextEncoder().encode(encryptionKey.padEnd(32).slice(0, 32)),
+    keyData,
     { name: 'AES-GCM' },
     false,
     ['decrypt']
   );
 
+  // Decode from base64 - format is: IV (12 bytes) + ciphertext
+  const combined = Uint8Array.from(atob(encrypted), c => c.charCodeAt(0));
+  const iv = combined.slice(0, 12);  // First 12 bytes = IV
+  const ciphertext = combined.slice(12);  // Rest = encrypted data
+
   const decrypted = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv },
-    key,
-    encryptedData
+    cryptoKey,
+    ciphertext
   );
 
   return new TextDecoder().decode(decrypted);

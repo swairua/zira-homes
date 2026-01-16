@@ -17,12 +17,20 @@ export interface ValidationError {
   message: string;
 }
 
+export interface FieldMetadata {
+  name: string;
+  required: boolean;
+  format?: string;
+  validValues?: string[];
+}
+
 export interface BulkUploadProps {
   title: string;
   description: string;
   templateData: Array<Record<string, any>>;
   templateFileName: string;
   requiredFields: string[];
+  fieldMetadata?: FieldMetadata[];
   onValidateData: (data: Array<Record<string, any>>) => Promise<ValidationError[]>;
   onImportData: (data: Array<Record<string, any>>) => Promise<void>;
   maxRecords?: number;
@@ -34,6 +42,7 @@ export function BulkUploadBase({
   templateData,
   templateFileName,
   requiredFields,
+  fieldMetadata,
   onValidateData,
   onImportData,
   maxRecords = 5000
@@ -78,7 +87,61 @@ export function BulkUploadBase({
         const workbook = XLSX.read(arrayBuffer, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        data = XLSX.utils.sheet_to_json(worksheet);
+        
+        // Parse as array of arrays to handle multi-row headers
+        const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        if (rawData.length > 0) {
+          // Detect if first row contains indicator markers like "(REQUIRED)" or "(Optional)"
+          const firstRow = rawData[0] || [];
+          const isIndicatorRow = firstRow.some((cell: any) => 
+            String(cell || '').includes('(REQUIRED)') || String(cell || '').includes('(Optional)')
+          );
+          
+          let headerRowIndex = 0;
+          let dataStartIndex = 1;
+          
+          if (isIndicatorRow && rawData.length > 1) {
+            // First row is indicators, second row is headers
+            headerRowIndex = 1;
+            dataStartIndex = 2;
+            
+            // Check if third row looks like format hints/guide row
+            // These typically contain patterns like: "Valid:", "e.g.", "Must match", "Positive number", 
+            // "Non-negative", "format", "Number (e.g.", "Text", "Comma-separated"
+            if (rawData.length > 2) {
+              const thirdRow = rawData[2] || [];
+              const formatPatterns = [
+                'Valid:', 'e.g.', 'e.g,', 'format', 'Positive number', 'Non-negative',
+                'Must match', 'Number (', 'Text', 'Comma-separated', 'email@', 
+                'max', 'characters', 'exactly', 'existing'
+              ];
+              
+              const isFormatRow = thirdRow.some((cell: any) => {
+                const cellStr = String(cell || '').toLowerCase();
+                return formatPatterns.some(pattern => cellStr.includes(pattern.toLowerCase()));
+              });
+              
+              if (isFormatRow) {
+                dataStartIndex = 3;
+              }
+            }
+          }
+          
+          const headers = (rawData[headerRowIndex] || []).map((h: any) => String(h || '').trim());
+          
+          // Convert remaining rows to objects using detected headers
+          data = rawData.slice(dataStartIndex).map((row: any[]) => {
+            const obj: Record<string, any> = {};
+            headers.forEach((header, index) => {
+              if (header) {
+                obj[header] = row[index] ?? '';
+              }
+            });
+            return obj;
+          });
+        }
+        
         processUploadedData(data);
       }
     } catch (error) {
@@ -135,7 +198,57 @@ export function BulkUploadBase({
   });
 
   const downloadTemplate = () => {
-    const ws = XLSX.utils.json_to_sheet(templateData);
+    if (!templateData.length) return;
+
+    const headers = Object.keys(templateData[0]);
+    
+    // Build rows with field metadata if available
+    const rows: any[][] = [];
+    
+    if (fieldMetadata && fieldMetadata.length > 0) {
+      // Row 1: Required/Optional indicators
+      const indicatorRow = headers.map(header => {
+        const meta = fieldMetadata.find(f => f.name === header);
+        return meta?.required ? "(REQUIRED)" : "(Optional)";
+      });
+      rows.push(indicatorRow);
+      
+      // Row 2: Column headers
+      rows.push(headers);
+      
+      // Row 3: Format hints and valid values
+      const formatRow = headers.map(header => {
+        const meta = fieldMetadata.find(f => f.name === header);
+        if (!meta) return "";
+        
+        let hint = meta.format || "";
+        if (meta.validValues && meta.validValues.length > 0) {
+          hint = `Valid: ${meta.validValues.join(", ")}`;
+        }
+        return hint;
+      });
+      rows.push(formatRow);
+    } else {
+      // Fallback: just headers with required indicators
+      const indicatorRow = headers.map(header => 
+        requiredFields.includes(header) ? "(REQUIRED)" : "(Optional)"
+      );
+      rows.push(indicatorRow);
+      rows.push(headers);
+    }
+    
+    // Add sample data rows
+    templateData.forEach(record => {
+      rows.push(headers.map(h => record[h] ?? ""));
+    });
+    
+    // Create worksheet from array of arrays
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    
+    // Set column widths for better readability
+    const colWidths = headers.map(h => ({ wch: Math.max(h.length + 5, 15) }));
+    ws['!cols'] = colWidths;
+    
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Template");
     XLSX.writeFile(wb, templateFileName);

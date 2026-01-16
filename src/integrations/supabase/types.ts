@@ -74,6 +74,178 @@ export type Database = {
         }
         Relationships: []
       }
+      bank_callbacks: {
+        Row: {
+          amount: number
+          bank_code: string
+          bank_reference: string | null
+          callback_type: string
+          created_at: string | null
+          currency: string | null
+          customer_mobile: string | null
+          customer_name: string | null
+          customer_reference: string | null
+          headers: Json | null
+          id: string
+          invoice_id: string | null
+          ip_address: unknown
+          landlord_id: string | null
+          order_amount: number | null
+          order_currency: string | null
+          payment_id: string | null
+          payment_mode: string | null
+          processed: boolean | null
+          processed_at: string | null
+          processing_notes: string | null
+          raw_payload: Json
+          retry_count: number | null
+          service_charge: number | null
+          status: string
+          transaction_date: string | null
+          transaction_reference: string
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          bank_code: string
+          bank_reference?: string | null
+          callback_type: string
+          created_at?: string | null
+          currency?: string | null
+          customer_mobile?: string | null
+          customer_name?: string | null
+          customer_reference?: string | null
+          headers?: Json | null
+          id?: string
+          invoice_id?: string | null
+          ip_address?: unknown
+          landlord_id?: string | null
+          order_amount?: number | null
+          order_currency?: string | null
+          payment_id?: string | null
+          payment_mode?: string | null
+          processed?: boolean | null
+          processed_at?: string | null
+          processing_notes?: string | null
+          raw_payload: Json
+          retry_count?: number | null
+          service_charge?: number | null
+          status: string
+          transaction_date?: string | null
+          transaction_reference: string
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          bank_code?: string
+          bank_reference?: string | null
+          callback_type?: string
+          created_at?: string | null
+          currency?: string | null
+          customer_mobile?: string | null
+          customer_name?: string | null
+          customer_reference?: string | null
+          headers?: Json | null
+          id?: string
+          invoice_id?: string | null
+          ip_address?: unknown
+          landlord_id?: string | null
+          order_amount?: number | null
+          order_currency?: string | null
+          payment_id?: string | null
+          payment_mode?: string | null
+          processed?: boolean | null
+          processed_at?: string | null
+          processing_notes?: string | null
+          raw_payload?: Json
+          retry_count?: number | null
+          service_charge?: number | null
+          status?: string
+          transaction_date?: string | null
+          transaction_reference?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_callbacks_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_callbacks_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_callbacks_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bank_providers: {
+        Row: {
+          api_base_url_production: string | null
+          api_base_url_sandbox: string | null
+          api_gateway_name: string | null
+          bank_code: string
+          bank_name: string
+          country_code: string | null
+          created_at: string | null
+          display_order: number | null
+          documentation_url: string | null
+          id: string
+          is_active: boolean | null
+          logo_url: string | null
+          paybill_number: string | null
+          required_credentials: Json | null
+          supported_features: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          api_base_url_production?: string | null
+          api_base_url_sandbox?: string | null
+          api_gateway_name?: string | null
+          bank_code: string
+          bank_name: string
+          country_code?: string | null
+          created_at?: string | null
+          display_order?: number | null
+          documentation_url?: string | null
+          id?: string
+          is_active?: boolean | null
+          logo_url?: string | null
+          paybill_number?: string | null
+          required_credentials?: Json | null
+          supported_features?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          api_base_url_production?: string | null
+          api_base_url_sandbox?: string | null
+          api_gateway_name?: string | null
+          bank_code?: string
+          bank_name?: string
+          country_code?: string | null
+          created_at?: string | null
+          display_order?: number | null
+          documentation_url?: string | null
+          id?: string
+          is_active?: boolean | null
+          logo_url?: string | null
+          paybill_number?: string | null
+          required_credentials?: Json | null
+          supported_features?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       billing_plan_audit: {
         Row: {
           action: string
@@ -111,6 +283,13 @@ export type Database = {
             columns: ["billing_plan_id"]
             isOneToOne: false
             referencedRelation: "billing_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_plan_audit_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
             referencedColumns: ["id"]
           },
         ]
@@ -422,6 +601,51 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_applications: {
+        Row: {
+          amount: number
+          applied_at: string | null
+          applied_by: string | null
+          credit_id: string
+          id: string
+          invoice_id: string
+          notes: string | null
+        }
+        Insert: {
+          amount: number
+          applied_at?: string | null
+          applied_by?: string | null
+          credit_id: string
+          id?: string
+          invoice_id: string
+          notes?: string | null
+        }
+        Update: {
+          amount?: number
+          applied_at?: string | null
+          applied_by?: string | null
+          credit_id?: string
+          id?: string
+          invoice_id?: string
+          notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_applications_credit_id_fkey"
+            columns: ["credit_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_credits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_applications_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       data_access_logs: {
         Row: {
           access_type: string
@@ -537,7 +761,15 @@ export type Database = {
           updated_at?: string
           variables?: string[]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "email_templates_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       expenses: {
         Row: {
@@ -598,6 +830,13 @@ export type Database = {
           vendor_name?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "expenses_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "fk_expenses_meter_reading_id"
             columns: ["meter_reading_id"]
@@ -845,6 +1084,117 @@ export type Database = {
           },
         ]
       }
+      jenga_ipn_callbacks: {
+        Row: {
+          additional_info: string | null
+          amount: number
+          bank_account: string | null
+          bank_reference: string | null
+          bill_number: string | null
+          callback_type: string
+          created_at: string | null
+          currency: string | null
+          customer_mobile: string | null
+          customer_name: string | null
+          customer_reference: string | null
+          id: string
+          invoice_id: string | null
+          ip_address: unknown
+          landlord_id: string | null
+          order_amount: number | null
+          order_currency: string | null
+          payment_mode: string | null
+          processed: boolean | null
+          processed_at: string | null
+          raw_data: Json
+          remarks: string | null
+          served_by: string | null
+          service_charge: number | null
+          status: string
+          transaction_date: string | null
+          transaction_reference: string
+          transaction_type: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          additional_info?: string | null
+          amount: number
+          bank_account?: string | null
+          bank_reference?: string | null
+          bill_number?: string | null
+          callback_type: string
+          created_at?: string | null
+          currency?: string | null
+          customer_mobile?: string | null
+          customer_name?: string | null
+          customer_reference?: string | null
+          id?: string
+          invoice_id?: string | null
+          ip_address?: unknown
+          landlord_id?: string | null
+          order_amount?: number | null
+          order_currency?: string | null
+          payment_mode?: string | null
+          processed?: boolean | null
+          processed_at?: string | null
+          raw_data: Json
+          remarks?: string | null
+          served_by?: string | null
+          service_charge?: number | null
+          status: string
+          transaction_date?: string | null
+          transaction_reference: string
+          transaction_type?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          additional_info?: string | null
+          amount?: number
+          bank_account?: string | null
+          bank_reference?: string | null
+          bill_number?: string | null
+          callback_type?: string
+          created_at?: string | null
+          currency?: string | null
+          customer_mobile?: string | null
+          customer_name?: string | null
+          customer_reference?: string | null
+          id?: string
+          invoice_id?: string | null
+          ip_address?: unknown
+          landlord_id?: string | null
+          order_amount?: number | null
+          order_currency?: string | null
+          payment_mode?: string | null
+          processed?: boolean | null
+          processed_at?: string | null
+          raw_data?: Json
+          remarks?: string | null
+          served_by?: string | null
+          service_charge?: number | null
+          status?: string
+          transaction_date?: string | null
+          transaction_reference?: string
+          transaction_type?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jenga_ipn_callbacks_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jenga_ipn_callbacks_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       knowledge_base_articles: {
         Row: {
           author_id: string | null
@@ -888,7 +1238,157 @@ export type Database = {
           updated_at?: string
           view_count?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_base_articles_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      landlord_bank_configs: {
+        Row: {
+          access_token_encrypted: string | null
+          account_number: string | null
+          api_key_encrypted: string | null
+          bank_code: string
+          consumer_secret_encrypted: string | null
+          created_at: string | null
+          credentials_verified: boolean | null
+          environment: string | null
+          extended_config: Json | null
+          id: string
+          ipn_password_encrypted: string | null
+          ipn_url: string | null
+          ipn_username: string | null
+          is_active: boolean | null
+          landlord_id: string
+          last_verified_at: string | null
+          merchant_code: string | null
+          paybill_number: string | null
+          updated_at: string | null
+          verification_method: string | null
+          webhook_secret_encrypted: string | null
+        }
+        Insert: {
+          access_token_encrypted?: string | null
+          account_number?: string | null
+          api_key_encrypted?: string | null
+          bank_code: string
+          consumer_secret_encrypted?: string | null
+          created_at?: string | null
+          credentials_verified?: boolean | null
+          environment?: string | null
+          extended_config?: Json | null
+          id?: string
+          ipn_password_encrypted?: string | null
+          ipn_url?: string | null
+          ipn_username?: string | null
+          is_active?: boolean | null
+          landlord_id: string
+          last_verified_at?: string | null
+          merchant_code?: string | null
+          paybill_number?: string | null
+          updated_at?: string | null
+          verification_method?: string | null
+          webhook_secret_encrypted?: string | null
+        }
+        Update: {
+          access_token_encrypted?: string | null
+          account_number?: string | null
+          api_key_encrypted?: string | null
+          bank_code?: string
+          consumer_secret_encrypted?: string | null
+          created_at?: string | null
+          credentials_verified?: boolean | null
+          environment?: string | null
+          extended_config?: Json | null
+          id?: string
+          ipn_password_encrypted?: string | null
+          ipn_url?: string | null
+          ipn_username?: string | null
+          is_active?: boolean | null
+          landlord_id?: string
+          last_verified_at?: string | null
+          merchant_code?: string | null
+          paybill_number?: string | null
+          updated_at?: string | null
+          verification_method?: string | null
+          webhook_secret_encrypted?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "landlord_bank_configs_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      landlord_jenga_configs: {
+        Row: {
+          api_key_encrypted: string | null
+          consumer_secret_encrypted: string | null
+          created_at: string | null
+          credentials_verified: boolean | null
+          environment: string
+          id: string
+          ipn_password_encrypted: string | null
+          ipn_url: string | null
+          ipn_username: string | null
+          is_active: boolean | null
+          landlord_id: string
+          last_verified_at: string | null
+          merchant_code: string
+          paybill_number: string
+          updated_at: string | null
+        }
+        Insert: {
+          api_key_encrypted?: string | null
+          consumer_secret_encrypted?: string | null
+          created_at?: string | null
+          credentials_verified?: boolean | null
+          environment?: string
+          id?: string
+          ipn_password_encrypted?: string | null
+          ipn_url?: string | null
+          ipn_username?: string | null
+          is_active?: boolean | null
+          landlord_id: string
+          last_verified_at?: string | null
+          merchant_code: string
+          paybill_number?: string
+          updated_at?: string | null
+        }
+        Update: {
+          api_key_encrypted?: string | null
+          consumer_secret_encrypted?: string | null
+          created_at?: string | null
+          credentials_verified?: boolean | null
+          environment?: string
+          id?: string
+          ipn_password_encrypted?: string | null
+          ipn_url?: string | null
+          ipn_username?: string | null
+          is_active?: boolean | null
+          landlord_id?: string
+          last_verified_at?: string | null
+          merchant_code?: string
+          paybill_number?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "landlord_jenga_configs_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: true
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       landlord_mpesa_configs: {
         Row: {
@@ -1005,7 +1505,15 @@ export type Database = {
           preferred_payment_method?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "landlord_payment_preferences_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: true
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       landlord_subscriptions: {
         Row: {
@@ -1345,7 +1853,15 @@ export type Database = {
           updated_at?: string
           variables?: string[]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "message_templates_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       meter_readings: {
         Row: {
@@ -1679,7 +2195,15 @@ export type Database = {
           type?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       onboarding_steps: {
         Row: {
@@ -1722,6 +2246,50 @@ export type Database = {
           user_roles?: string[]
         }
         Relationships: []
+      }
+      partner_logos: {
+        Row: {
+          company_name: string
+          created_at: string | null
+          created_by: string | null
+          display_order: number | null
+          id: string
+          is_active: boolean | null
+          logo_url: string
+          updated_at: string | null
+          website_url: string | null
+        }
+        Insert: {
+          company_name: string
+          created_at?: string | null
+          created_by?: string | null
+          display_order?: number | null
+          id?: string
+          is_active?: boolean | null
+          logo_url: string
+          updated_at?: string | null
+          website_url?: string | null
+        }
+        Update: {
+          company_name?: string
+          created_at?: string | null
+          created_by?: string | null
+          display_order?: number | null
+          id?: string
+          is_active?: boolean | null
+          logo_url?: string
+          updated_at?: string | null
+          website_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_logos_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payment_allocations: {
         Row: {
@@ -2109,7 +2677,15 @@ export type Database = {
           phone?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_id_fkey"
+            columns: ["id"]
+            isOneToOne: true
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles_backup: {
         Row: {
@@ -2196,7 +2772,22 @@ export type Database = {
           updated_at?: string
           zip_code?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "properties_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "properties_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       report_runs: {
         Row: {
@@ -2507,7 +3098,15 @@ export type Database = {
           total_amount?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "service_charge_invoices_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       service_providers: {
         Row: {
@@ -2632,6 +3231,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "sms_campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "sms_campaigns_template_id_fkey"
             columns: ["template_id"]
             isOneToOne: false
@@ -2681,6 +3287,13 @@ export type Database = {
           transaction_type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "sms_credit_transactions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "sms_credit_transactions_landlord_id_fkey"
             columns: ["landlord_id"]
@@ -2754,7 +3367,29 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "sms_logs_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sms_logs_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sms_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sms_providers: {
         Row: {
@@ -3292,9 +3927,71 @@ export type Database = {
           },
         ]
       }
+      tenant_credits: {
+        Row: {
+          amount: number
+          balance: number
+          created_at: string | null
+          description: string | null
+          id: string
+          landlord_id: string
+          source_payment_id: string | null
+          source_type: string
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          balance: number
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          landlord_id: string
+          source_payment_id?: string | null
+          source_type?: string
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          balance?: number
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          landlord_id?: string
+          source_payment_id?: string | null
+          source_type?: string
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_credits_source_payment_id_fkey"
+            columns: ["source_payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_credits_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_safe_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_credits_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenants: {
         Row: {
           created_at: string
+          date_of_birth: string | null
           email: string
           email_encrypted: string | null
           email_token: string | null
@@ -3303,6 +4000,8 @@ export type Database = {
           emergency_contact_phone: string | null
           emergency_contact_phone_encrypted: string | null
           emergency_contact_phone_plain: string | null
+          emergency_contact_relationship: string | null
+          employer_contact: string | null
           employer_name: string | null
           employment_status: string | null
           first_name: string
@@ -3317,6 +4016,8 @@ export type Database = {
           phone_plain: string | null
           phone_token: string | null
           previous_address: string | null
+          previous_landlord_contact: string | null
+          previous_landlord_name: string | null
           profession: string | null
           property_id: string | null
           updated_at: string
@@ -3324,6 +4025,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          date_of_birth?: string | null
           email: string
           email_encrypted?: string | null
           email_token?: string | null
@@ -3332,6 +4034,8 @@ export type Database = {
           emergency_contact_phone?: string | null
           emergency_contact_phone_encrypted?: string | null
           emergency_contact_phone_plain?: string | null
+          emergency_contact_relationship?: string | null
+          employer_contact?: string | null
           employer_name?: string | null
           employment_status?: string | null
           first_name: string
@@ -3346,6 +4050,8 @@ export type Database = {
           phone_plain?: string | null
           phone_token?: string | null
           previous_address?: string | null
+          previous_landlord_contact?: string | null
+          previous_landlord_name?: string | null
           profession?: string | null
           property_id?: string | null
           updated_at?: string
@@ -3353,6 +4059,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          date_of_birth?: string | null
           email?: string
           email_encrypted?: string | null
           email_token?: string | null
@@ -3361,6 +4068,8 @@ export type Database = {
           emergency_contact_phone?: string | null
           emergency_contact_phone_encrypted?: string | null
           emergency_contact_phone_plain?: string | null
+          emergency_contact_relationship?: string | null
+          employer_contact?: string | null
           employer_name?: string | null
           employment_status?: string | null
           first_name?: string
@@ -3375,6 +4084,8 @@ export type Database = {
           phone_plain?: string | null
           phone_token?: string | null
           previous_address?: string | null
+          previous_landlord_contact?: string | null
+          previous_landlord_name?: string | null
           profession?: string | null
           property_id?: string | null
           updated_at?: string
@@ -3386,6 +4097,13 @@ export type Database = {
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
             referencedColumns: ["id"]
           },
         ]
@@ -3527,6 +4245,7 @@ export type Database = {
           block_id: string | null
           created_at: string
           description: string | null
+          garbage_deposit: number | null
           id: string
           property_id: string
           rent_amount: number
@@ -3544,6 +4263,7 @@ export type Database = {
           block_id?: string | null
           created_at?: string
           description?: string | null
+          garbage_deposit?: number | null
           id?: string
           property_id: string
           rent_amount: number
@@ -3561,6 +4281,7 @@ export type Database = {
           block_id?: string | null
           created_at?: string
           description?: string | null
+          garbage_deposit?: number | null
           id?: string
           property_id?: string
           rent_amount?: number
@@ -3701,7 +4422,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_getting_started_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_onboarding_progress: {
         Row: {
@@ -3766,7 +4495,15 @@ export type Database = {
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_sessions: {
         Row: {
@@ -3880,7 +4617,15 @@ export type Database = {
           updated_at?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_tour_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -3899,6 +4644,17 @@ export type Database = {
           sub_user_record_id: string | null
           title: string | null
           user_id: string | null
+        }
+        Relationships: []
+      }
+      orphaned_users_monitor: {
+        Row: {
+          created_at: string | null
+          email: string | null
+          first_name: string | null
+          id: string | null
+          last_name: string | null
+          status: string | null
         }
         Relationships: []
       }
@@ -3945,7 +4701,15 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tenants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {
@@ -3955,6 +4719,27 @@ export type Database = {
       }
       admin_list_profiles_with_roles: {
         Args: { p_limit?: number; p_offset?: number }
+        Returns: Json
+      }
+      apply_credit_to_invoice: {
+        Args: {
+          p_amount: number
+          p_applied_by?: string
+          p_credit_id: string
+          p_invoice_id: string
+        }
+        Returns: Json
+      }
+      attach_lease_and_occupy_unit: {
+        Args: {
+          p_lease_end_date: string
+          p_lease_start_date: string
+          p_lease_terms?: string
+          p_monthly_rent: number
+          p_security_deposit?: number
+          p_tenant_id: string
+          p_unit_id: string
+        }
         Returns: Json
       }
       audit_security_exposure: { Args: never; Returns: string }
@@ -4029,6 +4814,31 @@ export type Database = {
         }
         Returns: string
       }
+      create_or_attach_tenant_lease: {
+        Args: {
+          p_allow_attach?: boolean
+          p_email: string
+          p_emergency_contact_name?: string
+          p_emergency_contact_phone?: string
+          p_employer_name?: string
+          p_employment_status?: string
+          p_existing_tenant_id?: string
+          p_first_name: string
+          p_last_name: string
+          p_lease_end_date?: string
+          p_lease_start_date?: string
+          p_monthly_income?: number
+          p_monthly_rent?: number
+          p_national_id?: string
+          p_phone?: string
+          p_previous_address?: string
+          p_profession?: string
+          p_property_id?: string
+          p_security_deposit?: number
+          p_unit_id?: string
+        }
+        Returns: Json
+      }
       create_search_token: {
         Args: { data: string; salt?: string }
         Returns: string
@@ -4046,22 +4856,25 @@ export type Database = {
       }
       create_tenant_and_optional_lease: {
         Args: {
+          p_date_of_birth?: string
           p_email: string
           p_emergency_contact_name?: string
           p_emergency_contact_phone?: string
+          p_emergency_contact_relationship?: string
+          p_employer_contact?: string
           p_employer_name?: string
           p_employment_status?: string
           p_first_name: string
           p_last_name: string
           p_lease_end_date?: string
           p_lease_start_date?: string
-          p_monthly_income?: number
+          p_lease_terms?: string
           p_monthly_rent?: number
           p_national_id?: string
-          p_phone?: string
+          p_phone: string
           p_previous_address?: string
-          p_profession?: string
-          p_property_id?: string
+          p_previous_landlord_contact?: string
+          p_previous_landlord_name?: string
           p_security_deposit?: number
           p_unit_id?: string
         }
@@ -4178,15 +4991,15 @@ export type Database = {
       }
       get_financial_summary_report:
         | {
+            Args: { p_end_date?: string; p_start_date?: string }
+            Returns: Json
+          }
+        | {
             Args: {
               p_end_date?: string
               p_property_id?: string
               p_start_date?: string
             }
-            Returns: Json
-          }
-        | {
-            Args: { p_end_date?: string; p_start_date?: string }
             Returns: Json
           }
       get_invoice_overview: {
@@ -4272,11 +5085,11 @@ export type Database = {
         }[]
       }
       get_market_rent_report:
+        | { Args: never; Returns: Json }
         | {
             Args: { p_end_date?: string; p_start_date?: string }
             Returns: Json
           }
-        | { Args: never; Returns: Json }
       get_mpesa_credentials_safe: {
         Args: { _landlord_id?: string }
         Returns: {
@@ -4356,6 +5169,10 @@ export type Database = {
         Returns: boolean
       }
       get_tenant_contacts: { Args: { p_user_id?: string }; Returns: Json }
+      get_tenant_credit_balance: {
+        Args: { p_tenant_id: string }
+        Returns: number
+      }
       get_tenant_leases: { Args: { p_user_id?: string }; Returns: Json }
       get_tenant_maintenance_data: {
         Args: { p_limit?: number; p_user_id?: string }
@@ -4480,13 +5297,12 @@ export type Database = {
       log_security_event:
         | {
             Args: {
-              p_details?: Json
-              p_event_type: string
-              p_ip_address?: unknown
-              p_severity?: string
-              p_user_id?: string
+              _details?: Json
+              _event_type: string
+              _ip_address?: unknown
+              _user_id?: string
             }
-            Returns: string
+            Returns: undefined
           }
         | {
             Args: {
@@ -4500,12 +5316,13 @@ export type Database = {
           }
         | {
             Args: {
-              _details?: Json
-              _event_type: string
-              _ip_address?: unknown
-              _user_id?: string
+              p_details?: Json
+              p_event_type: string
+              p_ip_address?: unknown
+              p_severity?: string
+              p_user_id?: string
             }
-            Returns: undefined
+            Returns: string
           }
       log_sensitive_data_access: {
         Args: { _operation: string; _record_id?: string; _table_name: string }
@@ -4566,6 +5383,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      lookup_tenant_in_portfolio: {
+        Args: { p_email?: string; p_national_id?: string; p_phone?: string }
+        Returns: Json
+      }
       map_feature_to_permission: { Args: { _feature: string }; Returns: string }
       mask_sensitive_data: {
         Args: { data: string; visible_chars?: number }
@@ -4586,6 +5407,10 @@ export type Database = {
       }
       sync_unit_status: { Args: { p_unit_id: string }; Returns: undefined }
       tenant_belongs_to_user: {
+        Args: { _tenant_id: string; _user_id: string }
+        Returns: boolean
+      }
+      tenant_belongs_to_user_safe: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
       }
@@ -4616,6 +5441,13 @@ export type Database = {
       }
       user_owns_property: {
         Args: { _property_id: string; _user_id: string }
+        Returns: boolean
+      }
+      validate_role_eligibility: {
+        Args: {
+          p_role: Database["public"]["Enums"]["app_role"]
+          p_user_id: string
+        }
         Returns: boolean
       }
       validate_strong_password: { Args: { password: string }; Returns: boolean }

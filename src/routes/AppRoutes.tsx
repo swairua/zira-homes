@@ -13,6 +13,7 @@ import NotFound from "@/pages/NotFound";
 // Import existing pages
 import Auth from "@/pages/Auth";
 import Index from "@/pages/Index";
+import LandingPage from "@/pages/LandingPage";
 
 // Lazy load tenant pages for better performance
 const TenantDashboard = React.lazy(() => import("@/pages/tenant/TenantDashboard"));
@@ -53,6 +54,7 @@ import MessageTemplates from "@/pages/landlord/MessageTemplates";
 import PaymentSettings from "@/pages/landlord/PaymentSettings";
 import LandlordBulkMessaging from "@/pages/landlord/BulkMessaging";
 import SmsUsage from "@/pages/landlord/SmsUsage";
+import UnmatchedPayments from "@/pages/landlord/UnmatchedPayments";
 import { Navigate } from "react-router-dom";
 
 // Existing settings pages
@@ -82,6 +84,8 @@ import BillingPlanManager from "@/pages/admin/BillingPlanManager";
 import SMSLogs from "@/pages/admin/SMSLogs";
 import PlanFeaturesManagement from "@/pages/admin/PlanFeaturesManagement";
 import { MpesaTest } from "@/pages/MpesaTest";
+import JengaPaymentTest from "@/pages/admin/JengaPaymentTest";
+import PartnerLogosManager from "@/pages/admin/PartnerLogosManager";
 
 const LoadingSpinner = () => (
   <div className="flex items-center justify-center min-h-screen">
@@ -93,6 +97,8 @@ export const AppRoutes = () => {
   return (
     <Routes>
       {/* Public routes */}
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/home" element={<LandingPage />} />
       <Route path="/auth" element={<Auth />} />
       <Route path="/test-sms" element={
         <React.Suspense fallback={<LoadingSpinner />}>
@@ -125,7 +131,7 @@ export const AppRoutes = () => {
 
       {/* Landlord routes */}
       <Route
-        path="/*"
+        path="/dashboard/*"
         element={
           <RequireAuth>
             <RoleBasedRoute>
@@ -133,7 +139,7 @@ export const AppRoutes = () => {
                 <Routes>
                 <Route path="/" element={<Index />} />
                 {/* Redirect from /agent/dashboard to main dashboard */}
-                <Route path="/agent/dashboard" element={<Navigate to="/" replace />} />
+                <Route path="/agent/dashboard" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/properties" element={
                   <PermissionGuard permission="manage_properties">
                     <Properties />
@@ -210,6 +216,13 @@ export const AppRoutes = () => {
                 <Route path="/payment-settings" element={
                   <SubUserBlockedRoute>
                     <PaymentSettings />
+                  </SubUserBlockedRoute>
+                } />
+                
+                {/* Unmatched Payments Route */}
+                <Route path="/unmatched-payments" element={
+                  <SubUserBlockedRoute>
+                    <UnmatchedPayments />
                   </SubUserBlockedRoute>
                 } />
                 
@@ -310,6 +323,8 @@ export const AppRoutes = () => {
                 <Route path="/plan-features" element={<PlanFeaturesManagement />} />
                 <Route path="/sms-logs" element={<SMSLogs />} />
                 <Route path="/mpesa-test" element={<MpesaTest />} />
+                <Route path="/jenga-payment-test" element={<JengaPaymentTest />} />
+                <Route path="/partner-logos" element={<PartnerLogosManager />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
               </AdminOnlyRoute>
